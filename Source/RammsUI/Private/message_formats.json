@@ -1,0 +1,62 @@
+{
+  "transform": {
+    "timestamp": 2.0,
+    "location": [x, y, z],
+    "rotation": [qx, qy, qz, qw],
+    "frame_id": "frame_id"
+  },
+  "path": {
+    "timestamp": 2.0,
+    "transforms": [
+      {
+        "location": [x, y, z],
+        "rotation": [qx, qy, qz, qw]
+      }, ...
+    ]
+  },
+  "camera_info": {
+    "timestamp": 2.0,
+    "sensor_name": "sensor_name",
+    "width": 672,
+    "height": 384,
+    "distortion_model": "plumb_bob",
+    "K": [ ... ]
+  },
+  "color_image": {
+    "timestamp": 2.0,
+    "transform": {
+      "location": [x, y, z],
+      "rotation": [qx, qy, qz, qw]
+    },
+    "sensor_name": "sensor_name",
+    "width": 672,
+    "height": 384,
+    "num_channels": 3,
+    "format": "float",
+    "data": rawBinaryData
+  },
+  "depth_image": {
+    "timestamp": 2.0,
+    "transform": {
+      "location": [x, y, z],
+      "rotation": [qx, qy, qz, qw]
+    },
+    "sensor_name": "sensor_name",
+    "width": 672,
+    "height": 384,
+    "num_channels": 1,
+    "format": "float",
+    "data": rawBinaryData
+  },
+  "point_cloud": {
+    "timestamp": 2.0,
+    "transform": {
+      "location": [x, y, z],
+      "rotation": [qx, qy, qz, qw]
+    },
+    "num_points": XXXX,
+    "num_channels": 6,
+    "format": "float",
+    "data": rawBinaryData
+  }
+}

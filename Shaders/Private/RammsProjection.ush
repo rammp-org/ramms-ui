@@ -1,0 +1,154 @@
+// RammsUI Camera Projection Shader Utilities
+// Projects camera images onto surfaces using pinhole camera model.
+//
+// Used with deferred decal materials: the decal component is placed at the
+// camera's world pose (extrinsic), and this shader handles the perspective
+// projection using the camera's intrinsic parameters.
+//
+// ── Material Graph Setup ───────────────────────────────────────────
+//
+// 1. Create a Deferred Decal material (Blend Mode: Translucent).
+// 2. Add Vector Parameters: Intrinsics, ImageSize, CameraWorldPos,
+//    CameraForward, CameraRight, CameraUp.
+//    Add Scalar Parameters: FadeWidth, TargetStencil.
+//    Add Texture Parameter: CameraTexture.
+// 3. Add a Custom expression node with inputs:
+//      WorldPos       (float3) — wire from: AbsoluteWorldPosition
+//      CameraWorldPos (float4) — wire from: CameraWorldPos param
+//      CameraForward  (float4) — wire from: CameraForward param
+//      CameraRight    (float4) — wire from: CameraRight param
+//      CameraUp       (float4) — wire from: CameraUp param
+//      Intrinsics     (float4) — wire from: Intrinsics param
+//      ImageSize      (float2) — wire from: ImageSize param .rg (ComponentMask)
+//      FadeWidth      (float)  — wire from: FadeWidth param
+//    Output type: CMOT Float 3
+// 4. Custom node code:
+//      #include "/RammsUI/Private/RammsProjection.ush"
+//      return Ramms_ProjectCameraFromWorld(WorldPos, CameraWorldPos,
+//          CameraForward, CameraRight, CameraUp,
+//          Intrinsics, ImageSize, FadeWidth);
+// 5. Split output:
+//      .rg → TextureSample (CameraTexture param) UV → Emissive Color
+//      .b  → multiply with stencil check → Opacity
+// 6. For stencil masking (optional):
+//      SceneTexture(CustomStencil).r × 255 → Round → If(== TargetStencil, 1, 0)
+//      Multiply with .b output above → final Opacity
+
+#pragma once
+
+// ── Coordinate Convention ──────────────────────────────────────────
+//
+// UE local space:        X = forward,  Y = right,  Z = up
+// Pinhole camera model:  Z = forward,  X = right,  Y = down
+//
+// Mapping: CamX = UE_Y,  CamY = -UE_Z,  CamZ = UE_X
+
+// ── World → Camera Local Transform ────────────────────────────────
+
+// Transform a world-space point into the camera's UE-local space
+// using the camera's world-space axes and position.
+float3 Ramms_WorldToCameraLocal(
+	float3 WorldPos,
+	float3 CameraPos,
+	float3 CameraForward,
+	float3 CameraRight,
+	float3 CameraUp)
+{
+	float3 Offset = WorldPos - CameraPos;
+	return float3(
+		dot(Offset, CameraForward),
+		dot(Offset, CameraRight),
+		dot(Offset, CameraUp));
+}
+
+// ── Projection Functions ──────────────────────────────────────────
+
+// Project a surface point from camera-local space (UE convention)
+// to normalized image UV, with FOV masking.
+//
+// CameraLocalPos: surface point in camera's local space (UE axes)
+// Intrinsics:     float4(fx, fy, cx, cy) in pixels
+// ImageSize:      float2(width, height) in pixels
+// FadeWidth:      edge fade in normalized UV space (0 = hard, 0.1 = 10% fade)
+//
+// Returns: float3(U, V, Opacity)
+//   UV in [0,1] for texture sampling
+//   Opacity: 1 inside FOV, 0 outside, smooth fade at edges
+float3 Ramms_ProjectCameraUV(
+	float3 CameraLocalPos,
+	float4 Intrinsics,
+	float2 ImageSize,
+	float  FadeWidth)
+{
+	float Depth = CameraLocalPos.x;
+
+	// Behind the camera — fully transparent
+	if (Depth <= 0.01f)
+		return float3(0.5f, 0.5f, 0.0f);
+
+	// UE local → pinhole camera axes
+	float CamX = CameraLocalPos.y;
+	float CamY = -CameraLocalPos.z;
+
+	// Perspective projection through intrinsics
+	float u = Intrinsics.x * CamX / Depth + Intrinsics.z;
+	float v = Intrinsics.y * CamY / Depth + Intrinsics.w;
+
+	// Normalize to [0,1]
+	float2 UV = float2(u / ImageSize.x, v / ImageSize.y);
+
+	// FOV masking with edge fade
+	float Opacity = 0.0f;
+	if (UV.x >= 0.0f && UV.x <= 1.0f && UV.y >= 0.0f && UV.y <= 1.0f)
+	{
+		float2 EdgeDist = min(UV, 1.0f - UV);
+		float  MinEdge  = min(EdgeDist.x, EdgeDist.y);
+		Opacity = saturate(MinEdge / max(FadeWidth, 0.001f));
+	}
+
+	return float3(UV, Opacity);
+}
+
+// Simplified version — hard cutoff at FOV boundary (no fade)
+float3 Ramms_ProjectCameraUV_Hard(
+	float3 CameraLocalPos,
+	float4 Intrinsics,
+	float2 ImageSize)
+{
+	return Ramms_ProjectCameraUV(CameraLocalPos, Intrinsics, ImageSize, 0.001f);
+}
+
+// ── All-In-One: World Position → UV ───────────────────────────────
+//
+// Converts a world-space surface point to camera image UV in one call.
+// Use this when the Transform(World→Local) node is not available
+// (e.g., Deferred Decal domain).
+//
+// WorldPos:       pixel world position (from AbsoluteWorldPosition)
+// CameraWorldPos: camera position in world space (float3)
+// CameraForward:  camera forward axis in world space (float3)
+// CameraRight:    camera right axis in world space (float3)
+// CameraUp:       camera up axis in world space (float3)
+// Intrinsics:     float4(fx, fy, cx, cy)
+// ImageSize:      float2(width, height)
+// FadeWidth:      edge fade (0 = hard)
+//
+// Returns: float3(U, V, Opacity)
+float3 Ramms_ProjectCameraFromWorld(
+	float3 WorldPos,
+	float3 CameraWorldPos,
+	float3 CameraForward,
+	float3 CameraRight,
+	float3 CameraUp,
+	float4 Intrinsics,
+	float2 ImageSize,
+	float  FadeWidth)
+{
+	float3 LocalPos = Ramms_WorldToCameraLocal(
+		WorldPos,
+		CameraWorldPos,
+		CameraForward,
+		CameraRight,
+		CameraUp);
+	return Ramms_ProjectCameraUV(LocalPos, Intrinsics, ImageSize, FadeWidth);
+}

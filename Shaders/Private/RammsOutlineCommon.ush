@@ -1,0 +1,84 @@
+// RammsUI Outline Shader Utilities
+// Common types and helpers for the outline system.
+// Include via: #include "/RammsUI/Private/RammsOutlineCommon.ush"
+//
+// All functions accept Viewport UV (the UV from ScreenPosition / TexCoord
+// in your Custom node).  Internally they convert to Buffer UV via
+// ViewportUVToBufferUV() before sampling scene textures.
+
+#pragma once
+
+// ── Stencil Outline Configuration ──────────────────────────────────
+
+#define RAMMS_MAX_OUTLINE_PROFILES 8
+
+// ── Internal Helpers ───────────────────────────────────────────────
+
+// Viewport texel size — one pixel step in viewport UV space.
+float2 Ramms_GetTexelSize()
+{
+	return View_ViewSizeAndInvSize.zw;
+}
+
+// ── Sampling Helpers ───────────────────────────────────────────────
+// All accept Viewport UV, convert to Buffer UV internally.
+
+float Ramms_SampleCustomDepth(float2 ViewportUV)
+{
+	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
+	float WorldDepth = CalcSceneCustomDepth(BufUV);
+	return (WorldDepth > 1e6f) ? 0.0f : WorldDepth;
+}
+
+int Ramms_SampleStencilInt(float2 ViewportUV)
+{
+	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
+	uint2 Pixel = (uint2)(int2(BufUV * View_BufferSizeAndInvSize.xy));
+	return (int)CalcSceneCustomStencil(Pixel);
+}
+
+float Ramms_SampleSceneDepth(float2 ViewportUV)
+{
+	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
+	return CalcSceneDepth(BufUV);
+}
+
+// ── Edge Detection Kernels ─────────────────────────────────────────
+
+float Ramms_RobertsCrossDepth(float2 UV, float2 TexelSize)
+{
+	float d00 = Ramms_SampleCustomDepth(UV + float2(-0.5, -0.5) * TexelSize);
+	float d11 = Ramms_SampleCustomDepth(UV + float2( 0.5,  0.5) * TexelSize);
+	float d01 = Ramms_SampleCustomDepth(UV + float2(-0.5,  0.5) * TexelSize);
+	float d10 = Ramms_SampleCustomDepth(UV + float2( 0.5, -0.5) * TexelSize);
+
+	float gx = d00 - d11;
+	float gy = d01 - d10;
+
+	return sqrt(gx * gx + gy * gy);
+}
+
+float Ramms_SobelStencil(float2 UV, float2 TexelSize)
+{
+	int c  = Ramms_SampleStencilInt(UV);
+	int n  = Ramms_SampleStencilInt(UV + float2( 0,  1) * TexelSize);
+	int s  = Ramms_SampleStencilInt(UV + float2( 0, -1) * TexelSize);
+	int e  = Ramms_SampleStencilInt(UV + float2( 1,  0) * TexelSize);
+	int w  = Ramms_SampleStencilInt(UV + float2(-1,  0) * TexelSize);
+	int ne = Ramms_SampleStencilInt(UV + float2( 1,  1) * TexelSize);
+	int nw = Ramms_SampleStencilInt(UV + float2(-1,  1) * TexelSize);
+	int se = Ramms_SampleStencilInt(UV + float2( 1, -1) * TexelSize);
+	int sw = Ramms_SampleStencilInt(UV + float2(-1, -1) * TexelSize);
+
+	int diff = 0;
+	diff += (c != n)  ? 1 : 0;
+	diff += (c != s)  ? 1 : 0;
+	diff += (c != e)  ? 1 : 0;
+	diff += (c != w)  ? 1 : 0;
+	diff += (c != ne) ? 1 : 0;
+	diff += (c != nw) ? 1 : 0;
+	diff += (c != se) ? 1 : 0;
+	diff += (c != sw) ? 1 : 0;
+
+	return saturate((float)diff / 3.0f);
+}

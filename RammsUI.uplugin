@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "RammsUI",
+	"Description": "RAMMS UI plugin for Unreal Engine. Provides user interface components and tools for the RAMMS project.",
+	"Category": "Data Collection & Simulation",
+	"CreatedBy": "ATDev",
+	"CreatedByURL": "github.com/rammp-org/ramms-ui",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "RammsUI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+    "Plugins": [
+	]
+}

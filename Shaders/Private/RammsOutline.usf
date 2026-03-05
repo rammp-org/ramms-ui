@@ -1,0 +1,328 @@
+// RammsUI Object Outline Post-Process Shader
+// Renders configurable outlines around objects using custom depth / stencil.
+//
+// All functions accept **Viewport UV** (the UV from your Custom node's
+// ScreenPosition / TexCoord input).  The helpers in RammsOutlineCommon.ush
+// convert to Buffer UV via ViewportUVToBufferUV() before sampling scene
+// textures, so outlines align correctly regardless of viewport/buffer
+// size differences (PIE, split-screen, scene captures, dynamic resolution).
+//
+// ── Custom Node Setup ──────────────────────────────────────────────
+//
+// 1. Create a post-process material with a Custom expression node.
+// 2. Add inputs: SceneColor (float3), OutlineColor (float3),
+//    Thickness (float), Softness (float).
+// 3. Wire SceneTexture:PostProcessInput0 → SceneColor input.
+// 4. In the Custom node code:
+//
+//      #include "/RammsUI/Private/RammsOutline.usf"
+//      return Ramms_GetOutlineComposite(SceneColor, UV, OutlineColor, Thickness, Softness);
+//
+//    For per-stencil outlines (add StencilValue int input):
+//      return Ramms_GetStencilOutlineComposite(SceneColor, UV, StencilValue,
+//                                              OutlineColor, Thickness, Softness);
+
+#include "/RammsUI/Private/RammsOutlineCommon.ush"
+
+// ── Compositing Helper ─────────────────────────────────────────────
+
+float3 Ramms_CompositeOutline(float3 SceneColor, float4 Outline)
+{
+	return lerp(SceneColor, Outline.rgb, Outline.a);
+}
+
+// ── Single-Color Outline ───────────────────────────────────────────
+
+float Ramms_SampleOutlineRing(float2 UV, float Thickness)
+{
+	float2 TexelSize = Ramms_GetTexelSize();
+	float  MaxEdge   = 0.0f;
+	int    Radius    = (int)ceil(Thickness);
+
+	for (int y = -Radius; y <= Radius; y++)
+	{
+		for (int x = -Radius; x <= Radius; x++)
+		{
+			float Dist = length(float2(x, y));
+			if (Dist > Thickness + 0.5f || Dist < 0.5f)
+				continue;
+
+			float2 OffsetUV = UV + float2(x, y) * TexelSize;
+			float  Depth    = Ramms_SampleCustomDepth(OffsetUV);
+
+			if (Depth > 0.0f)
+			{
+				float Weight = 1.0f - saturate((Dist - Thickness) / 1.0f);
+				MaxEdge = max(MaxEdge, Weight);
+			}
+		}
+	}
+
+	return MaxEdge;
+}
+
+float4 Ramms_GetOutline(
+	float2 UV,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float CenterDepth = Ramms_SampleCustomDepth(UV);
+	if (CenterDepth > 0.0f)
+		return float4(0, 0, 0, 0);
+
+	float Edge = Ramms_SampleOutlineRing(UV, Thickness);
+
+	float Alpha = (Softness > 0.001f)
+		? smoothstep(0.0f, Softness, Edge)
+		: step(0.001f, Edge);
+
+	return float4(OutlineColor, Alpha);
+}
+
+
+// ── Per-Stencil Outline ────────────────────────────────────────────
+
+float Ramms_SampleStencilRing(
+	float2 UV,
+	float  Thickness,
+	int    TargetStencil)
+{
+	float2 TexelSize = Ramms_GetTexelSize();
+	float  MaxEdge   = 0.0f;
+	int    Radius    = (int)ceil(Thickness);
+
+	for (int y = -Radius; y <= Radius; y++)
+	{
+		for (int x = -Radius; x <= Radius; x++)
+		{
+			float Dist = length(float2(x, y));
+			if (Dist > Thickness + 0.5f || Dist < 0.5f)
+				continue;
+
+			float2 OffsetUV = UV + float2(x, y) * TexelSize;
+			int    Stencil  = Ramms_SampleStencilInt(OffsetUV);
+
+			if (Stencil == TargetStencil)
+			{
+				float Weight = 1.0f - saturate((Dist - Thickness) / 1.0f);
+				MaxEdge = max(MaxEdge, Weight);
+			}
+		}
+	}
+
+	return MaxEdge;
+}
+
+float4 Ramms_GetStencilOutline(
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	int CenterStencil = Ramms_SampleStencilInt(UV);
+	if (CenterStencil == TargetStencil)
+		return float4(0, 0, 0, 0);
+
+	float Edge = Ramms_SampleStencilRing(UV, Thickness, TargetStencil);
+
+	float Alpha = (Softness > 0.001f)
+		? smoothstep(0.0f, Softness, Edge)
+		: step(0.001f, Edge);
+
+	return float4(OutlineColor, Alpha);
+}
+
+
+// ── Multi-Stencil Composited Outline ───────────────────────────────
+
+float4 Ramms_BlendOutline(float4 Back, float4 Front)
+{
+	float OutAlpha = Front.a + Back.a * (1.0f - Front.a);
+	float3 OutColor = (OutAlpha > 0.001f)
+		? (Front.rgb * Front.a + Back.rgb * Back.a * (1.0f - Front.a)) / OutAlpha
+		: float3(0, 0, 0);
+	return float4(OutColor, OutAlpha);
+}
+
+float4 Ramms_AccumulateStencilOutline(
+	float4 Accumulated,
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float4 Layer = Ramms_GetStencilOutline(UV, TargetStencil, OutlineColor, Thickness, Softness);
+	return Ramms_BlendOutline(Accumulated, Layer);
+}
+
+
+// ── Depth-Aware Outline ────────────────────────────────────────────
+
+float4 Ramms_GetDepthAwareOutline(
+	float2 UV,
+	float3 OutlineColor,
+	float  BaseThickness,
+	float  Softness,
+	float  NearDistance,
+	float  FarDistance)
+{
+	float SceneDepth = Ramms_SampleSceneDepth(UV);
+	float DepthFactor = 1.0f - saturate((SceneDepth - NearDistance) / max(FarDistance - NearDistance, 0.001f));
+	float Thickness = BaseThickness * lerp(0.25f, 1.0f, DepthFactor);
+
+	return Ramms_GetOutline(UV, OutlineColor, Thickness, Softness);
+}
+
+float4 Ramms_GetDepthAwareStencilOutline(
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  BaseThickness,
+	float  Softness,
+	float  NearDistance,
+	float  FarDistance)
+{
+	float SceneDepth = Ramms_SampleSceneDepth(UV);
+	float DepthFactor = 1.0f - saturate((SceneDepth - NearDistance) / max(FarDistance - NearDistance, 0.001f));
+	float Thickness = BaseThickness * lerp(0.25f, 1.0f, DepthFactor);
+
+	return Ramms_GetStencilOutline(UV, TargetStencil, OutlineColor, Thickness, Softness);
+}
+
+
+// ── Fast Directional Outline (8-direction ray march) ───────────────
+
+float4 Ramms_GetFastOutline(
+	float2 UV,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float CenterDepth = Ramms_SampleCustomDepth(UV);
+	if (CenterDepth > 0.0f)
+		return float4(0, 0, 0, 0);
+
+	float2 TexelSize = Ramms_GetTexelSize();
+	float  MaxEdge   = 0.0f;
+	int    Steps     = (int)ceil(Thickness);
+
+	static const float2 Dirs[8] = {
+		float2( 1,  0), float2(-1,  0),
+		float2( 0,  1), float2( 0, -1),
+		float2( 0.7071f,  0.7071f), float2(-0.7071f, -0.7071f),
+		float2( 0.7071f, -0.7071f), float2(-0.7071f,  0.7071f)
+	};
+
+	for (int d = 0; d < 8; d++)
+	{
+		for (int s = 1; s <= Steps; s++)
+		{
+			float2 SampleUV = UV + Dirs[d] * (float)s * TexelSize;
+			float  Depth    = Ramms_SampleCustomDepth(SampleUV);
+
+			if (Depth > 0.0f)
+			{
+				float Dist   = (float)s;
+				float Weight = 1.0f - saturate((Dist - Thickness) / max(Softness, 0.5f));
+				MaxEdge = max(MaxEdge, Weight);
+				break;
+			}
+		}
+	}
+
+	return float4(OutlineColor, MaxEdge);
+}
+
+float4 Ramms_GetFastStencilOutline(
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	int CenterStencil = Ramms_SampleStencilInt(UV);
+	if (CenterStencil == TargetStencil)
+		return float4(0, 0, 0, 0);
+
+	float2 TexelSize = Ramms_GetTexelSize();
+	float  MaxEdge   = 0.0f;
+	int    Steps     = (int)ceil(Thickness);
+
+	static const float2 Dirs[8] = {
+		float2( 1,  0), float2(-1,  0),
+		float2( 0,  1), float2( 0, -1),
+		float2( 0.7071f,  0.7071f), float2(-0.7071f, -0.7071f),
+		float2( 0.7071f, -0.7071f), float2(-0.7071f,  0.7071f)
+	};
+
+	for (int d = 0; d < 8; d++)
+	{
+		for (int s = 1; s <= Steps; s++)
+		{
+			float2 SampleUV = UV + Dirs[d] * (float)s * TexelSize;
+			int    Stencil  = Ramms_SampleStencilInt(SampleUV);
+
+			if (Stencil == TargetStencil)
+			{
+				float Dist   = (float)s;
+				float Weight = 1.0f - saturate((Dist - Thickness) / max(Softness, 0.5f));
+				MaxEdge = max(MaxEdge, Weight);
+				break;
+			}
+		}
+	}
+
+	return float4(OutlineColor, MaxEdge);
+}
+
+
+// ── Composite Convenience Functions ────────────────────────────────
+
+float3 Ramms_GetOutlineComposite(
+	float3 SceneColor,
+	float2 UV,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float4 Outline = Ramms_GetOutline(UV, OutlineColor, Thickness, Softness);
+	return Ramms_CompositeOutline(SceneColor, Outline);
+}
+
+float3 Ramms_GetStencilOutlineComposite(
+	float3 SceneColor,
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float4 Outline = Ramms_GetStencilOutline(UV, TargetStencil, OutlineColor, Thickness, Softness);
+	return Ramms_CompositeOutline(SceneColor, Outline);
+}
+
+float3 Ramms_GetFastOutlineComposite(
+	float3 SceneColor,
+	float2 UV,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float4 Outline = Ramms_GetFastOutline(UV, OutlineColor, Thickness, Softness);
+	return Ramms_CompositeOutline(SceneColor, Outline);
+}
+
+float3 Ramms_GetFastStencilOutlineComposite(
+	float3 SceneColor,
+	float2 UV,
+	int    TargetStencil,
+	float3 OutlineColor,
+	float  Thickness,
+	float  Softness)
+{
+	float4 Outline = Ramms_GetFastStencilOutline(UV, TargetStencil, OutlineColor, Thickness, Softness);
+	return Ramms_CompositeOutline(SceneColor, Outline);
+}
