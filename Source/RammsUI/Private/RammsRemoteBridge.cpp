@@ -7,8 +7,6 @@
 #include "UI/RammsNotificationContainer.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
-#include "EngineUtils.h"
-#include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/UObjectIterator.h"
@@ -16,7 +14,7 @@
 // Static member
 TWeakObjectPtr<URammsNotificationContainer> URammsRemoteBridge::NotificationContainer;
 
-// ── Discovery ──────────────────────────────────────────────────────
+// ── UI Widget Discovery ────────────────────────────────────────────
 
 TArray<FString> URammsRemoteBridge::GetAllRammsWidgetPaths()
 {
@@ -47,99 +45,6 @@ TArray<FString> URammsRemoteBridge::FindRammsWidgets(const FString& ClassNameFil
 			}
 		}
 	}
-	return Paths;
-}
-
-TArray<FString> URammsRemoteBridge::GetAllActorPaths()
-{
-	TArray<FString> Paths;
-
-	// Try to find the play world (PIE or game)
-	UWorld* World = nullptr;
-	if (GEngine)
-	{
-		// Try play worlds first
-		for (const FWorldContext& Context : GEngine->GetWorldContexts())
-		{
-			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
-			{
-				World = Context.World();
-				break;
-			}
-		}
-		// Fall back to editor world
-		if (!World)
-		{
-			for (const FWorldContext& Context : GEngine->GetWorldContexts())
-			{
-				if (Context.WorldType == EWorldType::Editor)
-				{
-					World = Context.World();
-					break;
-				}
-			}
-		}
-	}
-
-	if (World)
-	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AActor* Actor = *It;
-			if (IsValid(Actor))
-			{
-				Paths.Add(Actor->GetPathName());
-			}
-		}
-	}
-
-	return Paths;
-}
-
-TArray<FString> URammsRemoteBridge::FindActors(const FString& ClassNameFilter)
-{
-	TArray<FString> Paths;
-
-	UWorld* World = nullptr;
-	if (GEngine)
-	{
-		for (const FWorldContext& Context : GEngine->GetWorldContexts())
-		{
-			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
-			{
-				World = Context.World();
-				break;
-			}
-		}
-		if (!World)
-		{
-			for (const FWorldContext& Context : GEngine->GetWorldContexts())
-			{
-				if (Context.WorldType == EWorldType::Editor)
-				{
-					World = Context.World();
-					break;
-				}
-			}
-		}
-	}
-
-	if (World)
-	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AActor* Actor = *It;
-			if (IsValid(Actor))
-			{
-				FString ClassName = Actor->GetClass()->GetName();
-				if (ClassNameFilter.IsEmpty() || ClassName.Contains(ClassNameFilter))
-				{
-					Paths.Add(Actor->GetPathName());
-				}
-			}
-		}
-	}
-
 	return Paths;
 }
 

@@ -10,9 +10,11 @@
 #include "RammsRemoteBridge.generated.h"
 
 /**
- * Static function library for Remote Control API integration.
+ * Static function library for Remote Control API integration (UI-specific).
  * Provides functions callable via PUT /remote/object/call on the CDO path:
  *   /Script/RammsUI.Default__URammsRemoteBridge
+ *
+ * For generic actor/component discovery, use URammsCoreBridge in RammsCore.
  *
  * These use TObjectIterator to find runtime widget instances without needing
  * a world context, making them accessible from the Remote Control HTTP API.
@@ -23,7 +25,7 @@ class RAMMSUI_API URammsRemoteBridge : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	// ── Discovery ──────────────────────────────────────────────────
+	// ── UI Widget Discovery ───────────────────────────────────────
 
 	/**
 	 * Get object paths for all live URammsBaseWidget instances.
@@ -37,18 +39,6 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
 	static TArray<FString> FindRammsWidgets(const FString& ClassNameFilter);
-
-	/**
-	 * Get object paths for all actors in the current play world (PIE or game).
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
-	static TArray<FString> GetAllActorPaths();
-
-	/**
-	 * Get object paths for actors matching a class name substring.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
-	static TArray<FString> FindActors(const FString& ClassNameFilter);
 
 	// ── Status Panel ───────────────────────────────────────────────
 
