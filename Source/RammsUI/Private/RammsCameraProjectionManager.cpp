@@ -2,6 +2,9 @@
 
 #include "RammsCameraProjectionManager.h"
 #include "RammsCameraProjectorComponent.h"
+#include "RammsCameraProviderComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "EngineUtils.h"
 
 URammsCameraProjectionManager::URammsCameraProjectionManager()
 {
@@ -11,6 +14,51 @@ URammsCameraProjectionManager::URammsCameraProjectionManager()
 void URammsCameraProjectionManager::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Auto-discover: if no provider assigned yet, find one in the world
+	if (!CameraProviderObject.IsValid() && bAutoCreateProjectors)
+	{
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			// First try actor-based providers
+			TArray<AActor*> ProviderActors;
+			UGameplayStatics::GetAllActorsWithInterface(World, URammsCameraProvider::StaticClass(), ProviderActors);
+			for (AActor* Actor : ProviderActors)
+			{
+				if (Actor == GetOwner())
+					continue;
+				if (IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Actor))
+				{
+					TScriptInterface<IRammsCameraProvider> Provider;
+					Provider.SetObject(Actor);
+					Provider.SetInterface(Iface);
+					SetCameraProvider(Provider);
+					UE_LOG(LogTemp, Log, TEXT("RammsCameraProjectionManager: Auto-discovered actor camera provider: %s"), *Actor->GetName());
+					break;
+				}
+			}
+
+			// If no actor-based provider found, search for component-based providers
+			if (!CameraProviderObject.IsValid())
+			{
+				for (TActorIterator<AActor> It(World); It; ++It)
+				{
+					if (*It == GetOwner())
+						continue;
+					if (URammsCameraProviderComponent* Comp = It->FindComponentByClass<URammsCameraProviderComponent>())
+					{
+						TScriptInterface<IRammsCameraProvider> Provider;
+						Provider.SetObject(Comp);
+						Provider.SetInterface(static_cast<IRammsCameraProvider*>(Comp));
+						SetCameraProvider(Provider);
+						UE_LOG(LogTemp, Log, TEXT("RammsCameraProjectionManager: Auto-discovered component camera provider on: %s"), *It->GetName());
+						break;
+					}
+				}
+			}
+		}
+	}
 }
 
 void URammsCameraProjectionManager::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -60,6 +108,8 @@ void URammsCameraProjectionManager::BindProvider(IRammsCameraProvider* Iface)
 		this, &URammsCameraProjectionManager::OnCameraFrameReady);
 	StreamStatusHandle = Iface->OnCameraStreamStatus().AddUObject(
 		this, &URammsCameraProjectionManager::OnCameraStreamStatus);
+	ExtrinsicUpdatedHandle = Iface->OnCameraExtrinsicUpdated().AddUObject(
+		this, &URammsCameraProjectionManager::OnCameraExtrinsicUpdated);
 }
 
 void URammsCameraProjectionManager::UnbindProvider()
@@ -75,9 +125,14 @@ void URammsCameraProjectionManager::UnbindProvider()
 		{
 			Iface->OnCameraStreamStatus().Remove(StreamStatusHandle);
 		}
+		if (ExtrinsicUpdatedHandle.IsValid())
+		{
+			Iface->OnCameraExtrinsicUpdated().Remove(ExtrinsicUpdatedHandle);
+		}
 	}
 	FrameReadyHandle.Reset();
 	StreamStatusHandle.Reset();
+	ExtrinsicUpdatedHandle.Reset();
 	CameraProviderObject.Reset();
 }
 
@@ -228,5 +283,13 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 	if (TObjectPtr<URammsCameraProjectorComponent>* Found = Projectors.Find(StreamID))
 	{
 		(*Found)->SetProjectionEnabled(bActive);
+	}
+}
+
+void URammsCameraProjectionManager::OnCameraExtrinsicUpdated(const FString& StreamID, const FTransform& WorldTransform)
+{
+	if (TObjectPtr<URammsCameraProjectorComponent>* Found = Projectors.Find(StreamID))
+	{
+		(*Found)->SetCameraTransform(WorldTransform);
 	}
 }

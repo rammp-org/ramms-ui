@@ -77,6 +77,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void SetStreamActive(const FString& StreamID, bool bActive);
 
+	/** Update the extrinsic (world-space pose) for a stream. Fires OnCameraStreamStatus so consumers can refresh. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
+	void UpdateStreamExtrinsic(const FString& StreamID, const FTransform& WorldTransform);
+
 	// --- Blueprint Events (override in Blueprint) ---
 
 	/** Called when a consumer requests a stream to start. Override to begin producing frames. Return true if stream started successfully. */
@@ -98,6 +102,7 @@ public:
 	virtual float GetActualFrameRate(const FString& StreamID) const override;
 	virtual FOnCameraFrameReady& OnCameraFrameReady() override { return CameraFrameReadyDelegate; }
 	virtual FOnCameraStreamStatus& OnCameraStreamStatus() override { return CameraStreamStatusDelegate; }
+	virtual FOnCameraExtrinsicUpdated& OnCameraExtrinsicUpdated() override { return CameraExtrinsicUpdatedDelegate; }
 
 protected:
 	virtual void Tick(float DeltaTime) override;
@@ -108,4 +113,5 @@ protected:
 private:
 	FOnCameraFrameReady CameraFrameReadyDelegate;
 	FOnCameraStreamStatus CameraStreamStatusDelegate;
+	FOnCameraExtrinsicUpdated CameraExtrinsicUpdatedDelegate;
 };

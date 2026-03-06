@@ -46,6 +46,14 @@ struct FRammsCameraStreamInfo
 	/** Camera intrinsics (fx, fy, cx, cy) - empty if not available */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	TArray<float> Intrinsics;
+
+	/** Camera extrinsic — world-space pose (position + orientation). Identity if not available. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	FTransform Extrinsic;
+
+	/** Whether a valid extrinsic has been provided */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	bool bHasExtrinsic = false;
 };
 
 /**
@@ -62,6 +70,13 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnCameraFrameReady, const FString&, UTex
  * @param bActive - True if stream is active, false if stopped
  */
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCameraStreamStatus, const FString&, bool);
+
+/**
+ * Delegate for camera extrinsic (pose) update
+ * @param StreamID - Stream identifier
+ * @param WorldTransform - Updated world-space camera pose
+ */
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCameraExtrinsicUpdated, const FString&, const FTransform&);
 
 UINTERFACE(MinimalAPI, Blueprintable)
 class URammsCameraProvider : public UInterface
@@ -137,4 +152,5 @@ public:
 	// Delegate accessors
 	virtual FOnCameraFrameReady& OnCameraFrameReady() = 0;
 	virtual FOnCameraStreamStatus& OnCameraStreamStatus() = 0;
+	virtual FOnCameraExtrinsicUpdated& OnCameraExtrinsicUpdated() = 0;
 };

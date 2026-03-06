@@ -135,6 +135,12 @@ void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCam
 		FocalLengthY    = PrincipalPointY;
 	}
 
+	// Apply extrinsic if provided
+	if (StreamInfo.bHasExtrinsic)
+	{
+		SetCameraTransform(StreamInfo.Extrinsic);
+	}
+
 	UpdateDecalSize();
 	UpdateMaterialParameters();
 }

@@ -82,6 +82,17 @@ void ARammsCameraProviderBase::SetStreamActive(const FString& StreamID, bool bAc
 	CameraStreamStatusDelegate.Broadcast(StreamID, bActive);
 }
 
+void ARammsCameraProviderBase::UpdateStreamExtrinsic(const FString& StreamID, const FTransform& WorldTransform)
+{
+	FRammsCameraStreamState* State = Streams.Find(StreamID);
+	if (!State)
+		return;
+
+	State->Info.Extrinsic = WorldTransform;
+	State->Info.bHasExtrinsic = true;
+	CameraExtrinsicUpdatedDelegate.Broadcast(StreamID, WorldTransform);
+}
+
 bool ARammsCameraProviderBase::OnStreamStartRequested_Implementation(const FString& StreamID)
 {
 	// Default: just mark as active. Override in Blueprint for custom behavior.

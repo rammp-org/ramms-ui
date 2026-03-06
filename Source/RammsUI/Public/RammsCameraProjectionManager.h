@@ -14,11 +14,12 @@ class URammsCameraProjectorComponent;
  *
  * Attach this component to any actor. When a camera provider is assigned,
  * the manager auto-creates URammsCameraProjectorComponent children for each
- * non-depth stream and keeps their textures up to date.
+ * non-depth stream and keeps their textures and transforms up to date.
  *
- * Camera extrinsics (world transforms) must be supplied separately via
- * SetProjectorTransform(), since the camera provider only supplies intrinsics
- * and image data.
+ * Camera extrinsics (world transforms) can be supplied via:
+ *   - FRammsCameraStreamInfo::Extrinsic (set bHasExtrinsic=true)
+ *   - UpdateStreamExtrinsic() on the provider (auto-updates projectors)
+ *   - SetProjectorTransform() on this manager (manual override)
  */
 UCLASS(ClassGroup = (Ramms), meta = (BlueprintSpawnableComponent))
 class RAMMSUI_API URammsCameraProjectionManager : public UActorComponent
@@ -97,6 +98,7 @@ private:
 
 	FDelegateHandle FrameReadyHandle;
 	FDelegateHandle StreamStatusHandle;
+	FDelegateHandle ExtrinsicUpdatedHandle;
 
 	IRammsCameraProvider* GetProvider() const;
 	void BindProvider(IRammsCameraProvider* Iface);
@@ -105,4 +107,5 @@ private:
 
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
+	void OnCameraExtrinsicUpdated(const FString& StreamID, const FTransform& WorldTransform);
 };
