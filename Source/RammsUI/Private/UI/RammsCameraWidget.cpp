@@ -310,7 +310,7 @@ void URammsCameraWidget::NativeConstruct()
 		CachedExpandedSlotSize = CanvasSlot->GetSize();
 	}
 
-	// Auto-find camera providers
+	// Auto-find camera providers if none pre-assigned
 	if (!CameraProvider.GetInterface() && bAutoFindProvider)
 	{
 		if (UWorld* World = GetWorld())
@@ -361,8 +361,7 @@ void URammsCameraWidget::NativeConstruct()
 				CameraProvider.SetInterface(ProviderIfaces[0]);
 			}
 
-			// Subscribe to ALL providers' frame delegates so we
-			// receive frames regardless of which provider serves our stream
+			// Subscribe to ALL discovered providers' frame delegates
 			for (int32 i = 0; i < ProviderIfaces.Num(); ++i)
 			{
 				FProviderSubscription Sub;
@@ -376,6 +375,17 @@ void URammsCameraWidget::NativeConstruct()
 			UE_LOG(LogTemp, Log, TEXT("RammsCameraWidget: Found %d providers, subscribed to all. StreamID='%s'"),
 				ProviderIfaces.Num(), *StreamID);
 		}
+	}
+
+	// Ensure preassigned CameraProvider is always subscribed
+	if (CameraProvider.GetInterface() && ProviderSubscriptions.IsEmpty())
+	{
+		FProviderSubscription Sub;
+		Sub.Object = CameraProvider.GetObject();
+		Sub.Interface = CameraProvider.GetInterface();
+		Sub.Handle = CameraProvider.GetInterface()->OnCameraFrameReady().AddUObject(
+			this, &URammsCameraWidget::OnCameraFrameReady);
+		ProviderSubscriptions.Add(Sub);
 	}
 
 	// Start camera stream if provider and stream ID are set
@@ -758,6 +768,8 @@ void URammsCameraWidget::StartStream()
 			FProviderSubscription Sub;
 			Sub.Object = CameraProvider.GetObject();
 			Sub.Interface = CameraProvider.GetInterface();
+			Sub.Handle = CameraProvider.GetInterface()->OnCameraFrameReady().AddUObject(
+				this, &URammsCameraWidget::OnCameraFrameReady);
 			ProviderSubscriptions.Add(Sub);
 		}
 
