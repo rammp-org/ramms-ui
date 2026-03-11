@@ -732,13 +732,6 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture* Texture, int64 Timestamp)
 {
-	static int32 LogCount = 0;
-	if (LogCount < 5)
-	{
-		UE_LOG(LogTemp, Log, TEXT("RammsCameraWidget::OnCameraFrameReady stream='%s' myStream='%s' tex=%p"), *InStreamID, *StreamID, Texture);
-		LogCount++;
-	}
-
 	if (InStreamID == StreamID)
 	{
 		CurrentTexture = Texture;
@@ -759,6 +752,15 @@ void URammsCameraWidget::StartStream()
 	// Try StartStream on ALL subscribed providers (any of them might serve our stream)
 	if (!StreamID.IsEmpty())
 	{
+		// If no subscriptions exist but CameraProvider is set, add it as a fallback
+		if (ProviderSubscriptions.IsEmpty() && CameraProvider.GetInterface())
+		{
+			FProviderSubscription Sub;
+			Sub.Object = CameraProvider.GetObject();
+			Sub.Interface = CameraProvider.GetInterface();
+			ProviderSubscriptions.Add(Sub);
+		}
+
 		bool bStarted = false;
 		for (auto& Sub : ProviderSubscriptions)
 		{

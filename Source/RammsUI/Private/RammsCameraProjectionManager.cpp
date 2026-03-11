@@ -227,7 +227,7 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 
 	for (const FRammsCameraStreamInfo& Info : Streams)
 	{
-		UE_LOG(LogRammsProjection, Log,
+		UE_LOG(LogRammsProjection, Verbose,
 			TEXT("  Stream '%s': depth=%d, %dx%d, intrinsics=%d, hasExtrinsic=%d"),
 			*Info.StreamID, Info.bIsDepth ? 1 : 0, Info.Width, Info.Height,
 			Info.Intrinsics.Num(), Info.bHasExtrinsic ? 1 : 0);

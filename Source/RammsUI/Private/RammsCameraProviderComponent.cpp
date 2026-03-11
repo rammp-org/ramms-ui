@@ -3,6 +3,8 @@
 #include "RammsCameraProviderComponent.h"
 #include "Engine/Texture2D.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraProvider, Log, All);
+
 URammsCameraProviderComponent::URammsCameraProviderComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -35,24 +37,15 @@ void URammsCameraProviderComponent::BroadcastFrame(const FString& StreamID, UTex
 	FRammsCameraStreamState* State = Streams.Find(StreamID);
 	if (!State)
 	{
-		static int32 MissCount = 0;
-		if (MissCount++ < 3)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("CameraProviderComponent::BroadcastFrame: stream '%s' not in Streams map (%d entries)"), *StreamID, Streams.Num());
-		}
+		UE_LOG(LogRammsCameraProvider, Warning,
+			TEXT("BroadcastFrame: stream '%s' not registered (%d entries)"),
+			*StreamID, Streams.Num());
 		return;
 	}
 
 	State->Texture = Texture;
 	State->LastTimestamp = FDateTime::UtcNow().GetTicks();
 	State->FrameCount++;
-
-	static int32 BcastCount = 0;
-	if (BcastCount < 5)
-	{
-		UE_LOG(LogTemp, Log, TEXT("CameraProviderComponent::BroadcastFrame '%s' tex=%p (frameCount=%d)"), *StreamID, Texture, State->FrameCount);
-		BcastCount++;
-	}
 
 	CameraFrameReadyDelegate.Broadcast(StreamID, Texture, State->LastTimestamp);
 }

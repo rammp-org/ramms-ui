@@ -8,6 +8,7 @@
 
 class URammsStreamSinkComponent;
 class URammsCameraProviderComponent;
+class UTexture2D;
 class FJsonObject;
 
 /**

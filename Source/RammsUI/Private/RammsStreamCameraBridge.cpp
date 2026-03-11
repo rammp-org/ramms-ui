@@ -108,11 +108,18 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			const TSharedPtr<FJsonObject>* IntrObj = nullptr;
 			if (Meta->TryGetObjectField(TEXT("intrinsics"), IntrObj) && IntrObj->IsValid())
 			{
-				Info.Intrinsics.SetNum(4);
-				Info.Intrinsics[0] = static_cast<float>((*IntrObj)->GetNumberField(TEXT("fx")));
-				Info.Intrinsics[1] = static_cast<float>((*IntrObj)->GetNumberField(TEXT("fy")));
-				Info.Intrinsics[2] = static_cast<float>((*IntrObj)->GetNumberField(TEXT("cx")));
-				Info.Intrinsics[3] = static_cast<float>((*IntrObj)->GetNumberField(TEXT("cy")));
+				double Fx, Fy, Cx, Cy;
+				if ((*IntrObj)->TryGetNumberField(TEXT("fx"), Fx)
+					&& (*IntrObj)->TryGetNumberField(TEXT("fy"), Fy)
+					&& (*IntrObj)->TryGetNumberField(TEXT("cx"), Cx)
+					&& (*IntrObj)->TryGetNumberField(TEXT("cy"), Cy))
+				{
+					Info.Intrinsics.SetNum(4);
+					Info.Intrinsics[0] = static_cast<float>(Fx);
+					Info.Intrinsics[1] = static_cast<float>(Fy);
+					Info.Intrinsics[2] = static_cast<float>(Cx);
+					Info.Intrinsics[3] = static_cast<float>(Cy);
+				}
 			}
 
 			// Extract extrinsic transform
@@ -159,17 +166,18 @@ bool URammsStreamCameraBridge::ParseTransformFromMeta(
 		return false;
 	}
 
-	FVector Loc(
-		(*TransObj)->GetNumberField(TEXT("x")),
-		(*TransObj)->GetNumberField(TEXT("y")),
-		(*TransObj)->GetNumberField(TEXT("z"))
-	);
-	FRotator Rot(
-		(*TransObj)->GetNumberField(TEXT("pitch")),
-		(*TransObj)->GetNumberField(TEXT("yaw")),
-		(*TransObj)->GetNumberField(TEXT("roll"))
-	);
-	FTransform ParsedTransform(Rot, Loc);
+	double X = 0, Y = 0, Z = 0, Pitch = 0, Yaw = 0, Roll = 0;
+	if (!(*TransObj)->TryGetNumberField(TEXT("x"), X)
+		|| !(*TransObj)->TryGetNumberField(TEXT("y"), Y)
+		|| !(*TransObj)->TryGetNumberField(TEXT("z"), Z)
+		|| !(*TransObj)->TryGetNumberField(TEXT("pitch"), Pitch)
+		|| !(*TransObj)->TryGetNumberField(TEXT("yaw"), Yaw)
+		|| !(*TransObj)->TryGetNumberField(TEXT("roll"), Roll))
+	{
+		return false;
+	}
+
+	FTransform ParsedTransform(FRotator(Pitch, Yaw, Roll), FVector(X, Y, Z));
 
 	// If the transform is relative, compose it with our owner actor's world transform
 	FString TransformSpace;
