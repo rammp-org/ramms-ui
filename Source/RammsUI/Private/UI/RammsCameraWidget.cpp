@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/RammsCameraWidget.h"
+#include "RammsCameraProviderComponent.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/OverlaySlot.h"
 #include "Components/VerticalBoxSlot.h"
@@ -309,21 +310,82 @@ void URammsCameraWidget::NativeConstruct()
 		CachedExpandedSlotSize = CanvasSlot->GetSize();
 	}
 
-	// Auto-find camera provider if none set
+	// Auto-find camera providers if none pre-assigned
 	if (!CameraProvider.GetInterface() && bAutoFindProvider)
 	{
 		if (UWorld* World = GetWorld())
 		{
+			// Collect all providers (actor-based and component-based)
+			TArray<UObject*> ProviderObjs;
+			TArray<IRammsCameraProvider*> ProviderIfaces;
+
 			for (TActorIterator<AActor> It(World); It; ++It)
 			{
+				// Actor-based providers
 				if (It->GetClass()->ImplementsInterface(URammsCameraProvider::StaticClass()))
 				{
-					CameraProvider.SetObject(*It);
-					CameraProvider.SetInterface(Cast<IRammsCameraProvider>(*It));
-					break;
+					ProviderObjs.Add(*It);
+					ProviderIfaces.Add(Cast<IRammsCameraProvider>(*It));
+				}
+
+				// Component-based providers
+				if (URammsCameraProviderComponent* Comp = It->FindComponentByClass<URammsCameraProviderComponent>())
+				{
+					if (!ProviderObjs.Contains(Comp))
+					{
+						ProviderObjs.Add(Comp);
+						ProviderIfaces.Add(static_cast<IRammsCameraProvider*>(Comp));
+					}
 				}
 			}
+
+			// Prefer a provider that already has our StreamID registered
+			for (int32 i = 0; i < ProviderIfaces.Num(); ++i)
+			{
+				for (const auto& Info : ProviderIfaces[i]->GetAvailableStreams())
+				{
+					if (Info.StreamID == StreamID)
+					{
+						CameraProvider.SetObject(ProviderObjs[i]);
+						CameraProvider.SetInterface(ProviderIfaces[i]);
+						break;
+					}
+				}
+				if (CameraProvider.GetInterface()) break;
+			}
+
+			// Fall back to first provider if none had the stream yet
+			if (!CameraProvider.GetInterface() && ProviderIfaces.Num() > 0)
+			{
+				CameraProvider.SetObject(ProviderObjs[0]);
+				CameraProvider.SetInterface(ProviderIfaces[0]);
+			}
+
+			// Subscribe to ALL discovered providers' frame delegates
+			for (int32 i = 0; i < ProviderIfaces.Num(); ++i)
+			{
+				FProviderSubscription Sub;
+				Sub.Object = ProviderObjs[i];
+				Sub.Interface = ProviderIfaces[i];
+				Sub.Handle = ProviderIfaces[i]->OnCameraFrameReady().AddUObject(
+					this, &URammsCameraWidget::OnCameraFrameReady);
+				ProviderSubscriptions.Add(Sub);
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("RammsCameraWidget: Found %d providers, subscribed to all. StreamID='%s'"),
+				ProviderIfaces.Num(), *StreamID);
 		}
+	}
+
+	// Ensure preassigned CameraProvider is always subscribed
+	if (CameraProvider.GetInterface() && ProviderSubscriptions.IsEmpty())
+	{
+		FProviderSubscription Sub;
+		Sub.Object = CameraProvider.GetObject();
+		Sub.Interface = CameraProvider.GetInterface();
+		Sub.Handle = CameraProvider.GetInterface()->OnCameraFrameReady().AddUObject(
+			this, &URammsCameraWidget::OnCameraFrameReady);
+		ProviderSubscriptions.Add(Sub);
 	}
 
 	// Start camera stream if provider and stream ID are set
@@ -339,6 +401,17 @@ void URammsCameraWidget::NativeConstruct()
 void URammsCameraWidget::NativeDestruct()
 {
 	StopStream();
+
+	// Unsubscribe from all providers' frame delegates
+	for (auto& Sub : ProviderSubscriptions)
+	{
+		if (Sub.Object.IsValid() && Sub.Interface)
+		{
+			Sub.Interface->OnCameraFrameReady().Remove(Sub.Handle);
+		}
+	}
+	ProviderSubscriptions.Empty();
+
 	Super::NativeDestruct();
 }
 
@@ -479,11 +552,34 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 
 void URammsCameraWidget::SetCameraProvider(TScriptInterface<IRammsCameraProvider> Provider)
 {
-	// Stop existing stream
+	// Stop existing streams
 	StopStream();
 
 	// Set new provider
 	CameraProvider = Provider;
+
+	// Add subscription if this provider isn't already tracked
+	if (IRammsCameraProvider* Iface = Provider.GetInterface())
+	{
+		bool bAlreadySubscribed = false;
+		for (const auto& Sub : ProviderSubscriptions)
+		{
+			if (Sub.Object.Get() == Provider.GetObject())
+			{
+				bAlreadySubscribed = true;
+				break;
+			}
+		}
+		if (!bAlreadySubscribed)
+		{
+			FProviderSubscription Sub;
+			Sub.Object = Provider.GetObject();
+			Sub.Interface = Iface;
+			Sub.Handle = Iface->OnCameraFrameReady().AddUObject(
+				this, &URammsCameraWidget::OnCameraFrameReady);
+			ProviderSubscriptions.Add(Sub);
+		}
+	}
 
 	// Start new stream if we have a stream ID
 	if (!StreamID.IsEmpty())
@@ -660,68 +756,67 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 
 void URammsCameraWidget::StartStream()
 {
-	IRammsCameraProvider* Provider = CameraProvider.GetInterface();
-	if (!Provider)
-		return;
+	// Delegate subscriptions are managed in NativeConstruct/NativeDestruct (widget lifetime).
+	// Here we just tell providers to activate the stream.
 
-	// Subscribe to frame updates (single delegate handles both RGB and depth)
-	if (!CameraFrameHandle.IsValid())
-	{
-		CameraFrameHandle = Provider->OnCameraFrameReady().AddUObject(this, &URammsCameraWidget::OnCameraFrameReady);
-	}
-
-	// Start RGB stream
+	// Try StartStream on ALL subscribed providers (any of them might serve our stream)
 	if (!StreamID.IsEmpty())
 	{
-		if (Provider->StartStream(StreamID))
+		// If no subscriptions exist but CameraProvider is set, add it as a fallback
+		if (ProviderSubscriptions.IsEmpty() && CameraProvider.GetInterface())
 		{
-			UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: Started RGB stream '%s'"), *StreamID);
+			FProviderSubscription Sub;
+			Sub.Object = CameraProvider.GetObject();
+			Sub.Interface = CameraProvider.GetInterface();
+			Sub.Handle = CameraProvider.GetInterface()->OnCameraFrameReady().AddUObject(
+				this, &URammsCameraWidget::OnCameraFrameReady);
+			ProviderSubscriptions.Add(Sub);
 		}
-		else
+
+		bool bStarted = false;
+		for (auto& Sub : ProviderSubscriptions)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("URammsCameraWidget: Failed to start RGB stream '%s'"), *StreamID);
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				if (Sub.Interface->StartStream(StreamID))
+				{
+					bStarted = true;
+				}
+			}
 		}
+		UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: StartStream('%s') %s"), *StreamID,
+			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"));
 	}
 
 	// Start depth stream if configured
 	if (!DepthStreamID.IsEmpty())
 	{
-		if (Provider->StartStream(DepthStreamID))
+		for (auto& Sub : ProviderSubscriptions)
 		{
-			UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: Started depth stream '%s'"), *DepthStreamID);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("URammsCameraWidget: Failed to start depth stream '%s'"), *DepthStreamID);
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				Sub.Interface->StartStream(DepthStreamID);
+			}
 		}
 	}
 }
 
 void URammsCameraWidget::StopStream()
 {
-	IRammsCameraProvider* Provider = CameraProvider.GetInterface();
-	if (!Provider)
-		return;
-
-	// Unsubscribe from frame updates
-	if (CameraFrameHandle.IsValid())
+	// Stop streams on all providers (but keep delegate subscriptions alive)
+	for (auto& Sub : ProviderSubscriptions)
 	{
-		Provider->OnCameraFrameReady().Remove(CameraFrameHandle);
-		CameraFrameHandle.Reset();
-	}
-
-	// Stop RGB stream
-	if (!StreamID.IsEmpty())
-	{
-		Provider->StopStream(StreamID);
-		UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: Stopped stream '%s'"), *StreamID);
-	}
-
-	// Stop depth stream
-	if (!DepthStreamID.IsEmpty())
-	{
-		Provider->StopStream(DepthStreamID);
-		UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: Stopped depth stream '%s'"), *DepthStreamID);
+		if (Sub.Object.IsValid() && Sub.Interface)
+		{
+			if (!StreamID.IsEmpty())
+			{
+				Sub.Interface->StopStream(StreamID);
+			}
+			if (!DepthStreamID.IsEmpty())
+			{
+				Sub.Interface->StopStream(DepthStreamID);
+			}
+		}
 	}
 }
 

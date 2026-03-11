@@ -10,11 +10,15 @@
 class URammsCameraProjectorComponent;
 
 /**
- * Manages camera-feed projectors driven by an IRammsCameraProvider.
+ * Manages camera-feed projectors driven by one or more IRammsCameraProviders.
  *
- * Attach this component to any actor. When a camera provider is assigned,
- * the manager auto-creates URammsCameraProjectorComponent children for each
- * non-depth stream and keeps their textures and transforms up to date.
+ * Attach this component to any actor. When camera providers are discovered
+ * (or assigned), the manager auto-creates URammsCameraProjectorComponent
+ * children for each non-depth stream and keeps their textures and transforms
+ * up to date.
+ *
+ * Supports multiple providers simultaneously — e.g. an actor-based provider
+ * for in-scene cameras AND a component-based provider for streamed cameras.
  *
  * Camera extrinsics (world transforms) can be supplied via:
  *   - FRammsCameraStreamInfo::Extrinsic (set bHasExtrinsic=true)
@@ -57,7 +61,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetCameraProvider(TScriptInterface<IRammsCameraProvider> Provider);
 
-	/** Disconnect from the current camera provider */
+	/** Add an additional provider (does not remove existing ones) */
+	UFUNCTION(BlueprintCallable, Category = "Projection")
+	void AddCameraProvider(TScriptInterface<IRammsCameraProvider> Provider);
+
+	/** Disconnect from all camera providers */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void ClearCameraProvider();
 
@@ -93,17 +101,30 @@ protected:
 	TMap<FString, TObjectPtr<URammsCameraProjectorComponent>> Projectors;
 
 private:
-	UPROPERTY()
-	TWeakObjectPtr<UObject> CameraProviderObject;
+	/** Per-provider binding state. */
+	struct FProviderBinding
+	{
+		TWeakObjectPtr<UObject> Object;
+		FDelegateHandle FrameReadyHandle;
+		FDelegateHandle StreamStatusHandle;
+		FDelegateHandle ExtrinsicUpdatedHandle;
+	};
 
-	FDelegateHandle FrameReadyHandle;
-	FDelegateHandle StreamStatusHandle;
-	FDelegateHandle ExtrinsicUpdatedHandle;
+	TArray<FProviderBinding> ProviderBindings;
 
-	IRammsCameraProvider* GetProvider() const;
-	void BindProvider(IRammsCameraProvider* Iface);
-	void UnbindProvider();
-	void CreateProjectorsForExistingStreams();
+	/** Get the interface pointer for a binding (nullptr if stale). */
+	static IRammsCameraProvider* GetProviderFromBinding(const FProviderBinding& Binding);
+
+	/** Find a valid provider that knows about a given StreamID. */
+	IRammsCameraProvider* FindProviderForStream(const FString& StreamID) const;
+
+	void BindProvider(UObject* Obj, IRammsCameraProvider* Iface);
+	void UnbindAllProviders();
+	bool IsProviderBound(UObject* Obj) const;
+	void CreateProjectorsForProvider(IRammsCameraProvider* Iface);
+	void DiscoverProviders();
+
+	FTimerHandle DeferredDiscoveryHandle;
 
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);

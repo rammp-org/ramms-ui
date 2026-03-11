@@ -236,11 +236,14 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> OverlayRT;
 
-	/** Delegate handle for camera frame updates */
-	FDelegateHandle CameraFrameHandle;
-
-	/** Delegate handle for depth frame updates */
-	FDelegateHandle DepthFrameHandle;
+	/** Tracked subscriptions to all discovered providers' frame delegates */
+	struct FProviderSubscription
+	{
+		TWeakObjectPtr<UObject> Object;
+		IRammsCameraProvider* Interface = nullptr;
+		FDelegateHandle Handle;
+	};
+	TArray<FProviderSubscription> ProviderSubscriptions;
 
 public:
 	virtual void NativeOnInitialized() override;

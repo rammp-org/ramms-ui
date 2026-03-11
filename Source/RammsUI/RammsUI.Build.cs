@@ -41,7 +41,8 @@ public class RammsUI : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				// ... add private dependencies that you statically link with here ...
+				"Json",           // FJsonObject/FJsonSerializer used by StreamCameraBridge
+				"RammsStreaming", // For stream sink → camera provider bridge
 			}
 			);
 
