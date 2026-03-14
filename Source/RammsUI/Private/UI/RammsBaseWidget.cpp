@@ -116,6 +116,25 @@ void URammsBaseWidget::SynchronizeProperties()
 	// ran before WidgetTree was ready, or the tree was just reset above)
 	BuildWidgetTree();
 
+	// When placed in a Canvas Panel with default (0,0) slot size (common when the
+	// widget had no content at placement time), auto-enable "Size to Content"
+	// so the widget is visible. Only applies to point anchors (not stretch anchors).
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+	{
+		FAnchors Anchors = CanvasSlot->GetAnchors();
+		bool bPointAnchors = FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
+			&& FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y);
+
+		if (bPointAnchors && !CanvasSlot->GetAutoSize())
+		{
+			FVector2D SlotSize = CanvasSlot->GetSize();
+			if (SlotSize.X < 1.0f && SlotSize.Y < 1.0f)
+			{
+				CanvasSlot->SetAutoSize(true);
+			}
+		}
+	}
+
 	// Re-apply style when properties change in the designer
 	if (bAutoApplyStyle && Style)
 	{
