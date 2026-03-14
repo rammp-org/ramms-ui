@@ -89,6 +89,7 @@ public:
 
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual void SynchronizeProperties() override;
 	virtual void ApplyStyle_Implementation() override;
 
 	/** Set the button image */
@@ -116,6 +117,7 @@ public:
 	void SetImageSize(FVector2D NewSize);
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	void UpdateVisualState();
 

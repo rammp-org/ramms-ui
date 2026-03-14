@@ -114,6 +114,7 @@ public:
 	void SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon);
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	void UpdateModeButtons();
 

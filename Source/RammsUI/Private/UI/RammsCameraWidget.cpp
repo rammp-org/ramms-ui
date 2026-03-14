@@ -15,6 +15,20 @@
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
 
+void URammsCameraWidget::ResetCachedWidgets()
+{
+	CameraBorder = nullptr;
+	CameraImage = nullptr;
+	CameraLabel = nullptr;
+	TitleBar = nullptr;
+	CollapseButton = nullptr;
+	CollapseIcon = nullptr;
+	CameraSizeBox = nullptr;
+	DepthImage = nullptr;
+	ViewModeButton = nullptr;
+	ViewModeLabel = nullptr;
+}
+
 void URammsCameraWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || CameraBorder)

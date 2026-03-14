@@ -84,6 +84,7 @@ public:
 	void SetActionEnabled(ERammsArmAction Action, bool bEnabled);
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()

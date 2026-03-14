@@ -7,12 +7,27 @@
 #include "Interfaces/IRammsRobotController.h"
 #include "RammsUISubsystem.h"
 
+bool URammsBaseWidget::Initialize()
+{
+	bool bResult = Super::Initialize();
+	if (bResult)
+	{
+		// Build the widget tree immediately after WidgetTree is created by Super.
+		// This ensures the tree is populated BEFORE RebuildWidget()/TakeWidget()
+		// creates the Slate representation — critical for designer preview.
+		// At runtime, NativeOnInitialized (called by Super) may have already built
+		// it; the guard in each derived BuildWidgetTree prevents double-building.
+		BuildWidgetTree();
+	}
+	return bResult;
+}
+
 void URammsBaseWidget::NativePreConstruct()
 {
 	Super::NativePreConstruct();
 
-	BuildWidgetTree();
-
+	// Tree should already be built by Initialize(), but apply style here
+	// since this is the first point where designer flags are set.
 	if (bAutoApplyStyle && Style)
 	{
 		ApplyStyle();
@@ -89,12 +104,27 @@ void URammsBaseWidget::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
 
+	// After Blueprint recompilation, the WidgetTree root may be cleared
+	// while our cached widget pointers (InnerButton, etc.) are stale.
+	// Detect this and force a rebuild.
+	if (WidgetTree && !WidgetTree->RootWidget)
+	{
+		ResetCachedWidgets();
+	}
+
+	// Ensure the widget tree is built (covers the case where NativePreConstruct
+	// ran before WidgetTree was ready, or the tree was just reset above)
+	BuildWidgetTree();
+
 	// Re-apply style when properties change in the designer
 	if (bAutoApplyStyle && Style)
 	{
 		ApplyStyle();
 		PropagateStyleToChildren();
 	}
+
+	// Force Slate to recalculate layout — prevents 0-height after Blueprint recompilation
+	InvalidateLayoutAndVolatility();
 }
 
 // ==================== Animation Helpers ====================

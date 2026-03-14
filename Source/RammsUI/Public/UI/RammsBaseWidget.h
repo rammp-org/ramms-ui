@@ -60,6 +60,7 @@ protected:
 	TWeakObjectPtr<AActor> ResolvedControllerActor;
 
 public:
+	virtual bool Initialize() override;
 	virtual void NativePreConstruct() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -67,10 +68,18 @@ public:
 
 	/**
 	 * Build the widget tree for this widget. Override in derived classes.
-	 * Called automatically from NativePreConstruct (works in both designer and runtime).
+	 * Called from Initialize() (before Slate representation is created) so the
+	 * tree is ready for both designer preview and runtime.
 	 * Implementations should guard against double-building.
 	 */
 	virtual void BuildWidgetTree() {}
+
+	/**
+	 * Reset cached widget pointers. Called when the widget tree is invalidated
+	 * (e.g., after Blueprint recompilation) so that BuildWidgetTree can rebuild.
+	 * Override in derived classes to null out all cached UWidget* members.
+	 */
+	virtual void ResetCachedWidgets() {}
 
 	/**
 	 * Set the UI style and apply it

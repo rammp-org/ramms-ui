@@ -156,6 +156,7 @@ public:
 	void SetMaxContentHeight(float Height);
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	void EnsureScrollableContent();
 	void UpdateToggleIcon();

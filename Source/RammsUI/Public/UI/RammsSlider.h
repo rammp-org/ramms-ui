@@ -104,6 +104,7 @@ public:
 protected:
 	virtual void SynchronizeProperties() override;
 	/** Build the widget tree programmatically */
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()

@@ -4,6 +4,17 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 
+void URammsTestWidget::ResetCachedWidgets()
+{
+	MainBorder = nullptr;
+	TitleText = nullptr;
+	StatusText = nullptr;
+	FadeInButton = nullptr;
+	FadeOutButton = nullptr;
+	SlideInButton = nullptr;
+	ScaleInButton = nullptr;
+}
+
 void URammsTestWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || MainBorder)

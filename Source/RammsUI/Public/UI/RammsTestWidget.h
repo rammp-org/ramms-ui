@@ -47,6 +47,7 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
 private:

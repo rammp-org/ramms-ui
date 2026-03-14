@@ -121,6 +121,7 @@ public:
 
 protected:
 	/** Build the widget tree programmatically */
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
 	/** Update display with current state */

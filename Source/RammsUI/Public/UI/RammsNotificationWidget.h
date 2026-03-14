@@ -100,6 +100,7 @@ public:
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	FLinearColor GetAccentColor() const;
 };

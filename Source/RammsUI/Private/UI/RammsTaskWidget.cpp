@@ -7,6 +7,15 @@
 #include "Components/Spacer.h"
 #include "RammsUISubsystem.h"
 
+void URammsTaskWidget::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	HeaderText = nullptr;
+	StatusLabel = nullptr;
+	ExitButton = nullptr;
+	CancelButton = nullptr;
+}
+
 void URammsTaskWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)

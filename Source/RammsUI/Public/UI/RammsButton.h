@@ -68,6 +68,7 @@ public:
 
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual void SynchronizeProperties() override;
 	virtual void ApplyStyle_Implementation() override;
 
 	/**
@@ -114,5 +115,6 @@ protected:
 	void UpdateVisualState();
 
 	/** Build widget tree programmatically */
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 };

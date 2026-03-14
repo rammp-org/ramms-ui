@@ -6,6 +6,14 @@
 #include "Components/VerticalBoxSlot.h"
 #include "RammsUISubsystem.h"
 
+void URammsToolbar::ResetCachedWidgets()
+{
+	ToolbarBorder = nullptr;
+	ItemContainer = nullptr;
+	ToolbarContentSlot = nullptr;
+	ItemButtons.Empty();
+}
+
 void URammsToolbar::BuildWidgetTree()
 {
 	if (!WidgetTree)

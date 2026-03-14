@@ -12,6 +12,13 @@ URammsJoystickWidget::URammsJoystickWidget(const FObjectInitializer& ObjectIniti
 	bAutoFindRobotController = true;
 }
 
+void URammsJoystickWidget::ResetCachedWidgets()
+{
+	JoystickCanvas = nullptr;
+	BackgroundImage = nullptr;
+	ThumbImage = nullptr;
+}
+
 void URammsJoystickWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || JoystickCanvas)

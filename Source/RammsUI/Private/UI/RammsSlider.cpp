@@ -7,6 +7,13 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 
+void URammsSlider::ResetCachedWidgets()
+{
+	InnerSlider = nullptr;
+	SliderLabel = nullptr;
+	ValueLabel = nullptr;
+}
+
 void URammsSlider::BuildWidgetTree()
 {
 	if (!WidgetTree || InnerSlider)

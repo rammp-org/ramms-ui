@@ -7,6 +7,13 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/OverlaySlot.h"
 
+void URammsButton::ResetCachedWidgets()
+{
+	InnerButton = nullptr;
+	ButtonLabel = nullptr;
+	ButtonIcon = nullptr;
+}
+
 void URammsButton::BuildWidgetTree()
 {
 	if (!WidgetTree || InnerButton)
@@ -19,6 +26,12 @@ void URammsButton::BuildWidgetTree()
 	// HorizontalBox inside the button for icon + label layout
 	UHorizontalBox* HBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonHBox"));
 	InnerButton->AddChild(HBox);
+	if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(HBox->Slot))
+	{
+		ContentSlot->SetPadding(FMargin(12.0f, 6.0f));
+		ContentSlot->SetHorizontalAlignment(HAlign_Center);
+		ContentSlot->SetVerticalAlignment(VAlign_Center);
+	}
 
 	// Optional icon (hidden by default)
 	ButtonIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("ButtonIcon"));
@@ -111,6 +124,36 @@ void URammsButton::ApplyStyle_Implementation()
 	UpdateVisualState();
 }
 
+void URammsButton::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	if (ButtonLabel)
+	{
+		ButtonLabel->SetText(ButtonText);
+	}
+
+	if (ButtonIcon)
+	{
+		if (IconTexture)
+		{
+			ButtonIcon->SetBrushFromTexture(IconTexture);
+			ButtonIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+		else
+		{
+			ButtonIcon->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (InnerButton)
+	{
+		InnerButton->SetIsEnabled(bButtonEnabled);
+	}
+
+	UpdateVisualState();
+}
+
 void URammsButton::SetText(FText Text)
 {
 	ButtonText = Text;
@@ -179,35 +222,41 @@ void URammsButton::OnButtonReleased()
 
 void URammsButton::UpdateVisualState()
 {
-	if (!Style || !InnerButton)
+	if (!InnerButton)
 		return;
 
 	FLinearColor BackgroundColor;
 	FLinearColor TextColor;
 
+	// Use style colors or fallback defaults
+	FLinearColor PrimaryColor = Style ? Style->Colors.Primary : FLinearColor(0.0f, 0.478f, 0.8f);
+	FLinearColor SecondaryColor = Style ? Style->Colors.Secondary : FLinearColor(0.25f, 0.25f, 0.3f);
+	FLinearColor TextPrimaryColor = Style ? Style->Colors.TextPrimary : FLinearColor::White;
+	FLinearColor TextDisabledColor = Style ? Style->Colors.TextDisabled : FLinearColor(0.4f, 0.4f, 0.4f);
+
 	switch (CurrentState)
 	{
 	case ERammsButtonState::Normal:
-		BackgroundColor = bUsePrimaryColor ? Style->Colors.Primary : Style->Colors.Secondary;
-		TextColor = Style->Colors.TextPrimary;
+		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+		TextColor = TextPrimaryColor;
 		InnerButton->SetRenderOpacity(1.0f);
 		break;
 
 	case ERammsButtonState::Hovered:
-		BackgroundColor = bUsePrimaryColor ? Style->Colors.Primary : Style->Colors.Secondary;
-		TextColor = Style->Colors.TextPrimary;
+		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+		TextColor = TextPrimaryColor;
 		InnerButton->SetRenderOpacity(0.8f);
 		break;
 
 	case ERammsButtonState::Pressed:
-		BackgroundColor = bUsePrimaryColor ? Style->Colors.Primary : Style->Colors.Secondary;
-		TextColor = Style->Colors.TextPrimary;
+		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+		TextColor = TextPrimaryColor;
 		InnerButton->SetRenderOpacity(0.6f);
 		break;
 
 	case ERammsButtonState::Disabled:
-		BackgroundColor = Style->Colors.Secondary;
-		TextColor = Style->Colors.TextDisabled;
+		BackgroundColor = SecondaryColor;
+		TextColor = TextDisabledColor;
 		InnerButton->SetRenderOpacity(0.5f);
 		break;
 	}

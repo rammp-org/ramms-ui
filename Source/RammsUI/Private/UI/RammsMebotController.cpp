@@ -12,6 +12,16 @@ URammsMebotController::URammsMebotController(const FObjectInitializer& ObjectIni
 	bAutoFindRobotController = true;
 }
 
+void URammsMebotController::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	HeaderText = nullptr;
+	ModeGrid = nullptr;
+	SelfLevelButton = nullptr;
+	CurbAscentButton = nullptr;
+	CurbDescentButton = nullptr;
+}
+
 void URammsMebotController::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)

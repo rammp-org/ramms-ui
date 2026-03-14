@@ -359,6 +359,7 @@ protected:
 
 protected:
 	/** Build the widget tree programmatically */
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
 	/** Update layout based on current display mode */

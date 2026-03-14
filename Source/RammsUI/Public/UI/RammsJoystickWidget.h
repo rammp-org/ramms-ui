@@ -107,6 +107,7 @@ protected:
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	void UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
 	void SetThumbOffset(FVector2D Offset);

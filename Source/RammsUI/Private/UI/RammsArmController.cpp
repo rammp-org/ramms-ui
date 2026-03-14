@@ -12,6 +12,14 @@ URammsArmController::URammsArmController(const FObjectInitializer& ObjectInitial
 	bAutoFindRobotController = true;
 }
 
+void URammsArmController::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	HeaderText = nullptr;
+	HomeButton = nullptr;
+	RetractButton = nullptr;
+}
+
 void URammsArmController::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)

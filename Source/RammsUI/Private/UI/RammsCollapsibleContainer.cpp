@@ -6,6 +6,19 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/CanvasPanelSlot.h"
 
+void URammsCollapsibleContainer::ResetCachedWidgets()
+{
+	ContainerBorder = nullptr;
+	HeaderBorder = nullptr;
+	HeaderLabel = nullptr;
+	ToggleButton = nullptr;
+	ToggleIcon = nullptr;
+	ContentSizeBox = nullptr;
+	ContentScrollBox = nullptr;
+	ContentBox = nullptr;
+	ContentSlot = nullptr;
+}
+
 void URammsCollapsibleContainer::BuildWidgetTree()
 {
 if (!WidgetTree)

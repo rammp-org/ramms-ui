@@ -144,6 +144,7 @@ public:
 	int32 GetItemCount() const { return Items.Num(); }
 
 protected:
+	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 	void RebuildItems();
 	UButton* CreateItemButton(const FRammsToolbarItem& Item);
