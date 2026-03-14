@@ -66,7 +66,7 @@ struct FRammsToolbarItem
  * Use BindWidgetOptional pattern: create a WBP subclass to provide custom layout,
  * or use pure C++ for programmatic construction.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Toolbar"))
 class RAMMSUI_API URammsToolbar : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -144,7 +144,7 @@ public:
 	int32 GetItemCount() const { return Items.Num(); }
 
 protected:
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 	void RebuildItems();
 	UButton* CreateItemButton(const FRammsToolbarItem& Item);
 

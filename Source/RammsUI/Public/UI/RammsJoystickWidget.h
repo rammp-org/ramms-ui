@@ -13,11 +13,15 @@
  * Virtual joystick widget for manual robot control.
  * Outputs a normalized FVector2D (-1 to 1 on each axis).
  * Supports mouse and touch input.
+ * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Joystick"))
 class RAMMSUI_API URammsJoystickWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
+
+public:
+	URammsJoystickWidget(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Joystick radius in pixels */
@@ -103,7 +107,9 @@ protected:
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 	void UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
 	void SetThumbOffset(FVector2D Offset);
+
+	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

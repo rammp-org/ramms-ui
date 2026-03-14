@@ -147,6 +147,34 @@ void URammsSlider::SetLabel(FText Label)
 	}
 }
 
+void URammsSlider::SetUnits(FText Units)
+{
+	UnitsText = Units;
+	UpdateValueLabel();
+}
+
+void URammsSlider::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	if (SliderLabel)
+	{
+		SliderLabel->SetText(LabelText);
+	}
+	if (InnerSlider)
+	{
+		InnerSlider->SetMinValue(MinValue);
+		InnerSlider->SetMaxValue(MaxValue);
+		InnerSlider->SetValue(Value);
+		InnerSlider->SetStepSize(StepSize);
+	}
+	if (ValueLabel)
+	{
+		ValueLabel->SetVisibility(bShowValue ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	UpdateValueLabel();
+}
+
 void URammsSlider::OnSliderValueChanged(float NewValue)
 {
 	Value = NewValue;
@@ -164,5 +192,12 @@ void URammsSlider::UpdateValueLabel()
 	FormatOptions.MaximumFractionalDigits = DecimalPlaces;
 
 	FText ValueText = FText::AsNumber(Value, &FormatOptions);
-	ValueLabel->SetText(ValueText);
+	if (!UnitsText.IsEmpty())
+	{
+		ValueLabel->SetText(FText::Format(NSLOCTEXT("RammsSlider", "ValueWithUnits", "{0} {1}"), ValueText, UnitsText));
+	}
+	else
+	{
+		ValueLabel->SetText(ValueText);
+	}
 }

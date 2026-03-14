@@ -17,7 +17,7 @@
  * A styled button with a prominent image and optional label.
  * Supports hover/press feedback, toggle/active state, and custom sizing.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Image Button"))
 class RAMMSUI_API URammsImageButton : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -116,7 +116,7 @@ public:
 	void SetImageSize(FVector2D NewSize);
 
 protected:
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 	void UpdateVisualState();
 
 	UFUNCTION()

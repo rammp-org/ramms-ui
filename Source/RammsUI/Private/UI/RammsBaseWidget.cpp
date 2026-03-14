@@ -4,15 +4,37 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Animation/UMGSequencePlayer.h"
+#include "Interfaces/IRammsRobotController.h"
+#include "RammsUISubsystem.h"
 
-void URammsBaseWidget::NativeConstruct()
+void URammsBaseWidget::NativePreConstruct()
 {
-	Super::NativeConstruct();
+	Super::NativePreConstruct();
+
+	BuildWidgetTree();
 
 	if (bAutoApplyStyle && Style)
 	{
 		ApplyStyle();
 		PropagateStyleToChildren();
+	}
+}
+
+void URammsBaseWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// Style is already applied by NativePreConstruct, but re-apply if
+	// style was set between PreConstruct and Construct (e.g., parent propagation)
+	if (bAutoApplyStyle && Style)
+	{
+		ApplyStyle();
+		PropagateStyleToChildren();
+	}
+
+	if (bAutoFindRobotController)
+	{
+		ResolveController();
 	}
 }
 
@@ -61,6 +83,18 @@ void URammsBaseWidget::PropagateStyleToChildren()
 void URammsBaseWidget::ApplyStyle_Implementation()
 {
 	// Base implementation does nothing - override in derived classes
+}
+
+void URammsBaseWidget::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	// Re-apply style when properties change in the designer
+	if (bAutoApplyStyle && Style)
+	{
+		ApplyStyle();
+		PropagateStyleToChildren();
+	}
 }
 
 // ==================== Animation Helpers ====================
@@ -297,4 +331,72 @@ void URammsBaseWidget::StartAnimation(FAnimationState Animation)
 	});
 
 	ActiveAnimations.Add(Animation);
+}
+
+// ==================== Robot Controller Discovery ====================
+
+void URammsBaseWidget::ResolveController()
+{
+	// Check if existing controller is still valid
+	if (ResolvedControllerActor.IsValid())
+	{
+		return;
+	}
+
+	// Clear stale references
+	ResolvedControllerActor.Reset();
+
+	AActor* FoundActor = nullptr;
+
+	// 1. Check explicit override first
+	if (TargetRobotOverride)
+	{
+		if (TargetRobotOverride->GetClass()->ImplementsInterface(URammsRobotController::StaticClass()))
+		{
+			FoundActor = TargetRobotOverride;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: TargetRobotOverride '%s' does not implement IRammsRobotController"),
+				*GetName(), *TargetRobotOverride->GetName());
+		}
+	}
+
+	// 2. Fall back to subsystem auto-discovery
+	if (!FoundActor)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+			{
+				FoundActor = Subsystem->FindRobotController();
+			}
+		}
+	}
+
+	if (FoundActor)
+	{
+		ResolvedControllerActor = FoundActor;
+		OnRobotControllerResolved(FoundActor);
+	}
+}
+
+AActor* URammsBaseWidget::GetResolvedControllerActor() const
+{
+	return ResolvedControllerActor.Get();
+}
+
+bool URammsBaseWidget::HasResolvedController() const
+{
+	return ResolvedControllerActor.IsValid();
+}
+
+void URammsBaseWidget::OnRobotControllerResolved(AActor* ControllerActor)
+{
+	// Base implementation does nothing — override in derived classes
+}
+
+void URammsBaseWidget::OnRobotControllerLost()
+{
+	// Base implementation does nothing — override in derived classes
 }

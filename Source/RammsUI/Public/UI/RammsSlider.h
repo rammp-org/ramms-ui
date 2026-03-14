@@ -13,7 +13,7 @@
 /**
  * Styled slider widget with value label
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Slider"))
 class RAMMSUI_API URammsSlider : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -36,8 +36,12 @@ protected:
 	float StepSize = 0.0f;
 
 	/** Label text (e.g., "Speed", "Volume") */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider", meta = (ExposeOnSpawn = true))
 	FText LabelText = FText::FromString(TEXT("Value"));
+
+	/** Units suffix (e.g., "°", "m/s", "%") — appended to value display */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FText UnitsText;
 
 	/** Show current value */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
@@ -91,9 +95,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Slider")
 	void SetLabel(FText Label);
 
+	/**
+	 * Set units suffix text
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Slider")
+	void SetUnits(FText Units);
+
 protected:
+	virtual void SynchronizeProperties() override;
 	/** Build the widget tree programmatically */
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()
 	void OnSliderValueChanged(float NewValue);

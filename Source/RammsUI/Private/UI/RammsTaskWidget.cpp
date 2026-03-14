@@ -5,6 +5,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Spacer.h"
+#include "RammsUISubsystem.h"
 
 void URammsTaskWidget::BuildWidgetTree()
 {
@@ -209,9 +210,25 @@ void URammsTaskWidget::SetActionEnabled(ERammsTaskAction Action, bool bEnabled)
 void URammsTaskWidget::OnExitClicked()
 {
 	OnTaskAction.Broadcast(ERammsTaskAction::Exit);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->BroadcastTaskAction(ERammsTaskAction::Exit);
+		}
+	}
 }
 
 void URammsTaskWidget::OnCancelClicked()
 {
 	OnTaskAction.Broadcast(ERammsTaskAction::Cancel);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->BroadcastTaskAction(ERammsTaskAction::Cancel);
+		}
+	}
 }

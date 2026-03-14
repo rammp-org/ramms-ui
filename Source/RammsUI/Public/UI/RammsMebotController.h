@@ -28,11 +28,15 @@ enum class ERammsMebotMode : uint8
  * Displays a grid of image buttons for mode selection:
  * Self-Levelling, Curb Ascent, Curb Descent.
  * Only one mode can be active at a time.
+ * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms MEBot Controller"))
 class RAMMSUI_API URammsMebotController : public URammsBaseWidget
 {
 	GENERATED_BODY()
+
+public:
+	URammsMebotController(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Header title */
@@ -110,7 +114,7 @@ public:
 	void SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon);
 
 protected:
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 	void UpdateModeButtons();
 
 	UFUNCTION()
@@ -123,4 +127,7 @@ protected:
 	void OnCurbDescentClicked();
 
 	void HandleModeButtonClicked(ERammsMebotMode Mode);
+
+protected:
+	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

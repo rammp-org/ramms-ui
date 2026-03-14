@@ -24,11 +24,15 @@ enum class ERammsArmAction : uint8
 /**
  * Controller widget for the 6DOF robot arm.
  * Provides Home and Retract action buttons.
+ * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Arm Controller"))
 class RAMMSUI_API URammsArmController : public URammsBaseWidget
 {
 	GENERATED_BODY()
+
+public:
+	URammsArmController(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Header title */
@@ -80,11 +84,14 @@ public:
 	void SetActionEnabled(ERammsArmAction Action, bool bEnabled);
 
 protected:
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()
 	void OnHomeClicked();
 
 	UFUNCTION()
 	void OnRetractClicked();
+
+protected:
+	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

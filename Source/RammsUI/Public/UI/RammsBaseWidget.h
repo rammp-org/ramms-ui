@@ -9,7 +9,7 @@
 
 /**
  * Base class for all RammsUI widgets
- * Provides style application, animation helpers, and common utilities
+ * Provides style application, animation helpers, auto-discovery, and common utilities
  */
 UCLASS(Abstract, Blueprintable)
 class RAMMSUI_API URammsBaseWidget : public UUserWidget
@@ -37,9 +37,40 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	FVector2D CurrentScale = FVector2D(1.0f, 1.0f);
 
+	// ── Robot Controller Binding ──────────────────────────────────
+
+	/**
+	 * Optional explicit override: set this to a specific actor implementing
+	 * IRammsRobotController to bypass auto-discovery.
+	 * If null, the widget queries URammsUISubsystem to find one automatically.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Robot Controller",
+		meta = (DisplayName = "Target Robot (Override)"))
+	TObjectPtr<AActor> TargetRobotOverride;
+
+	/**
+	 * When true, the widget will automatically search for an actor
+	 * implementing IRammsRobotController via URammsUISubsystem.
+	 * Disable this for widgets that don't need robot control (pure UI).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Robot Controller")
+	bool bAutoFindRobotController = false;
+
+	/** Cached weak reference to the resolved controller actor */
+	TWeakObjectPtr<AActor> ResolvedControllerActor;
+
 public:
+	virtual void NativePreConstruct() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void SynchronizeProperties() override;
+
+	/**
+	 * Build the widget tree for this widget. Override in derived classes.
+	 * Called automatically from NativePreConstruct (works in both designer and runtime).
+	 * Implementations should guard against double-building.
+	 */
+	virtual void BuildWidgetTree() {}
 
 	/**
 	 * Set the UI style and apply it
@@ -132,6 +163,44 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Layout")
 	void SetSize(FVector2D Size);
+
+	// ==================== Robot Controller =====================
+
+	/**
+	 * Resolve the robot controller. Checks TargetRobotOverride first,
+	 * then queries URammsUISubsystem for auto-discovery.
+	 * Called automatically by NativeConstruct if bAutoFindRobotController is true.
+	 *
+	 * Override OnRobotControllerResolved() to react when a controller is found.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Robot Controller")
+	void ResolveController();
+
+	/**
+	 * Get the resolved robot controller actor (may be null).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Robot Controller")
+	AActor* GetResolvedControllerActor() const;
+
+	/**
+	 * Whether a robot controller has been resolved and is still valid.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Robot Controller")
+	bool HasResolvedController() const;
+
+protected:
+	/**
+	 * Called after ResolveController() successfully finds a controller.
+	 * Override in derived classes to sync initial state from the controller.
+	 * Use IRammsRobotController::Execute_*() to call interface methods.
+	 */
+	virtual void OnRobotControllerResolved(AActor* ControllerActor);
+
+	/**
+	 * Called when the controller is lost (actor destroyed, etc.)
+	 * Override in derived classes to clean up bindings.
+	 */
+	virtual void OnRobotControllerLost();
 
 protected:
 	/**

@@ -69,7 +69,7 @@ enum class ERammsDepthColormap : uint8
  * Camera feed widget with multiple display modes
  * Integrates with IRammsCameraProvider for transport-agnostic camera streams
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Camera Widget"))
 class RAMMSUI_API URammsCameraWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -359,7 +359,7 @@ protected:
 
 protected:
 	/** Build the widget tree programmatically */
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 
 	/** Update layout based on current display mode */
 	void UpdateLayout(bool bAnimate);

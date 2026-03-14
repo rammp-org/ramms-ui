@@ -12,7 +12,7 @@
 /**
  * Styled radio button widget (part of a group)
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Radio Button"))
 class RAMMSUI_API URammsRadioButton : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -87,5 +87,5 @@ protected:
 	void UncheckGroup();
 
 	/** Build widget tree programmatically */
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 };

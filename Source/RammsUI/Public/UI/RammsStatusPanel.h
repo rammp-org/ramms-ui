@@ -18,7 +18,7 @@
  * Displays: speed, battery level, mode
  * Integrates with IRammsStateProvider
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Status Panel"))
 class RAMMSUI_API URammsStatusPanel : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -121,7 +121,7 @@ public:
 
 protected:
 	/** Build the widget tree programmatically */
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 
 	/** Update display with current state */
 	void UpdateDisplay();

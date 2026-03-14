@@ -34,7 +34,7 @@ enum class ERammsCollapseAnimation : uint8
  * The header always stays visible with a toggle button.
  * Content can be any child widgets added to the ContentSlot.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Collapsible Container"))
 class RAMMSUI_API URammsCollapsibleContainer : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -156,7 +156,7 @@ public:
 	void SetMaxContentHeight(float Height);
 
 protected:
-	void BuildWidgetTree();
+	virtual void BuildWidgetTree() override;
 	void EnsureScrollableContent();
 	void UpdateToggleIcon();
 	void UpdateHeaderCornerRadii();
