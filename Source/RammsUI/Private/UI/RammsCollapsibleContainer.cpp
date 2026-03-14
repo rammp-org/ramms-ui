@@ -415,46 +415,10 @@ if (Style->ExpandCollapseCurve.Duration > 0.0f)
 AnimationDuration = Style->ExpandCollapseCurve.Duration;
 }
 
-// Style the scrollbar
+// Style the scrollbar using the shared style definition
 if (ContentScrollBox)
 {
-	float ScrollRadius = Style->Border.CornerRadiusSmall;
-	float Thickness = 6.0f;
-
-	// Thumb brushes (rounded, semi-transparent)
-	FSlateBrush ThumbNormal = URammsUIStyle::MakeRoundedBoxBrush(
-		FLinearColor(Style->Colors.TextSecondary.R, Style->Colors.TextSecondary.G, Style->Colors.TextSecondary.B, 0.4f), ScrollRadius);
-	FSlateBrush ThumbHovered = URammsUIStyle::MakeRoundedBoxBrush(
-		FLinearColor(Style->Colors.TextSecondary.R, Style->Colors.TextSecondary.G, Style->Colors.TextSecondary.B, 0.7f), ScrollRadius);
-	FSlateBrush ThumbDragged = URammsUIStyle::MakeRoundedBoxBrush(
-		FLinearColor(Style->Colors.TextPrimary.R, Style->Colors.TextPrimary.G, Style->Colors.TextPrimary.B, 0.8f), ScrollRadius);
-
-	// Track brush (subtle, nearly transparent)
-	FSlateBrush TrackBrush = URammsUIStyle::MakeRoundedBoxBrush(
-		FLinearColor(Style->Colors.Surface.R, Style->Colors.Surface.G, Style->Colors.Surface.B, 0.15f), ScrollRadius);
-
-	FScrollBarStyle BarStyle = FScrollBarStyle::GetDefault();
-	BarStyle.SetNormalThumbImage(ThumbNormal);
-	BarStyle.SetHoveredThumbImage(ThumbHovered);
-	BarStyle.SetDraggedThumbImage(ThumbDragged);
-	BarStyle.SetVerticalBackgroundImage(TrackBrush);
-	BarStyle.SetVerticalTopSlotImage(TrackBrush);
-	BarStyle.SetVerticalBottomSlotImage(TrackBrush);
-	BarStyle.SetThickness(Thickness);
-
-	ContentScrollBox->SetWidgetBarStyle(BarStyle);
-	ContentScrollBox->SetScrollbarThickness(FVector2D(Thickness, Thickness));
-	ContentScrollBox->SetScrollbarPadding(FMargin(0.0f, 2.0f, 2.0f, 2.0f));
-
-	// Disable scroll shadow overlays (they ignore rounded corners)
-	FScrollBoxStyle BoxStyle = ContentScrollBox->GetWidgetStyle();
-	FSlateBrush EmptyBrush;
-	EmptyBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
-	BoxStyle.SetTopShadowBrush(EmptyBrush);
-	BoxStyle.SetBottomShadowBrush(EmptyBrush);
-	BoxStyle.SetLeftShadowBrush(EmptyBrush);
-	BoxStyle.SetRightShadowBrush(EmptyBrush);
-	ContentScrollBox->SetWidgetStyle(BoxStyle);
+	URammsUIStyle::ApplyScrollBarStyle(ContentScrollBox, Style->ScrollBar);
 }
 }
 

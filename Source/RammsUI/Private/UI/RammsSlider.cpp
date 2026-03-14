@@ -6,7 +6,6 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "Styling/SlateTypes.h"
 
 void URammsSlider::ResetCachedWidgets()
 {
@@ -195,69 +194,36 @@ void URammsSlider::ApplySliderAppearance()
 	if (!InnerSlider)
 		return;
 
-	// Resolve colors
-	FLinearColor ResolvedTrack = TrackColor;
-	FLinearColor ResolvedActive = ActiveBarColor;
-	FLinearColor ResolvedThumb = ThumbColor;
+	// Build an FRammsSliderStyle: start from the style asset defaults, then
+	// overlay per-widget overrides when bUseStyleColors is false.
+	FRammsSliderStyle Resolved;
 
 	if (bUseStyleColors && Style)
 	{
-		ResolvedTrack = Style->Colors.Surface;
-		ResolvedActive = Style->Colors.Primary;
-		ResolvedThumb = Style->Colors.TextPrimary;
+		// Use the centralized style definition
+		Resolved = Style->Slider;
 	}
-
-	// Build custom slider style with rounded brushes
-	float ThumbRadius = ThumbSize * 0.5f;
-	float BarRadius = BarThickness * 0.5f;
-
-	// Thumb brushes (circular)
-	FSlateBrush ThumbNormal = URammsUIStyle::MakeRoundedBoxBrush(ResolvedThumb, ThumbRadius);
-	ThumbNormal.SetImageSize(FVector2D(ThumbSize, ThumbSize));
-
-	FLinearColor ThumbHoverColor = FLinearColor::LerpUsingHSV(ResolvedThumb, ResolvedActive, 0.3f);
-	FSlateBrush ThumbHovered = URammsUIStyle::MakeRoundedBoxBrush(ThumbHoverColor, ThumbRadius);
-	ThumbHovered.SetImageSize(FVector2D(ThumbSize, ThumbSize));
-
-	FLinearColor ThumbDisabled = ResolvedThumb;
-	ThumbDisabled.A = 0.3f;
-	FSlateBrush ThumbDisabledBrush = URammsUIStyle::MakeRoundedBoxBrush(ThumbDisabled, ThumbRadius);
-	ThumbDisabledBrush.SetImageSize(FVector2D(ThumbSize, ThumbSize));
-
-	// Bar/track brushes (rounded rectangle)
-	FSlateBrush BarNormal = URammsUIStyle::MakeRoundedBoxBrush(ResolvedTrack, BarRadius);
-	BarNormal.SetImageSize(FVector2D(BarThickness, BarThickness));
-
-	FSlateBrush BarHovered = URammsUIStyle::MakeRoundedBoxBrush(
-		FLinearColor::LerpUsingHSV(ResolvedTrack, ResolvedActive, 0.15f), BarRadius);
-	BarHovered.SetImageSize(FVector2D(BarThickness, BarThickness));
-
-	FLinearColor BarDisabledColor = ResolvedTrack;
-	BarDisabledColor.A = 0.3f;
-	FSlateBrush BarDisabled = URammsUIStyle::MakeRoundedBoxBrush(BarDisabledColor, BarRadius);
-	BarDisabled.SetImageSize(FVector2D(BarThickness, BarThickness));
-
-	// Apply the style
-	FSliderStyle SliderStyle = FSliderStyle::GetDefault();
-	SliderStyle.SetNormalBarImage(BarNormal);
-	SliderStyle.SetHoveredBarImage(BarHovered);
-	SliderStyle.SetDisabledBarImage(BarDisabled);
-	SliderStyle.SetNormalThumbImage(ThumbNormal);
-	SliderStyle.SetHoveredThumbImage(ThumbHovered);
-	SliderStyle.SetDisabledThumbImage(ThumbDisabledBrush);
-	SliderStyle.SetBarThickness(BarThickness);
-
-	InnerSlider->SetWidgetStyle(SliderStyle);
-
-	// Tint the filled bar portion with the active color
-	InnerSlider->SetSliderBarColor(ResolvedActive);
-	InnerSlider->SetSliderHandleColor(FLinearColor::White);
-
-	// Force Slate to pick up the new style
-	if (InnerSlider->GetCachedWidget().IsValid())
+	else
 	{
-		InnerSlider->SynchronizeProperties();
+		// Per-widget manual overrides
+		Resolved.ThumbSize = ThumbSize;
+		Resolved.BarThickness = BarThickness;
+		Resolved.TrackColor = TrackColor;
+		Resolved.ActiveBarColor = ActiveBarColor;
+		Resolved.ThumbColor = ThumbColor;
 	}
+
+	// Always allow per-widget size overrides even when using style colors,
+	// if the widget has non-default values set
+	if (bUseStyleColors && Style)
+	{
+		if (!FMath::IsNearlyEqual(ThumbSize, 24.0f))
+			Resolved.ThumbSize = ThumbSize;
+		if (!FMath::IsNearlyEqual(BarThickness, 6.0f))
+			Resolved.BarThickness = BarThickness;
+	}
+
+	URammsUIStyle::ApplySliderStyle(InnerSlider, Resolved);
 }
 
 void URammsSlider::SetValue(float NewValue)
