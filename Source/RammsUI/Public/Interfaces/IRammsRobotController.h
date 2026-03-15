@@ -42,8 +42,9 @@ class URammsRobotController : public UInterface
  *
  * ## Implementing a subset
  *
- * Override only the methods your robot supports. All methods have
- * default no-op implementations (return false / do nothing).
+ * Override only the methods your robot supports. UHT auto-generates
+ * default no-op _Implementation bodies (return false / do nothing)
+ * inside GENERATED_BODY(), so unoverridden methods are safe.
  * In C++ override MethodName_Implementation(); in Blueprint override
  * the corresponding event/function node.
  *

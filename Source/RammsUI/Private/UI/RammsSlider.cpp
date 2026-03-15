@@ -194,33 +194,27 @@ void URammsSlider::ApplySliderAppearance()
 	if (!InnerSlider)
 		return;
 
-	// Build an FRammsSliderStyle: start from the style asset defaults, then
-	// overlay per-widget overrides when bUseStyleColors is false.
 	FRammsSliderStyle Resolved;
 
 	if (bUseStyleColors && Style)
 	{
-		// Use the centralized style definition
+		// Start from the centralized style definition
 		Resolved = Style->Slider;
+
+		// Apply explicit per-widget size overrides
+		if (bOverrideThumbSize)
+			Resolved.ThumbSize = ThumbSize;
+		if (bOverrideBarThickness)
+			Resolved.BarThickness = BarThickness;
 	}
 	else
 	{
-		// Per-widget manual overrides
+		// Per-widget manual overrides for everything
 		Resolved.ThumbSize = ThumbSize;
 		Resolved.BarThickness = BarThickness;
 		Resolved.TrackColor = TrackColor;
 		Resolved.ActiveBarColor = ActiveBarColor;
 		Resolved.ThumbColor = ThumbColor;
-	}
-
-	// Always allow per-widget size overrides even when using style colors,
-	// if the widget has non-default values set
-	if (bUseStyleColors && Style)
-	{
-		if (!FMath::IsNearlyEqual(ThumbSize, 24.0f))
-			Resolved.ThumbSize = ThumbSize;
-		if (!FMath::IsNearlyEqual(BarThickness, 6.0f))
-			Resolved.BarThickness = BarThickness;
 	}
 
 	URammsUIStyle::ApplySliderStyle(InnerSlider, Resolved);

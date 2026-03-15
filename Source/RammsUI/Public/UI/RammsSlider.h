@@ -77,12 +77,24 @@ protected:
 
 	// ── Slider Appearance ──
 
-	/** Thumb (handle) diameter in pixels. Larger = easier to touch. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance", meta = (ClampMin = "8.0", ClampMax = "64.0"))
+	/** Override the style asset's thumb size with the per-widget ThumbSize below */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance",
+		meta = (InlineEditConditionToggle))
+	bool bOverrideThumbSize = false;
+
+	/** Thumb (handle) diameter in pixels. Larger = easier to touch. Only used when bOverrideThumbSize is true. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance",
+		meta = (EditCondition = "bOverrideThumbSize", ClampMin = "8.0", ClampMax = "64.0"))
 	float ThumbSize = 24.0f;
 
-	/** Track bar thickness in pixels */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance", meta = (ClampMin = "1.0", ClampMax = "32.0"))
+	/** Override the style asset's bar thickness with the per-widget BarThickness below */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance",
+		meta = (InlineEditConditionToggle))
+	bool bOverrideBarThickness = false;
+
+	/** Track bar thickness in pixels. Only used when bOverrideBarThickness is true. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider|Appearance",
+		meta = (EditCondition = "bOverrideBarThickness", ClampMin = "1.0", ClampMax = "32.0"))
 	float BarThickness = 6.0f;
 
 	/** Use colors from the URammsUIStyle asset. When false, uses the manual color overrides below. */
