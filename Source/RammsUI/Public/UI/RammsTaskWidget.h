@@ -5,21 +5,12 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/HorizontalBox.h"
 #include "RammsTaskWidget.generated.h"
-
-/**
- * Task action types
- */
-UENUM(BlueprintType)
-enum class ERammsTaskAction : uint8
-{
-	Exit   UMETA(DisplayName = "Exit"),
-	Cancel UMETA(DisplayName = "Cancel")
-};
 
 /**
  * Task widget with Exit and Cancel action buttons.

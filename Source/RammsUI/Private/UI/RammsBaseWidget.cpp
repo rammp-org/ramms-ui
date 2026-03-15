@@ -49,6 +49,7 @@ void URammsBaseWidget::NativeConstruct()
 
 	if (bAutoFindRobotController)
 	{
+		SubscribeToRegistryChanges();
 		ResolveController();
 	}
 }
@@ -383,6 +384,75 @@ void URammsBaseWidget::StartAnimation(FAnimationState Animation)
 }
 
 // ==================== Robot Controller Discovery ====================
+
+void URammsBaseWidget::SubscribeToRegistryChanges()
+{
+	if (bSubscribedToRegistry)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->OnControllerRegistryChanged.AddDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
+			bSubscribedToRegistry = true;
+		}
+	}
+}
+
+void URammsBaseWidget::UnsubscribeFromRegistryChanges()
+{
+	if (!bSubscribedToRegistry)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->OnControllerRegistryChanged.RemoveDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
+		}
+	}
+	bSubscribedToRegistry = false;
+}
+
+void URammsBaseWidget::HandleControllerRegistryChanged(AActor* Actor, bool bRegistered)
+{
+	if (!bAutoFindRobotController)
+	{
+		return;
+	}
+
+	if (bRegistered)
+	{
+		// A new controller was registered — try to resolve if we don't have one
+		if (!ResolvedControllerActor.IsValid())
+		{
+			ResolveController();
+		}
+	}
+	else
+	{
+		// A controller was unregistered — if it's ours, clear and try to find another
+		if (ResolvedControllerActor.Get() == Actor)
+		{
+			ResolvedControllerActor.Reset();
+			OnRobotControllerLost();
+
+			// Try to find a replacement
+			ResolveController();
+		}
+	}
+}
+
+void URammsBaseWidget::BeginDestroy()
+{
+	UnsubscribeFromRegistryChanges();
+	Super::BeginDestroy();
+}
 
 void URammsBaseWidget::ResolveController()
 {

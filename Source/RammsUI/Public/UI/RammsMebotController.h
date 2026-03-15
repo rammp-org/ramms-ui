@@ -5,23 +5,12 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/UniformGridPanel.h"
 #include "RammsMebotController.generated.h"
-
-/**
- * MEBot driving modes
- */
-UENUM(BlueprintType)
-enum class ERammsMebotMode : uint8
-{
-	None        UMETA(DisplayName = "None"),
-	SelfLevel   UMETA(DisplayName = "Self-Levelling"),
-	CurbAscent  UMETA(DisplayName = "Curb Ascent"),
-	CurbDescent UMETA(DisplayName = "Curb Descent")
-};
 
 /**
  * Controller widget for MEBot wheelchair modes.

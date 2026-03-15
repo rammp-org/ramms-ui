@@ -178,7 +178,10 @@ public:
 	/**
 	 * Resolve the robot controller. Checks TargetRobotOverride first,
 	 * then queries URammsUISubsystem for auto-discovery.
-	 * Called automatically by NativeConstruct if bAutoFindRobotController is true.
+	 *
+	 * Called automatically from NativeConstruct when bAutoFindRobotController
+	 * is true, and also re-invoked when the controller registry changes
+	 * (so widgets resolve even if the controller spawns after the widget).
 	 *
 	 * Override OnRobotControllerResolved() to react when a controller is found.
 	 */
@@ -206,10 +209,26 @@ protected:
 	virtual void OnRobotControllerResolved(AActor* ControllerActor);
 
 	/**
-	 * Called when the controller is lost (actor destroyed, etc.)
-	 * Override in derived classes to clean up bindings.
+	 * Called when the active controller is lost (unregistered or destroyed).
+	 * Override in derived classes to clear cached state and disable controls.
 	 */
 	virtual void OnRobotControllerLost();
+
+	virtual void BeginDestroy() override;
+
+private:
+	/** Handler for URammsUISubsystem::OnControllerRegistryChanged */
+	UFUNCTION()
+	void HandleControllerRegistryChanged(AActor* Actor, bool bRegistered);
+
+	/** Whether we are currently subscribed to the subsystem delegate */
+	bool bSubscribedToRegistry = false;
+
+	/** Subscribe to the subsystem's controller registry change delegate */
+	void SubscribeToRegistryChanges();
+
+	/** Unsubscribe from the registry delegate */
+	void UnsubscribeFromRegistryChanges();
 
 protected:
 	/**

@@ -5,9 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
 #include "Interfaces/IRammsStateProvider.h"
-#include "UI/RammsArmController.h"
-#include "UI/RammsMebotController.h"
-#include "UI/RammsTaskWidget.h"
+#include "RammsRobotTypes.h"
 #include "IRammsRobotController.generated.h"
 
 UINTERFACE(MinimalAPI, Blueprintable, meta = (DisplayName = "Ramms Robot Controller"))

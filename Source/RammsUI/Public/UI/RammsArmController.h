@@ -5,21 +5,12 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/HorizontalBox.h"
 #include "RammsArmController.generated.h"
-
-/**
- * Arm action types
- */
-UENUM(BlueprintType)
-enum class ERammsArmAction : uint8
-{
-	Home     UMETA(DisplayName = "Home"),
-	Retract  UMETA(DisplayName = "Retract")
-};
 
 /**
  * Controller widget for the 6DOF robot arm.

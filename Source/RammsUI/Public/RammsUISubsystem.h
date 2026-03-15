@@ -26,7 +26,9 @@
  *
  *   Sub->OnTaskAction.AddDynamic(this, &AMyActor::HandleTaskAction);
  *   Sub->OnToolbarItemClicked.AddDynamic(this, &AMyActor::HandleToolbar);
- *   Sub->OnVisualizationChanged.AddDynamic(this, &AMyActor::HandleVizChange);
+ *   Sub->OnOverlayToggle.AddDynamic(this, &AMyActor::HandleOverlay);
+ *   Sub->OnVisualizationLayerToggle.AddDynamic(this, &AMyActor::HandleVizLayer);
+ *   Sub->OnHighlight.AddDynamic(this, &AMyActor::HandleHighlight);
  *
  * ## Widget auto-discovery flow
  *
@@ -68,26 +70,26 @@ public:
 	 * Returns nullptr if none registered.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Controllers")
-	AActor* FindRobotController() const;
+	AActor* FindRobotController();
 
 	/**
 	 * Find a robot controller by name (IRammsRobotController::GetRobotName).
 	 * Returns nullptr if not found.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Controllers")
-	AActor* FindRobotControllerByName(const FString& RobotName) const;
+	AActor* FindRobotControllerByName(const FString& RobotName);
 
 	/**
 	 * Get all registered robot controllers.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Controllers")
-	TArray<AActor*> GetAllRobotControllers() const;
+	TArray<AActor*> GetAllRobotControllers();
 
 	/**
-	 * Get the number of registered robot controllers.
+	 * Get the number of currently valid registered robot controllers.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Ramms|Controllers")
-	int32 GetRobotControllerCount() const { return RegisteredControllers.Num(); }
+	int32 GetRobotControllerCount();
 
 	// ── Controller Registry Delegates ─────────────────────────────
 

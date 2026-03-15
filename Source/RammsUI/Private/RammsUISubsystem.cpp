@@ -29,6 +29,9 @@ void URammsUISubsystem::RegisterRobotController(AActor* Actor)
 		return;
 	}
 
+	// Clean up stale entries first
+	CleanupStaleControllers();
+
 	// Avoid duplicates
 	for (const TWeakObjectPtr<AActor>& Existing : RegisteredControllers)
 	{
@@ -56,6 +59,9 @@ void URammsUISubsystem::UnregisterRobotController(AActor* Actor)
 		return Weak.Get() == Actor;
 	});
 
+	// Also clean up any other stale entries
+	CleanupStaleControllers();
+
 	if (Removed > 0)
 	{
 		OnControllerRegistryChanged.Broadcast(Actor, false);
@@ -63,8 +69,10 @@ void URammsUISubsystem::UnregisterRobotController(AActor* Actor)
 	}
 }
 
-AActor* URammsUISubsystem::FindRobotController() const
+AActor* URammsUISubsystem::FindRobotController()
 {
+	CleanupStaleControllers();
+
 	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
 	{
 		if (AActor* Actor = Weak.Get())
@@ -75,8 +83,10 @@ AActor* URammsUISubsystem::FindRobotController() const
 	return nullptr;
 }
 
-AActor* URammsUISubsystem::FindRobotControllerByName(const FString& RobotName) const
+AActor* URammsUISubsystem::FindRobotControllerByName(const FString& RobotName)
 {
+	CleanupStaleControllers();
+
 	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
 	{
 		AActor* Actor = Weak.Get();
@@ -93,8 +103,10 @@ AActor* URammsUISubsystem::FindRobotControllerByName(const FString& RobotName) c
 	return nullptr;
 }
 
-TArray<AActor*> URammsUISubsystem::GetAllRobotControllers() const
+TArray<AActor*> URammsUISubsystem::GetAllRobotControllers()
 {
+	CleanupStaleControllers();
+
 	TArray<AActor*> Result;
 	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
 	{
@@ -104,6 +116,12 @@ TArray<AActor*> URammsUISubsystem::GetAllRobotControllers() const
 		}
 	}
 	return Result;
+}
+
+int32 URammsUISubsystem::GetRobotControllerCount()
+{
+	CleanupStaleControllers();
+	return RegisteredControllers.Num();
 }
 
 void URammsUISubsystem::CleanupStaleControllers()
