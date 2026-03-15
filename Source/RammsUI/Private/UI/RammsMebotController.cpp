@@ -4,6 +4,23 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/UniformGridSlot.h"
+#include "Interfaces/IRammsRobotController.h"
+
+URammsMebotController::URammsMebotController(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	bAutoFindRobotController = true;
+}
+
+void URammsMebotController::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	HeaderText = nullptr;
+	ModeGrid = nullptr;
+	SelfLevelButton = nullptr;
+	CurbAscentButton = nullptr;
+	CurbDescentButton = nullptr;
+}
 
 void URammsMebotController::BuildWidgetTree()
 {
@@ -222,4 +239,23 @@ void URammsMebotController::HandleModeButtonClicked(ERammsMebotMode Mode)
 	{
 		SetMode(Mode);
 	}
+
+	// Forward to robot controller
+	if (ResolvedControllerActor.IsValid())
+	{
+		IRammsRobotController::Execute_RequestMebotMode(ResolvedControllerActor.Get(), CurrentMode);
+	}
+}
+
+void URammsMebotController::OnRobotControllerResolved(AActor* ControllerActor)
+{
+	// Sync current mode from the robot
+	ERammsMebotMode ActualMode = IRammsRobotController::Execute_GetCurrentMebotMode(ControllerActor);
+	if (ActualMode != CurrentMode)
+	{
+		CurrentMode = ActualMode;
+		UpdateModeButtons();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("URammsMebotController: Resolved robot controller '%s'"), *ControllerActor->GetName());
 }

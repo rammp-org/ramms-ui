@@ -6,6 +6,15 @@
 #include "Components/OverlaySlot.h"
 #include "Components/ButtonSlot.h"
 
+void URammsImageButton::ResetCachedWidgets()
+{
+	InnerButton = nullptr;
+	ContentImage = nullptr;
+	Label = nullptr;
+	ActiveBorder = nullptr;
+	ImageSizeBox = nullptr;
+}
+
 void URammsImageButton::BuildWidgetTree()
 {
 	if (!WidgetTree || InnerButton)
@@ -18,6 +27,12 @@ void URammsImageButton::BuildWidgetTree()
 	// VerticalBox for image + label stacking
 	UVerticalBox* VBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentVBox"));
 	InnerButton->AddChild(VBox);
+	if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(VBox->Slot))
+	{
+		ContentSlot->SetPadding(FMargin(ContentPadding));
+		ContentSlot->SetHorizontalAlignment(HAlign_Center);
+		ContentSlot->SetVerticalAlignment(VAlign_Center);
+	}
 
 	// Overlay wraps the image so we can put an active border on it
 	UOverlay* ImageOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ImageOverlay"));
@@ -105,6 +120,43 @@ void URammsImageButton::ApplyStyle_Implementation()
 	if (Label)
 	{
 		Label->SetFont(Style->Typography.Caption);
+	}
+
+	UpdateVisualState();
+}
+
+void URammsImageButton::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	if (Label)
+	{
+		Label->SetText(LabelText);
+		Label->SetVisibility(bShowLabel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+
+	if (ImageSizeBox)
+	{
+		ImageSizeBox->SetWidthOverride(ImageSize.X);
+		ImageSizeBox->SetHeightOverride(ImageSize.Y);
+	}
+
+	if (ContentImage)
+	{
+		if (ButtonImage)
+		{
+			ContentImage->SetBrushFromTexture(ButtonImage);
+			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor::White));
+		}
+		else
+		{
+			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor(0.3f, 0.3f, 0.35f)));
+		}
+	}
+
+	if (InnerButton)
+	{
+		InnerButton->SetIsEnabled(bButtonEnabled);
 	}
 
 	UpdateVisualState();

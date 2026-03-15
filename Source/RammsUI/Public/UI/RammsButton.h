@@ -25,7 +25,7 @@ enum class ERammsButtonState : uint8
 /**
  * Styled button widget with hover/press states
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Button"))
 class RAMMSUI_API URammsButton : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -68,6 +68,7 @@ public:
 
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual void SynchronizeProperties() override;
 	virtual void ApplyStyle_Implementation() override;
 
 	/**
@@ -114,5 +115,6 @@ protected:
 	void UpdateVisualState();
 
 	/** Build widget tree programmatically */
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 };

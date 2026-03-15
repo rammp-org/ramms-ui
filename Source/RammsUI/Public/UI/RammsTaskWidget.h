@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -12,20 +13,10 @@
 #include "RammsTaskWidget.generated.h"
 
 /**
- * Task action types
- */
-UENUM(BlueprintType)
-enum class ERammsTaskAction : uint8
-{
-	Exit   UMETA(DisplayName = "Exit"),
-	Cancel UMETA(DisplayName = "Cancel")
-};
-
-/**
  * Task widget with Exit and Cancel action buttons.
  * Used during active tasks/modes to provide abort/complete controls.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Task Widget"))
 class RAMMSUI_API URammsTaskWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -95,7 +86,8 @@ public:
 	void SetActionEnabled(ERammsTaskAction Action, bool bEnabled);
 
 protected:
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()
 	void OnExitClicked();

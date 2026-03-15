@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -12,27 +13,19 @@
 #include "RammsMebotController.generated.h"
 
 /**
- * MEBot driving modes
- */
-UENUM(BlueprintType)
-enum class ERammsMebotMode : uint8
-{
-	None        UMETA(DisplayName = "None"),
-	SelfLevel   UMETA(DisplayName = "Self-Levelling"),
-	CurbAscent  UMETA(DisplayName = "Curb Ascent"),
-	CurbDescent UMETA(DisplayName = "Curb Descent")
-};
-
-/**
  * Controller widget for MEBot wheelchair modes.
  * Displays a grid of image buttons for mode selection:
  * Self-Levelling, Curb Ascent, Curb Descent.
  * Only one mode can be active at a time.
+ * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms MEBot Controller"))
 class RAMMSUI_API URammsMebotController : public URammsBaseWidget
 {
 	GENERATED_BODY()
+
+public:
+	URammsMebotController(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Header title */
@@ -110,7 +103,8 @@ public:
 	void SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon);
 
 protected:
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 	void UpdateModeButtons();
 
 	UFUNCTION()
@@ -123,4 +117,7 @@ protected:
 	void OnCurbDescentClicked();
 
 	void HandleModeButtonClicked(ERammsMebotMode Mode);
+
+protected:
+	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

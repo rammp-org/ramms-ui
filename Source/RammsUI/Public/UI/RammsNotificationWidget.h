@@ -26,7 +26,7 @@ enum class ERammsNotificationLevel : uint8
  * Auto-dismisses after a configurable duration.
  * Can be stacked by a notification manager.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Notification"))
 class RAMMSUI_API URammsNotificationWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -100,6 +100,7 @@ public:
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 	FLinearColor GetAccentColor() const;
 };

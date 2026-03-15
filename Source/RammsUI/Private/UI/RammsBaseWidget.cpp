@@ -4,15 +4,53 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Animation/UMGSequencePlayer.h"
+#include "Interfaces/IRammsRobotController.h"
+#include "RammsUISubsystem.h"
+
+bool URammsBaseWidget::Initialize()
+{
+	bool bResult = Super::Initialize();
+	if (bResult)
+	{
+		// Build the widget tree immediately after WidgetTree is created by Super.
+		// This ensures the tree is populated BEFORE RebuildWidget()/TakeWidget()
+		// creates the Slate representation — critical for designer preview.
+		// At runtime, NativeOnInitialized (called by Super) may have already built
+		// it; the guard in each derived BuildWidgetTree prevents double-building.
+		BuildWidgetTree();
+	}
+	return bResult;
+}
+
+void URammsBaseWidget::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+
+	// Tree should already be built by Initialize(), but apply style here
+	// since this is the first point where designer flags are set.
+	if (bAutoApplyStyle && Style)
+	{
+		ApplyStyle();
+		PropagateStyleToChildren();
+	}
+}
 
 void URammsBaseWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	// Style is already applied by NativePreConstruct, but re-apply if
+	// style was set between PreConstruct and Construct (e.g., parent propagation)
 	if (bAutoApplyStyle && Style)
 	{
 		ApplyStyle();
 		PropagateStyleToChildren();
+	}
+
+	if (bAutoFindRobotController)
+	{
+		SubscribeToRegistryChanges();
+		ResolveController();
 	}
 }
 
@@ -61,6 +99,57 @@ void URammsBaseWidget::PropagateStyleToChildren()
 void URammsBaseWidget::ApplyStyle_Implementation()
 {
 	// Base implementation does nothing - override in derived classes
+}
+
+void URammsBaseWidget::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	// After Blueprint recompilation, the WidgetTree root may be cleared
+	// while our cached widget pointers (InnerButton, etc.) are stale.
+	// Detect this and force a rebuild.
+	if (WidgetTree && !WidgetTree->RootWidget)
+	{
+		ResetCachedWidgets();
+	}
+
+	// Ensure the widget tree is built (covers the case where NativePreConstruct
+	// ran before WidgetTree was ready, or the tree was just reset above)
+	BuildWidgetTree();
+
+	// Designer-only: when placed in a Canvas Panel with default (0,0) slot size
+	// (common when the widget had no content at placement time), auto-enable
+	// "Size to Content" so the widget is visible in the editor. Gated to
+	// design-time so runtime layout (e.g., widgets sized later or animated
+	// from 0) is never silently mutated.
+	if (IsDesignTime())
+	{
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			FAnchors Anchors = CanvasSlot->GetAnchors();
+			bool bPointAnchors = FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
+				&& FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y);
+
+			if (bPointAnchors && !CanvasSlot->GetAutoSize())
+			{
+				FVector2D SlotSize = CanvasSlot->GetSize();
+				if (SlotSize.X < 1.0f && SlotSize.Y < 1.0f)
+				{
+					CanvasSlot->SetAutoSize(true);
+				}
+			}
+		}
+	}
+
+	// Re-apply style when properties change in the designer
+	if (bAutoApplyStyle && Style)
+	{
+		ApplyStyle();
+		PropagateStyleToChildren();
+	}
+
+	// Force Slate to recalculate layout — prevents 0-height after Blueprint recompilation
+	InvalidateLayoutAndVolatility();
 }
 
 // ==================== Animation Helpers ====================
@@ -297,4 +386,141 @@ void URammsBaseWidget::StartAnimation(FAnimationState Animation)
 	});
 
 	ActiveAnimations.Add(Animation);
+}
+
+// ==================== Robot Controller Discovery ====================
+
+void URammsBaseWidget::SubscribeToRegistryChanges()
+{
+	if (bSubscribedToRegistry)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->OnControllerRegistryChanged.AddDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
+			bSubscribedToRegistry = true;
+		}
+	}
+}
+
+void URammsBaseWidget::UnsubscribeFromRegistryChanges()
+{
+	if (!bSubscribedToRegistry)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->OnControllerRegistryChanged.RemoveDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
+		}
+	}
+	bSubscribedToRegistry = false;
+}
+
+void URammsBaseWidget::HandleControllerRegistryChanged(AActor* Actor, bool bRegistered)
+{
+	if (!bAutoFindRobotController)
+	{
+		return;
+	}
+
+	if (bRegistered)
+	{
+		// A new controller was registered — try to resolve if we don't have one
+		if (!ResolvedControllerActor.IsValid())
+		{
+			ResolveController();
+		}
+	}
+	else
+	{
+		// A controller was unregistered — if it's ours, clear and try to find another
+		if (ResolvedControllerActor.Get() == Actor)
+		{
+			ResolvedControllerActor.Reset();
+			OnRobotControllerLost();
+
+			// Try to find a replacement
+			ResolveController();
+		}
+	}
+}
+
+void URammsBaseWidget::BeginDestroy()
+{
+	UnsubscribeFromRegistryChanges();
+	Super::BeginDestroy();
+}
+
+void URammsBaseWidget::ResolveController()
+{
+	// Check if existing controller is still valid
+	if (ResolvedControllerActor.IsValid())
+	{
+		return;
+	}
+
+	// Clear stale references
+	ResolvedControllerActor.Reset();
+
+	AActor* FoundActor = nullptr;
+
+	// 1. Check explicit override first
+	if (TargetRobotOverride)
+	{
+		if (TargetRobotOverride->GetClass()->ImplementsInterface(URammsRobotController::StaticClass()))
+		{
+			FoundActor = TargetRobotOverride;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: TargetRobotOverride '%s' does not implement IRammsRobotController"),
+				*GetName(), *TargetRobotOverride->GetName());
+		}
+	}
+
+	// 2. Fall back to subsystem auto-discovery
+	if (!FoundActor)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+			{
+				FoundActor = Subsystem->FindRobotController();
+			}
+		}
+	}
+
+	if (FoundActor)
+	{
+		ResolvedControllerActor = FoundActor;
+		OnRobotControllerResolved(FoundActor);
+	}
+}
+
+AActor* URammsBaseWidget::GetResolvedControllerActor() const
+{
+	return ResolvedControllerActor.Get();
+}
+
+bool URammsBaseWidget::HasResolvedController() const
+{
+	return ResolvedControllerActor.IsValid();
+}
+
+void URammsBaseWidget::OnRobotControllerResolved(AActor* ControllerActor)
+{
+	// Base implementation does nothing — override in derived classes
+}
+
+void URammsBaseWidget::OnRobotControllerLost()
+{
+	// Base implementation does nothing — override in derived classes
 }

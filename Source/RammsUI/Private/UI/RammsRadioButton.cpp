@@ -7,6 +7,12 @@
 // Initialize static radio groups map
 TMap<FName, TArray<TWeakObjectPtr<URammsRadioButton>>> URammsRadioButton::RadioGroups;
 
+void URammsRadioButton::ResetCachedWidgets()
+{
+	InnerCheckBox = nullptr;
+	RadioLabel = nullptr;
+}
+
 void URammsRadioButton::BuildWidgetTree()
 {
 	if (!WidgetTree || InnerCheckBox)
@@ -101,6 +107,26 @@ void URammsRadioButton::ApplyStyle_Implementation()
 
 	// CheckBox styling would require UCheckBoxStyle asset
 	// In production, create and reference a styled checkbox asset
+}
+
+void URammsRadioButton::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	if (RadioLabel)
+	{
+		RadioLabel->SetText(ButtonText);
+		// Ensure text is visible even without a Style asset
+		if (!Style)
+		{
+			RadioLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		}
+	}
+
+	if (InnerCheckBox)
+	{
+		InnerCheckBox->SetIsChecked(bIsChecked);
+	}
 }
 
 void URammsRadioButton::SetChecked(bool bChecked)

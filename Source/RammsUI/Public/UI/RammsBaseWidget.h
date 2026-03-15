@@ -9,7 +9,7 @@
 
 /**
  * Base class for all RammsUI widgets
- * Provides style application, animation helpers, and common utilities
+ * Provides style application, animation helpers, auto-discovery, and common utilities
  */
 UCLASS(Abstract, Blueprintable)
 class RAMMSUI_API URammsBaseWidget : public UUserWidget
@@ -37,9 +37,49 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	FVector2D CurrentScale = FVector2D(1.0f, 1.0f);
 
+	// ── Robot Controller Binding ──────────────────────────────────
+
+	/**
+	 * Optional explicit override: set this to a specific actor implementing
+	 * IRammsRobotController to bypass auto-discovery.
+	 * If null, the widget queries URammsUISubsystem to find one automatically.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Robot Controller",
+		meta = (DisplayName = "Target Robot (Override)"))
+	TObjectPtr<AActor> TargetRobotOverride;
+
+	/**
+	 * When true, the widget will automatically search for an actor
+	 * implementing IRammsRobotController via URammsUISubsystem.
+	 * Disable this for widgets that don't need robot control (pure UI).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Robot Controller")
+	bool bAutoFindRobotController = false;
+
+	/** Cached weak reference to the resolved controller actor */
+	TWeakObjectPtr<AActor> ResolvedControllerActor;
+
 public:
+	virtual bool Initialize() override;
+	virtual void NativePreConstruct() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void SynchronizeProperties() override;
+
+	/**
+	 * Build the widget tree for this widget. Override in derived classes.
+	 * Called from Initialize() (before Slate representation is created) so the
+	 * tree is ready for both designer preview and runtime.
+	 * Implementations should guard against double-building.
+	 */
+	virtual void BuildWidgetTree() {}
+
+	/**
+	 * Reset cached widget pointers. Called when the widget tree is invalidated
+	 * (e.g., after Blueprint recompilation) so that BuildWidgetTree can rebuild.
+	 * Override in derived classes to null out all cached UWidget* members.
+	 */
+	virtual void ResetCachedWidgets() {}
 
 	/**
 	 * Set the UI style and apply it
@@ -132,6 +172,63 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Layout")
 	void SetSize(FVector2D Size);
+
+	// ==================== Robot Controller =====================
+
+	/**
+	 * Resolve the robot controller. Checks TargetRobotOverride first,
+	 * then queries URammsUISubsystem for auto-discovery.
+	 *
+	 * Called automatically from NativeConstruct when bAutoFindRobotController
+	 * is true, and also re-invoked when the controller registry changes
+	 * (so widgets resolve even if the controller spawns after the widget).
+	 *
+	 * Override OnRobotControllerResolved() to react when a controller is found.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Robot Controller")
+	void ResolveController();
+
+	/**
+	 * Get the resolved robot controller actor (may be null).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Robot Controller")
+	AActor* GetResolvedControllerActor() const;
+
+	/**
+	 * Whether a robot controller has been resolved and is still valid.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Robot Controller")
+	bool HasResolvedController() const;
+
+protected:
+	/**
+	 * Called after ResolveController() successfully finds a controller.
+	 * Override in derived classes to sync initial state from the controller.
+	 * Use IRammsRobotController::Execute_*() to call interface methods.
+	 */
+	virtual void OnRobotControllerResolved(AActor* ControllerActor);
+
+	/**
+	 * Called when the active controller is lost (unregistered or destroyed).
+	 * Override in derived classes to clear cached state and disable controls.
+	 */
+	virtual void OnRobotControllerLost();
+
+	virtual void BeginDestroy() override;
+
+private:
+	/** Handler for URammsUISubsystem::OnControllerRegistryChanged */
+	UFUNCTION()
+	void HandleControllerRegistryChanged(AActor* Actor, bool bRegistered);
+
+	/** Whether we are currently subscribed to the subsystem delegate */
+	bool bSubscribedToRegistry = false;
+
+	/** Subscribe to the subsystem's controller registry change delegate */
+	void SubscribeToRegistryChanges();
+
+	/** Unsubscribe from the registry delegate */
+	void UnsubscribeFromRegistryChanges();
 
 protected:
 	/**

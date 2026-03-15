@@ -208,6 +208,111 @@ struct FRammsBorderStyle
 };
 
 /**
+ * Scrollbar appearance settings.
+ * Defines consistent styling for all scrollbars across the UI.
+ * Per-widget overrides are possible by providing non-default values.
+ */
+USTRUCT(BlueprintType)
+struct FRammsScrollBarStyle
+{
+	GENERATED_BODY()
+
+	/** Scrollbar track + thumb thickness in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar", meta = (ClampMin = "1.0", ClampMax = "32.0"))
+	float Thickness = 6.0f;
+
+	/** Corner radius for the thumb and track rounded box brushes */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar", meta = (ClampMin = "0.0"))
+	float CornerRadius = 3.0f;
+
+	/** Thumb color in the normal (idle) state */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	FLinearColor ThumbNormalColor = FLinearColor(0.7f, 0.7f, 0.7f, 0.4f);
+
+	/** Thumb color when hovered */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	FLinearColor ThumbHoveredColor = FLinearColor(0.7f, 0.7f, 0.7f, 0.7f);
+
+	/** Thumb color when being dragged */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	FLinearColor ThumbDraggedColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.8f);
+
+	/** Track background color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	FLinearColor TrackColor = FLinearColor(0.1f, 0.1f, 0.1f, 0.15f);
+
+	/** Padding between the scrollbar and the scroll content edge (Left, Top, Right, Bottom) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	FMargin Padding = FMargin(0.0f, 2.0f, 2.0f, 2.0f);
+
+	/** Disable the shadow overlay that UE draws at the scroll edges (breaks rounded corners) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ScrollBar")
+	bool bDisableEdgeShadows = true;
+
+	/** Whether these values have been explicitly customised (false = use style defaults) */
+	bool IsDefault() const
+	{
+		// A quick sentinel: if Thickness is still exactly the struct default, treat as "not customised"
+		return FMath::IsNearlyEqual(Thickness, 6.0f)
+			&& FMath::IsNearlyEqual(CornerRadius, 3.0f)
+			&& ThumbNormalColor.Equals(FLinearColor(0.7f, 0.7f, 0.7f, 0.4f));
+	}
+};
+
+/**
+ * Slider appearance settings.
+ * Defines consistent styling for all sliders across the UI.
+ * Per-widget overrides take priority when bUseStyleColors is false on the widget.
+ */
+USTRUCT(BlueprintType)
+struct FRammsSliderStyle
+{
+	GENERATED_BODY()
+
+	/** Thumb (handle) diameter in pixels. Larger = easier to touch. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider", meta = (ClampMin = "8.0", ClampMax = "64.0"))
+	float ThumbSize = 24.0f;
+
+	/** Track bar thickness in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider", meta = (ClampMin = "1.0", ClampMax = "32.0"))
+	float BarThickness = 6.0f;
+
+	/** Track (unfilled portion) color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FLinearColor TrackColor = FLinearColor(0.15f, 0.15f, 0.15f, 1.0f);
+
+	/** Filled bar (active portion) color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FLinearColor ActiveBarColor = FLinearColor(0.0f, 0.478f, 0.8f, 1.0f);
+
+	/** Thumb color (normal state) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FLinearColor ThumbColor = FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
+
+	/** Thumb color when hovered (auto-lerped between ThumbColor and ActiveBarColor if default) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FLinearColor ThumbHoveredColor = FLinearColor(-1.0f, 0.0f, 0.0f, 0.0f);
+
+	/** Thumb/bar color when disabled */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	FLinearColor DisabledColor = FLinearColor(0.3f, 0.3f, 0.3f, 0.3f);
+
+	/** Whether the slider panel background is shown by default */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Slider")
+	bool bShowPanelByDefault = true;
+
+	/** Get the effective hovered color (auto-computes if sentinel) */
+	FLinearColor GetThumbHoveredColor() const
+	{
+		if (ThumbHoveredColor.R < 0.0f)
+		{
+			return FLinearColor::LerpUsingHSV(ThumbColor, ActiveBarColor, 0.3f);
+		}
+		return ThumbHoveredColor;
+	}
+};
+
+/**
  * DataAsset defining the visual style for RammsUI
  * Create instances in the editor for different themes (Dark, Light, Custom, etc.)
  */
@@ -236,6 +341,14 @@ public:
 	/** Border and corner settings */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FRammsBorderStyle Border;
+
+	/** Default scrollbar appearance (used by all scroll widgets unless overridden) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	FRammsScrollBarStyle ScrollBar;
+
+	/** Default slider appearance (thumb, bar, colors — used unless overridden per widget) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	FRammsSliderStyle Slider;
 
 	/** Default fade in animation */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animations")
@@ -316,4 +429,18 @@ public:
 	 * Apply a rounded brush to a UBorder widget, syncing to the underlying Slate widget
 	 */
 	static void ApplyRoundedBrushToBorder(class UBorder* Border, const FSlateBrush& Brush);
+
+	/**
+	 * Apply scrollbar styling to a UScrollBox.
+	 */
+	static void ApplyScrollBarStyle(class UScrollBox* ScrollBox, const FRammsScrollBarStyle& ScrollBarStyle);
+
+	/**
+	 * Apply slider styling to a USlider.
+	 * Builds rounded-box brushes for thumb and bar from the style settings.
+	 *
+	 * @param Slider       The USlider to style.
+	 * @param SliderStyle  The slider appearance settings.
+	 */
+	static void ApplySliderStyle(class USlider* Slider, const FRammsSliderStyle& SliderStyle);
 };

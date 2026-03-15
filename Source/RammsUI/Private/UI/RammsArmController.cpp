@@ -4,6 +4,21 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Interfaces/IRammsRobotController.h"
+
+URammsArmController::URammsArmController(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	bAutoFindRobotController = true;
+}
+
+void URammsArmController::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	HeaderText = nullptr;
+	HomeButton = nullptr;
+	RetractButton = nullptr;
+}
 
 void URammsArmController::BuildWidgetTree()
 {
@@ -161,9 +176,24 @@ void URammsArmController::SetActionEnabled(ERammsArmAction Action, bool bEnabled
 void URammsArmController::OnHomeClicked()
 {
 	OnArmAction.Broadcast(ERammsArmAction::Home);
+
+	if (ResolvedControllerActor.IsValid())
+	{
+		IRammsRobotController::Execute_RequestArmAction(ResolvedControllerActor.Get(), ERammsArmAction::Home);
+	}
 }
 
 void URammsArmController::OnRetractClicked()
 {
 	OnArmAction.Broadcast(ERammsArmAction::Retract);
+
+	if (ResolvedControllerActor.IsValid())
+	{
+		IRammsRobotController::Execute_RequestArmAction(ResolvedControllerActor.Get(), ERammsArmAction::Retract);
+	}
+}
+
+void URammsArmController::OnRobotControllerResolved(AActor* ControllerActor)
+{
+	UE_LOG(LogTemp, Log, TEXT("URammsArmController: Resolved robot controller '%s'"), *ControllerActor->GetName());
 }

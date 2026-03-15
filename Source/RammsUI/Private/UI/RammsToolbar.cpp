@@ -4,6 +4,15 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/VerticalBoxSlot.h"
+#include "RammsUISubsystem.h"
+
+void URammsToolbar::ResetCachedWidgets()
+{
+	ToolbarBorder = nullptr;
+	ItemContainer = nullptr;
+	ToolbarContentSlot = nullptr;
+	ItemButtons.Empty();
+}
 
 void URammsToolbar::BuildWidgetTree()
 {
@@ -282,6 +291,15 @@ void URammsToolbar::OnButtonClicked()
 			FName ItemID = Pair.Key;
 			OnItemClicked.Broadcast(ItemID);
 
+			// Also broadcast through subsystem for cross-widget communication
+			if (UWorld* World = GetWorld())
+			{
+				if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+				{
+					Subsystem->BroadcastToolbarItemClicked(ItemID);
+				}
+			}
+
 			// Handle toggle
 			for (FRammsToolbarItem& Item : Items)
 			{
@@ -290,6 +308,14 @@ void URammsToolbar::OnButtonClicked()
 					Item.bIsActive = !Item.bIsActive;
 					UpdateButtonVisual(ItemID);
 					OnItemToggled.Broadcast(ItemID, Item.bIsActive);
+
+					if (UWorld* World = GetWorld())
+					{
+						if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+						{
+							Subsystem->BroadcastToolbarItemToggled(ItemID, Item.bIsActive);
+						}
+					}
 					break;
 				}
 			}

@@ -4,6 +4,20 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Styling/SlateBrush.h"
+#include "Interfaces/IRammsRobotController.h"
+
+URammsJoystickWidget::URammsJoystickWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	bAutoFindRobotController = true;
+}
+
+void URammsJoystickWidget::ResetCachedWidgets()
+{
+	JoystickCanvas = nullptr;
+	BackgroundImage = nullptr;
+	ThumbImage = nullptr;
+}
 
 void URammsJoystickWidget::BuildWidgetTree()
 {
@@ -207,6 +221,12 @@ void URammsJoystickWidget::UpdateThumbPosition(const FGeometry& InGeometry, FVec
 	CurrentValue = NormalizedValue;
 	SetThumbOffset(Offset);
 	OnValueChanged.Broadcast(CurrentValue);
+
+	// Forward movement input to robot controller
+	if (ResolvedControllerActor.IsValid())
+	{
+		IRammsRobotController::Execute_SendMovementInput(ResolvedControllerActor.Get(), CurrentValue);
+	}
 }
 
 void URammsJoystickWidget::SetThumbOffset(FVector2D Offset)
@@ -220,4 +240,9 @@ void URammsJoystickWidget::SetThumbOffset(FVector2D Offset)
 		FVector2D CenterPos = JoystickCenter - FVector2D(ThumbRadius, ThumbRadius);
 		ThumbSlot->SetPosition(CenterPos + Offset);
 	}
+}
+
+void URammsJoystickWidget::OnRobotControllerResolved(AActor* ControllerActor)
+{
+	UE_LOG(LogTemp, Log, TEXT("URammsJoystickWidget: Resolved robot controller '%s'"), *ControllerActor->GetName());
 }

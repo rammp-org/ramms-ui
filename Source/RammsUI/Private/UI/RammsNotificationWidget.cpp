@@ -9,6 +9,14 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 
+void URammsNotificationWidget::ResetCachedWidgets()
+{
+	NotificationBorder = nullptr;
+	AccentBar = nullptr;
+	TitleLabel = nullptr;
+	MessageLabel = nullptr;
+}
+
 void URammsNotificationWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || NotificationBorder)

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsImageButton.h"
+#include "RammsRobotTypes.h"
 #include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -12,23 +13,17 @@
 #include "RammsArmController.generated.h"
 
 /**
- * Arm action types
- */
-UENUM(BlueprintType)
-enum class ERammsArmAction : uint8
-{
-	Home     UMETA(DisplayName = "Home"),
-	Retract  UMETA(DisplayName = "Retract")
-};
-
-/**
  * Controller widget for the 6DOF robot arm.
  * Provides Home and Retract action buttons.
+ * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Arm Controller"))
 class RAMMSUI_API URammsArmController : public URammsBaseWidget
 {
 	GENERATED_BODY()
+
+public:
+	URammsArmController(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Header title */
@@ -80,11 +75,15 @@ public:
 	void SetActionEnabled(ERammsArmAction Action, bool bEnabled);
 
 protected:
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 
 	UFUNCTION()
 	void OnHomeClicked();
 
 	UFUNCTION()
 	void OnRetractClicked();
+
+protected:
+	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

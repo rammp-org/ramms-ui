@@ -6,6 +6,19 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 
+void URammsStatusPanel::ResetCachedWidgets()
+{
+	PanelBorder = nullptr;
+	ToggleButton = nullptr;
+	HeaderText = nullptr;
+	ContentBox = nullptr;
+	SpeedText = nullptr;
+	BatteryText = nullptr;
+	ModeText = nullptr;
+	ConnectionText = nullptr;
+	ArmText = nullptr;
+}
+
 void URammsStatusPanel::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)

@@ -14,7 +14,7 @@
  * Simple test widget to verify URammsUIStyle and animation system
  * Builds its UI programmatically - no Widget Blueprint needed.
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Ramms Test Widget"))
 class RAMMSUI_API URammsTestWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
@@ -47,7 +47,8 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 
 protected:
-	void BuildWidgetTree();
+	virtual void ResetCachedWidgets() override;
+	virtual void BuildWidgetTree() override;
 
 private:
 	UButton* CreateTestButton(const FString& Name, const FString& Label);
