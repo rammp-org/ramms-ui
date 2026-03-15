@@ -20,13 +20,13 @@
 UENUM(BlueprintType)
 enum class ERammsCollapseAnimation : uint8
 {
-	None       UMETA(DisplayName = "None (Instant)"),
-	ScaleY     UMETA(DisplayName = "Scale Vertical"),
+	None	   UMETA(DisplayName = "None (Instant)"),
+	ScaleY	   UMETA(DisplayName = "Scale Vertical"),
 	SlideDown  UMETA(DisplayName = "Slide Down"),
-	SlideUp    UMETA(DisplayName = "Slide Up"),
+	SlideUp	   UMETA(DisplayName = "Slide Up"),
 	SlideLeft  UMETA(DisplayName = "Slide Left"),
 	SlideRight UMETA(DisplayName = "Slide Right"),
-	Fade       UMETA(DisplayName = "Fade")
+	Fade	   UMETA(DisplayName = "Fade")
 };
 
 /**
@@ -102,14 +102,17 @@ protected:
 	TObjectPtr<UNamedSlot> ContentSlot;
 
 	/** Animation state tracking */
-	bool bIsAnimating = false;
+	bool  bIsAnimating = false;
 	float AnimationProgress = 1.0f; // 1 = fully expanded, 0 = fully collapsed
 	float AnimationTarget = 1.0f;
 	float ExpandedContentHeight = 0.0f; // Cached height of content when expanded
-	bool bNeedsCacheHeight = true;
+	bool  bNeedsCacheHeight = true;
 
 	/** Cached expanded size for Canvas Panel slot resizing */
 	FVector2D CachedExpandedSlotSize = FVector2D::ZeroVector;
+
+	/** Deferred initial collapse — resize the canvas slot after the first layout pass */
+	bool bPendingInitialCollapse = false;
 
 public:
 	/** Fired when expand state changes */
@@ -158,13 +161,13 @@ public:
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void EnsureScrollableContent();
-	void UpdateToggleIcon();
-	void UpdateHeaderCornerRadii();
-	void ApplyAnimationState(float Alpha);
-	void UpdateParentSlotSize(float Alpha);
-	void SetContentSlotFill(bool bFill);
-	float GetEffectiveMaxHeight() const;
+	void		 EnsureScrollableContent();
+	void		 UpdateToggleIcon();
+	void		 UpdateHeaderCornerRadii();
+	void		 ApplyAnimationState(float Alpha);
+	void		 UpdateParentSlotSize(float Alpha);
+	void		 SetContentSlotFill(bool bFill);
+	float		 GetEffectiveMaxHeight() const;
 
 	UFUNCTION()
 	void OnToggleClicked();
