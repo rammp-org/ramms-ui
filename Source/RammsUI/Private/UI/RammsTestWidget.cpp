@@ -35,14 +35,16 @@ void URammsTestWidget::BuildWidgetTree()
 	TitleText->SetText(FText::FromString(TEXT("RammsUI Test Panel")));
 	TitleText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	UVerticalBoxSlot* TitleSlot = Layout->AddChildToVerticalBox(TitleText);
-	if (TitleSlot) TitleSlot->SetPadding(FMargin(0, 0, 0, 8));
+	if (TitleSlot)
+		TitleSlot->SetPadding(FMargin(0, 0, 0, 8));
 
 	// Status
 	StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatusText"));
 	StatusText->SetText(FText::FromString(TEXT("Ready")));
 	StatusText->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)));
 	UVerticalBoxSlot* StatusSlot = Layout->AddChildToVerticalBox(StatusText);
-	if (StatusSlot) StatusSlot->SetPadding(FMargin(0, 0, 0, 12));
+	if (StatusSlot)
+		StatusSlot->SetPadding(FMargin(0, 0, 0, 12));
 
 	// Buttons
 	FadeInButton = CreateTestButton(TEXT("FadeInButton"), TEXT("Fade In"));
@@ -60,7 +62,7 @@ void URammsTestWidget::BuildWidgetTree()
 
 UButton* URammsTestWidget::CreateTestButton(const FString& Name, const FString& Label)
 {
-	UButton* Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), *Name);
+	UButton*	Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), *Name);
 	UTextBlock* BtnLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Name + TEXT("Label")));
 	BtnLabel->SetText(FText::FromString(Label));
 	BtnLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));

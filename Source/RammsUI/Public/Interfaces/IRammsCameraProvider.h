@@ -87,7 +87,7 @@ class URammsCameraProvider : public UInterface
 /**
  * Abstract interface for providing camera streams
  * Implementations: RemoteControl plugin, Socket.IO adapter, ROS 2 bridge
- * 
+ *
  * Handles automatic texture management, format conversion, and game thread updates.
  */
 class RAMMSUI_API IRammsCameraProvider
@@ -150,7 +150,7 @@ public:
 	virtual float GetActualFrameRate(const FString& StreamID) const = 0;
 
 	// Delegate accessors
-	virtual FOnCameraFrameReady& OnCameraFrameReady() = 0;
-	virtual FOnCameraStreamStatus& OnCameraStreamStatus() = 0;
+	virtual FOnCameraFrameReady&	   OnCameraFrameReady() = 0;
+	virtual FOnCameraStreamStatus&	   OnCameraStreamStatus() = 0;
 	virtual FOnCameraExtrinsicUpdated& OnCameraExtrinsicUpdated() = 0;
 };

@@ -96,5 +96,5 @@ public:
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void UpdateHeaderVisibility();
+	void		 UpdateHeaderVisibility();
 };

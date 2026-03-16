@@ -80,8 +80,7 @@ void URammsBaseWidget::PropagateStyleToChildren()
 		return;
 
 	// Walk all widgets in our WidgetTree and propagate style to child RammsBaseWidgets
-	WidgetTree->ForEachWidget([this](UWidget* Widget)
-	{
+	WidgetTree->ForEachWidget([this](UWidget* Widget) {
 		if (Widget == this)
 			return;
 
@@ -127,7 +126,7 @@ void URammsBaseWidget::SynchronizeProperties()
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
 		{
 			FAnchors Anchors = CanvasSlot->GetAnchors();
-			bool bPointAnchors = FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
+			bool	 bPointAnchors = FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
 				&& FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y);
 
 			if (bPointAnchors && !CanvasSlot->GetAutoSize())
@@ -277,59 +276,59 @@ float URammsBaseWidget::EvaluateEasing(float Alpha, ERammsUIEasing Easing)
 {
 	switch (Easing)
 	{
-	case ERammsUIEasing::Linear:
-		return Alpha;
+		case ERammsUIEasing::Linear:
+			return Alpha;
 
-	case ERammsUIEasing::EaseIn:
-		return Alpha * Alpha;
+		case ERammsUIEasing::EaseIn:
+			return Alpha * Alpha;
 
-	case ERammsUIEasing::EaseOut:
-		return 1.0f - (1.0f - Alpha) * (1.0f - Alpha);
+		case ERammsUIEasing::EaseOut:
+			return 1.0f - (1.0f - Alpha) * (1.0f - Alpha);
 
-	case ERammsUIEasing::EaseInOut:
-		if (Alpha < 0.5f)
-			return 2.0f * Alpha * Alpha;
-		else
-			return 1.0f - FMath::Pow(-2.0f * Alpha + 2.0f, 2.0f) / 2.0f;
+		case ERammsUIEasing::EaseInOut:
+			if (Alpha < 0.5f)
+				return 2.0f * Alpha * Alpha;
+			else
+				return 1.0f - FMath::Pow(-2.0f * Alpha + 2.0f, 2.0f) / 2.0f;
 
-	case ERammsUIEasing::Bounce:
-	{
-		const float n1 = 7.5625f;
-		const float d1 = 2.75f;
-
-		if (Alpha < 1.0f / d1)
+		case ERammsUIEasing::Bounce:
 		{
-			return n1 * Alpha * Alpha;
-		}
-		else if (Alpha < 2.0f / d1)
-		{
-			float t = Alpha - 1.5f / d1;
-			return n1 * t * t + 0.75f;
-		}
-		else if (Alpha < 2.5f / d1)
-		{
-			float t = Alpha - 2.25f / d1;
-			return n1 * t * t + 0.9375f;
-		}
-		else
-		{
-			float t = Alpha - 2.625f / d1;
-			return n1 * t * t + 0.984375f;
-		}
-	}
+			const float n1 = 7.5625f;
+			const float d1 = 2.75f;
 
-	case ERammsUIEasing::Elastic:
-	{
-		const float c4 = (2.0f * PI) / 3.0f;
-		if (Alpha == 0.0f)
-			return 0.0f;
-		if (Alpha == 1.0f)
-			return 1.0f;
-		return FMath::Pow(2.0f, -10.0f * Alpha) * FMath::Sin((Alpha * 10.0f - 0.75f) * c4) + 1.0f;
-	}
+			if (Alpha < 1.0f / d1)
+			{
+				return n1 * Alpha * Alpha;
+			}
+			else if (Alpha < 2.0f / d1)
+			{
+				float t = Alpha - 1.5f / d1;
+				return n1 * t * t + 0.75f;
+			}
+			else if (Alpha < 2.5f / d1)
+			{
+				float t = Alpha - 2.25f / d1;
+				return n1 * t * t + 0.9375f;
+			}
+			else
+			{
+				float t = Alpha - 2.625f / d1;
+				return n1 * t * t + 0.984375f;
+			}
+		}
 
-	default:
-		return Alpha;
+		case ERammsUIEasing::Elastic:
+		{
+			const float c4 = (2.0f * PI) / 3.0f;
+			if (Alpha == 0.0f)
+				return 0.0f;
+			if (Alpha == 1.0f)
+				return 1.0f;
+			return FMath::Pow(2.0f, -10.0f * Alpha) * FMath::Sin((Alpha * 10.0f - 0.75f) * c4) + 1.0f;
+		}
+
+		default:
+			return Alpha;
 	}
 }
 
@@ -348,26 +347,26 @@ void URammsBaseWidget::UpdateAnimations(float DeltaTime)
 
 		switch (Anim.Type)
 		{
-		case FAnimationState::EType::Fade:
-		{
-			CurrentOpacity = FMath::Lerp(Anim.StartValue.X, Anim.TargetValue.X, EasedAlpha);
-			SetRenderOpacity(CurrentOpacity);
-			break;
-		}
+			case FAnimationState::EType::Fade:
+			{
+				CurrentOpacity = FMath::Lerp(Anim.StartValue.X, Anim.TargetValue.X, EasedAlpha);
+				SetRenderOpacity(CurrentOpacity);
+				break;
+			}
 
-		case FAnimationState::EType::Slide:
-		{
-			FVector2D CurrentOffset = FMath::Lerp(Anim.StartValue, Anim.TargetValue, EasedAlpha);
-			SetRenderTranslation(CurrentOffset);
-			break;
-		}
+			case FAnimationState::EType::Slide:
+			{
+				FVector2D CurrentOffset = FMath::Lerp(Anim.StartValue, Anim.TargetValue, EasedAlpha);
+				SetRenderTranslation(CurrentOffset);
+				break;
+			}
 
-		case FAnimationState::EType::Scale:
-		{
-			CurrentScale = FMath::Lerp(Anim.StartValue, Anim.TargetValue, EasedAlpha);
-			SetRenderScale(CurrentScale);
-			break;
-		}
+			case FAnimationState::EType::Scale:
+			{
+				CurrentScale = FMath::Lerp(Anim.StartValue, Anim.TargetValue, EasedAlpha);
+				SetRenderScale(CurrentScale);
+				break;
+			}
 		}
 
 		// Remove completed animations

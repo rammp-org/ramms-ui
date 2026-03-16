@@ -115,7 +115,7 @@ void URammsPanel::ApplyStyle_Implementation()
 
 	if (HeaderBorder)
 	{
-		float R = FMath::Max(Radius - BorderW, 0.0f);
+		float		 R = FMath::Max(Radius - BorderW, 0.0f);
 		FLinearColor HeaderBg = Style->Colors.Surface;
 		HeaderBg.A = 1.0f;
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(HeaderBg, FVector4(R, R, 0.0f, 0.0f));

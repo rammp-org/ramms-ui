@@ -86,9 +86,9 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
 	static bool ShowNotification(const FString& Message,
-		ERammsNotificationLevel Level = ERammsNotificationLevel::Info,
-		float Duration = 4.0f,
-		const FString& Title = TEXT(""));
+		ERammsNotificationLevel					Level = ERammsNotificationLevel::Info,
+		float									Duration = 4.0f,
+		const FString&							Title = TEXT(""));
 
 	/**
 	 * Dismiss all active notifications.

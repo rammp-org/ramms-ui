@@ -71,7 +71,8 @@ void URammsNotificationWidget::BuildWidgetTree()
 	TitleLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	TitleLabel->SetVisibility(Title.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	UVerticalBoxSlot* TitleSlot = TextLayout->AddChildToVerticalBox(TitleLabel);
-	if (TitleSlot) TitleSlot->SetPadding(FMargin(0, 0, 0, 2));
+	if (TitleSlot)
+		TitleSlot->SetPadding(FMargin(0, 0, 0, 2));
 
 	// Message
 	MessageLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("MessageLabel"));
@@ -106,8 +107,8 @@ void URammsNotificationWidget::NativeConstruct()
 
 	if (AccentBar)
 	{
-		float Radius = Style ? Style->Border.CornerRadiusMedium : 6.0f;
-		FVector4 LeftRadii(Radius, 0.0f, 0.0f, Radius);
+		float		Radius = Style ? Style->Border.CornerRadiusMedium : 6.0f;
+		FVector4	LeftRadii(Radius, 0.0f, 0.0f, Radius);
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(GetAccentColor(), LeftRadii);
 		URammsUIStyle::ApplyRoundedBrushToBorder(AccentBar, Brush);
 	}
@@ -147,7 +148,7 @@ void URammsNotificationWidget::ApplyStyle_Implementation()
 
 	if (AccentBar)
 	{
-		FVector4 LeftRadii(Radius, 0.0f, 0.0f, Radius);
+		FVector4	LeftRadii(Radius, 0.0f, 0.0f, Radius);
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(GetAccentColor(), LeftRadii);
 		URammsUIStyle::ApplyRoundedBrushToBorder(AccentBar, Brush);
 	}
@@ -185,8 +186,8 @@ void URammsNotificationWidget::Show(FText InMessage, ERammsNotificationLevel InL
 
 	if (AccentBar)
 	{
-		float Radius = Style ? Style->Border.CornerRadiusMedium : 6.0f;
-		FVector4 LeftRadii(Radius, 0.0f, 0.0f, Radius);
+		float		Radius = Style ? Style->Border.CornerRadiusMedium : 6.0f;
+		FVector4	LeftRadii(Radius, 0.0f, 0.0f, Radius);
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(GetAccentColor(), LeftRadii);
 		URammsUIStyle::ApplyRoundedBrushToBorder(AccentBar, Brush);
 	}
@@ -219,14 +220,15 @@ void URammsNotificationWidget::Dismiss()
 	FTimerHandle TimerHandle;
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().SetTimer(TimerHandle, [this]()
-		{
-			if (IsValid(this))
-			{
-				SetVisibility(ESlateVisibility::Collapsed);
-				SetRenderOpacity(0.0f);
-			}
-		}, 0.35f, false);
+		World->GetTimerManager().SetTimer(
+			TimerHandle, [this]() {
+				if (IsValid(this))
+				{
+					SetVisibility(ESlateVisibility::Collapsed);
+					SetRenderOpacity(0.0f);
+				}
+			},
+			0.35f, false);
 	}
 }
 
@@ -247,20 +249,28 @@ FLinearColor URammsNotificationWidget::GetAccentColor() const
 	{
 		switch (Level)
 		{
-		case ERammsNotificationLevel::Info:    return Style->Colors.Info;
-		case ERammsNotificationLevel::Success: return Style->Colors.Success;
-		case ERammsNotificationLevel::Warning: return Style->Colors.Warning;
-		case ERammsNotificationLevel::Error:   return Style->Colors.Error;
+			case ERammsNotificationLevel::Info:
+				return Style->Colors.Info;
+			case ERammsNotificationLevel::Success:
+				return Style->Colors.Success;
+			case ERammsNotificationLevel::Warning:
+				return Style->Colors.Warning;
+			case ERammsNotificationLevel::Error:
+				return Style->Colors.Error;
 		}
 	}
 
 	// Fallback colors without style
 	switch (Level)
 	{
-	case ERammsNotificationLevel::Info:    return FLinearColor(0.2f, 0.5f, 1.0f);
-	case ERammsNotificationLevel::Success: return FLinearColor(0.2f, 0.8f, 0.3f);
-	case ERammsNotificationLevel::Warning: return FLinearColor(1.0f, 0.7f, 0.1f);
-	case ERammsNotificationLevel::Error:   return FLinearColor(1.0f, 0.2f, 0.2f);
+		case ERammsNotificationLevel::Info:
+			return FLinearColor(0.2f, 0.5f, 1.0f);
+		case ERammsNotificationLevel::Success:
+			return FLinearColor(0.2f, 0.8f, 0.3f);
+		case ERammsNotificationLevel::Warning:
+			return FLinearColor(1.0f, 0.7f, 0.1f);
+		case ERammsNotificationLevel::Error:
+			return FLinearColor(1.0f, 0.2f, 0.2f);
 	}
 
 	return FLinearColor::White;

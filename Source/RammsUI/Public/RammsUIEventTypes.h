@@ -10,11 +10,11 @@
 UENUM(BlueprintType)
 enum class ERammsOverlayType : uint8
 {
-	None        UMETA(DisplayName = "None"),
-	DepthMap    UMETA(DisplayName = "Depth Map"),
-	ThermalMap  UMETA(DisplayName = "Thermal Map"),
+	None			UMETA(DisplayName = "None"),
+	DepthMap		UMETA(DisplayName = "Depth Map"),
+	ThermalMap		UMETA(DisplayName = "Thermal Map"),
 	ObjectDetection UMETA(DisplayName = "Object Detection"),
-	Segmentation   UMETA(DisplayName = "Segmentation")
+	Segmentation	UMETA(DisplayName = "Segmentation")
 };
 
 // ── 3D Visualization Layer Types ─────────────────────────────────
@@ -22,13 +22,13 @@ enum class ERammsOverlayType : uint8
 UENUM(BlueprintType)
 enum class ERammsVisualizationLayer : uint8
 {
-	None              UMETA(DisplayName = "None"),
-	LidarPoints       UMETA(DisplayName = "Lidar Points"),
-	NavigationPath    UMETA(DisplayName = "Navigation Path"),
-	CollisionZones    UMETA(DisplayName = "Collision Zones"),
-	JointAxes         UMETA(DisplayName = "Joint Axes"),
+	None			  UMETA(DisplayName = "None"),
+	LidarPoints		  UMETA(DisplayName = "Lidar Points"),
+	NavigationPath	  UMETA(DisplayName = "Navigation Path"),
+	CollisionZones	  UMETA(DisplayName = "Collision Zones"),
+	JointAxes		  UMETA(DisplayName = "Joint Axes"),
 	WorkspaceEnvelope UMETA(DisplayName = "Workspace Envelope"),
-	CurbDetection     UMETA(DisplayName = "Curb Detection")
+	CurbDetection	  UMETA(DisplayName = "Curb Detection")
 };
 
 // ── Robot Highlight Targets ──────────────────────────────────────
@@ -36,11 +36,11 @@ enum class ERammsVisualizationLayer : uint8
 UENUM(BlueprintType)
 enum class ERammsHighlightTarget : uint8
 {
-	None         UMETA(DisplayName = "None"),
-	EndEffector  UMETA(DisplayName = "End Effector"),
-	Base         UMETA(DisplayName = "Base"),
-	Wheels       UMETA(DisplayName = "Wheels"),
-	Sensors      UMETA(DisplayName = "Sensors")
+	None		UMETA(DisplayName = "None"),
+	EndEffector UMETA(DisplayName = "End Effector"),
+	Base		UMETA(DisplayName = "Base"),
+	Wheels		UMETA(DisplayName = "Wheels"),
+	Sensors		UMETA(DisplayName = "Sensors")
 };
 
 // ── Custom Event Payload (Blueprint-extensible) ──────────────────

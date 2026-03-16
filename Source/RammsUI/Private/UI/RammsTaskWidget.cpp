@@ -60,7 +60,7 @@ void URammsTaskWidget::BuildWidgetTree()
 	}
 
 	// Buttons row
-	UHorizontalBox* ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
+	UHorizontalBox*	  ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
 	UVerticalBoxSlot* RowSlot = VBox->AddChildToVerticalBox(ButtonRow);
 	if (RowSlot)
 	{
@@ -71,8 +71,10 @@ void URammsTaskWidget::BuildWidgetTree()
 	CancelButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("CancelBtn"));
 	CancelButton->SetLabelText(FText::FromString(TEXT("Cancel")));
 	CancelButton->SetImageSize(ButtonImageSize);
-	if (CancelIcon) CancelButton->SetButtonImage(CancelIcon);
-	if (Style) CancelButton->SetStyle(Style);
+	if (CancelIcon)
+		CancelButton->SetButtonImage(CancelIcon);
+	if (Style)
+		CancelButton->SetStyle(Style);
 
 	UHorizontalBoxSlot* CancelSlot = ButtonRow->AddChildToHorizontalBox(CancelButton);
 	if (CancelSlot)
@@ -90,8 +92,10 @@ void URammsTaskWidget::BuildWidgetTree()
 	ExitButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ExitBtn"));
 	ExitButton->SetLabelText(FText::FromString(TEXT("Exit")));
 	ExitButton->SetImageSize(ButtonImageSize);
-	if (ExitIcon) ExitButton->SetButtonImage(ExitIcon);
-	if (Style) ExitButton->SetStyle(Style);
+	if (ExitIcon)
+		ExitButton->SetButtonImage(ExitIcon);
+	if (Style)
+		ExitButton->SetStyle(Style);
 
 	UHorizontalBoxSlot* ExitSlot = ButtonRow->AddChildToHorizontalBox(ExitButton);
 	if (ExitSlot)
@@ -145,8 +149,10 @@ void URammsTaskWidget::ApplyStyle_Implementation()
 		StatusLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
 	}
 
-	if (ExitButton) ExitButton->SetStyle(Style);
-	if (CancelButton) CancelButton->SetStyle(Style);
+	if (ExitButton)
+		ExitButton->SetStyle(Style);
+	if (CancelButton)
+		CancelButton->SetStyle(Style);
 }
 
 void URammsTaskWidget::SynchronizeProperties()
@@ -155,12 +161,14 @@ void URammsTaskWidget::SynchronizeProperties()
 
 	if (ExitButton)
 	{
-		if (ExitIcon) ExitButton->SetButtonImage(ExitIcon);
+		if (ExitIcon)
+			ExitButton->SetButtonImage(ExitIcon);
 		ExitButton->SetImageSize(ButtonImageSize);
 	}
 	if (CancelButton)
 	{
-		if (CancelIcon) CancelButton->SetButtonImage(CancelIcon);
+		if (CancelIcon)
+			CancelButton->SetButtonImage(CancelIcon);
 		CancelButton->SetImageSize(ButtonImageSize);
 	}
 	if (HeaderText)
@@ -192,14 +200,16 @@ void URammsTaskWidget::SetActionIcon(ERammsTaskAction Action, UTexture2D* Icon)
 {
 	switch (Action)
 	{
-	case ERammsTaskAction::Exit:
-		ExitIcon = Icon;
-		if (ExitButton) ExitButton->SetButtonImage(Icon);
-		break;
-	case ERammsTaskAction::Cancel:
-		CancelIcon = Icon;
-		if (CancelButton) CancelButton->SetButtonImage(Icon);
-		break;
+		case ERammsTaskAction::Exit:
+			ExitIcon = Icon;
+			if (ExitButton)
+				ExitButton->SetButtonImage(Icon);
+			break;
+		case ERammsTaskAction::Cancel:
+			CancelIcon = Icon;
+			if (CancelButton)
+				CancelButton->SetButtonImage(Icon);
+			break;
 	}
 }
 
@@ -207,12 +217,14 @@ void URammsTaskWidget::SetActionEnabled(ERammsTaskAction Action, bool bEnabled)
 {
 	switch (Action)
 	{
-	case ERammsTaskAction::Exit:
-		if (ExitButton) ExitButton->SetButtonEnabled(bEnabled);
-		break;
-	case ERammsTaskAction::Cancel:
-		if (CancelButton) CancelButton->SetButtonEnabled(bEnabled);
-		break;
+		case ERammsTaskAction::Exit:
+			if (ExitButton)
+				ExitButton->SetButtonEnabled(bEnabled);
+			break;
+		case ERammsTaskAction::Cancel:
+			if (CancelButton)
+				CancelButton->SetButtonEnabled(bEnabled);
+			break;
 	}
 }
 

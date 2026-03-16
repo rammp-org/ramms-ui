@@ -52,9 +52,9 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float Fy = FMath::Max(FocalLengthY, 1.0f);
 
 	// Conservative half-extents of the frustum at max distance
-	const float HalfWidth  = MaxProjectionDistance * (float)ImageWidth  / (2.0f * Fx);
+	const float HalfWidth = MaxProjectionDistance * (float)ImageWidth / (2.0f * Fx);
 	const float HalfHeight = MaxProjectionDistance * (float)ImageHeight / (2.0f * Fy);
-	const float HalfDepth  = MaxProjectionDistance * 0.5f;
+	const float HalfDepth = MaxProjectionDistance * 0.5f;
 
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
 	DecalComponent->DecalSize = FVector(HalfDepth, HalfWidth, HalfHeight);
@@ -88,10 +88,10 @@ void URammsCameraProjectorComponent::UpdateCameraTransformParameters()
 		return;
 
 	const FTransform& WorldXform = GetComponentTransform();
-	const FVector Pos = WorldXform.GetLocation();
-	const FVector Fwd = WorldXform.GetUnitAxis(EAxis::X);
-	const FVector Right = WorldXform.GetUnitAxis(EAxis::Y);
-	const FVector Up = WorldXform.GetUnitAxis(EAxis::Z);
+	const FVector	  Pos = WorldXform.GetLocation();
+	const FVector	  Fwd = WorldXform.GetUnitAxis(EAxis::X);
+	const FVector	  Right = WorldXform.GetUnitAxis(EAxis::Y);
+	const FVector	  Up = WorldXform.GetUnitAxis(EAxis::Z);
 
 	MaterialInstance->SetVectorParameterValue(FName("CameraWorldPos"),
 		FLinearColor(Pos.X, Pos.Y, Pos.Z, 0.0f));
@@ -116,23 +116,23 @@ void URammsCameraProjectorComponent::SetCameraTexture(UTexture* Texture)
 
 void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCameraStreamInfo& StreamInfo)
 {
-	ImageWidth  = StreamInfo.Width;
+	ImageWidth = StreamInfo.Width;
 	ImageHeight = StreamInfo.Height;
 
 	if (StreamInfo.Intrinsics.Num() >= 4)
 	{
-		FocalLengthX    = StreamInfo.Intrinsics[0];
-		FocalLengthY    = StreamInfo.Intrinsics[1];
+		FocalLengthX = StreamInfo.Intrinsics[0];
+		FocalLengthY = StreamInfo.Intrinsics[1];
 		PrincipalPointX = StreamInfo.Intrinsics[2];
 		PrincipalPointY = StreamInfo.Intrinsics[3];
 	}
 	else
 	{
 		// Fallback: assume ~90° FOV centered
-		PrincipalPointX = (float)ImageWidth  * 0.5f;
+		PrincipalPointX = (float)ImageWidth * 0.5f;
 		PrincipalPointY = (float)ImageHeight * 0.5f;
-		FocalLengthX    = PrincipalPointX;
-		FocalLengthY    = PrincipalPointY;
+		FocalLengthX = PrincipalPointX;
+		FocalLengthY = PrincipalPointY;
 	}
 
 	// Apply extrinsic if provided

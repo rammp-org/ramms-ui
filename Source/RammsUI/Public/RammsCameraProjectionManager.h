@@ -105,9 +105,9 @@ private:
 	struct FProviderBinding
 	{
 		TWeakObjectPtr<UObject> Object;
-		FDelegateHandle FrameReadyHandle;
-		FDelegateHandle StreamStatusHandle;
-		FDelegateHandle ExtrinsicUpdatedHandle;
+		FDelegateHandle			FrameReadyHandle;
+		FDelegateHandle			StreamStatusHandle;
+		FDelegateHandle			ExtrinsicUpdatedHandle;
 	};
 
 	TArray<FProviderBinding> ProviderBindings;

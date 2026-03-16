@@ -67,7 +67,7 @@ class URammsDataSource : public UInterface
 /**
  * Abstract interface for receiving data from external sources
  * Implementations: RemoteControl plugin, Socket.IO adapter, ROS 2 bridge
- * 
+ *
  * This interface allows UI components and game logic to receive data
  * without knowing the underlying transport mechanism.
  */
@@ -117,10 +117,10 @@ public:
 	virtual TArray<FString> GetAvailableStreams() = 0;
 
 	// Delegate accessors
-	virtual FOnCameraFrame& OnCameraFrame() = 0;
-	virtual FOnRobotState& OnRobotState() = 0;
-	virtual FOnJointState& OnJointState() = 0;
-	virtual FOnTransform& OnTransform() = 0;
-	virtual FOnSensorData& OnSensorData() = 0;
+	virtual FOnCameraFrame&		 OnCameraFrame() = 0;
+	virtual FOnRobotState&		 OnRobotState() = 0;
+	virtual FOnJointState&		 OnJointState() = 0;
+	virtual FOnTransform&		 OnTransform() = 0;
+	virtual FOnSensorData&		 OnSensorData() = 0;
 	virtual FOnConnectionStatus& OnConnectionStatus() = 0;
 };

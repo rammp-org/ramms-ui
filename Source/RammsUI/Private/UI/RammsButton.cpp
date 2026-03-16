@@ -166,7 +166,7 @@ void URammsButton::SetText(FText Text)
 void URammsButton::SetEnabled(bool bEnabled)
 {
 	bButtonEnabled = bEnabled;
-	
+
 	if (InnerButton)
 	{
 		InnerButton->SetIsEnabled(bButtonEnabled);
@@ -236,34 +236,34 @@ void URammsButton::UpdateVisualState()
 
 	switch (CurrentState)
 	{
-	case ERammsButtonState::Normal:
-		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
-		TextColor = TextPrimaryColor;
-		InnerButton->SetRenderOpacity(1.0f);
-		break;
+		case ERammsButtonState::Normal:
+			BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+			TextColor = TextPrimaryColor;
+			InnerButton->SetRenderOpacity(1.0f);
+			break;
 
-	case ERammsButtonState::Hovered:
-		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
-		TextColor = TextPrimaryColor;
-		InnerButton->SetRenderOpacity(0.8f);
-		break;
+		case ERammsButtonState::Hovered:
+			BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+			TextColor = TextPrimaryColor;
+			InnerButton->SetRenderOpacity(0.8f);
+			break;
 
-	case ERammsButtonState::Pressed:
-		BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
-		TextColor = TextPrimaryColor;
-		InnerButton->SetRenderOpacity(0.6f);
-		break;
+		case ERammsButtonState::Pressed:
+			BackgroundColor = bUsePrimaryColor ? PrimaryColor : SecondaryColor;
+			TextColor = TextPrimaryColor;
+			InnerButton->SetRenderOpacity(0.6f);
+			break;
 
-	case ERammsButtonState::Disabled:
-		BackgroundColor = SecondaryColor;
-		TextColor = TextDisabledColor;
-		InnerButton->SetRenderOpacity(0.5f);
-		break;
+		case ERammsButtonState::Disabled:
+			BackgroundColor = SecondaryColor;
+			TextColor = TextDisabledColor;
+			InnerButton->SetRenderOpacity(0.5f);
+			break;
 	}
 
 	// Apply colors
 	InnerButton->SetBackgroundColor(BackgroundColor);
-	
+
 	if (ButtonLabel)
 	{
 		ButtonLabel->SetColorAndOpacity(FSlateColor(TextColor));

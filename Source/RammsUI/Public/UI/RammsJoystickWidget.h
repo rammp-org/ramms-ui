@@ -109,8 +109,8 @@ protected:
 
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
-	void SetThumbOffset(FVector2D Offset);
+	void		 UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
+	void		 SetThumbOffset(FVector2D Offset);
 
 	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

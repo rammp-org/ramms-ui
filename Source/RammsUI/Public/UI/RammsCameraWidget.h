@@ -26,10 +26,10 @@ enum class ERammsCameraDisplayMode : uint8
 {
 	/** Full screen (fills entire viewport) */
 	Fullscreen,
-	
+
 	/** Large window (centered, takes most of screen) */
 	Windowed,
-	
+
 	/** Corner widget (small, anchored to corner) */
 	Corner
 };
@@ -41,16 +41,16 @@ UENUM(BlueprintType)
 enum class ERammsCameraViewMode : uint8
 {
 	/** Show RGB color image */
-	RGB          UMETA(DisplayName = "RGB Color"),
+	RGB UMETA(DisplayName = "RGB Color"),
 
 	/** Show depth image with colormap */
-	Depth        UMETA(DisplayName = "Depth (Colorized)"),
+	Depth UMETA(DisplayName = "Depth (Colorized)"),
 
 	/** Side-by-side RGB + Depth */
-	SideBySide   UMETA(DisplayName = "Side-by-Side"),
+	SideBySide UMETA(DisplayName = "Side-by-Side"),
 
 	/** RGB with depth overlay (alpha blended) */
-	Overlay      UMETA(DisplayName = "RGB + Depth Overlay")
+	Overlay UMETA(DisplayName = "RGB + Depth Overlay")
 };
 
 /**
@@ -59,10 +59,10 @@ enum class ERammsCameraViewMode : uint8
 UENUM(BlueprintType)
 enum class ERammsDepthColormap : uint8
 {
-	Grayscale    UMETA(DisplayName = "Grayscale"),
-	Jet          UMETA(DisplayName = "Jet"),
-	Turbo        UMETA(DisplayName = "Turbo"),
-	Inferno      UMETA(DisplayName = "Inferno")
+	Grayscale UMETA(DisplayName = "Grayscale"),
+	Jet		  UMETA(DisplayName = "Jet"),
+	Turbo	  UMETA(DisplayName = "Turbo"),
+	Inferno	  UMETA(DisplayName = "Inferno")
 };
 
 /**
@@ -240,8 +240,8 @@ protected:
 	struct FProviderSubscription
 	{
 		TWeakObjectPtr<UObject> Object;
-		IRammsCameraProvider* Interface = nullptr;
-		FDelegateHandle Handle;
+		IRammsCameraProvider*	Interface = nullptr;
+		FDelegateHandle			Handle;
 	};
 	TArray<FProviderSubscription> ProviderSubscriptions;
 
@@ -422,5 +422,5 @@ protected:
 	/** Collapse animation state */
 	float CollapseProgress = 1.0f; // 1 = expanded, 0 = collapsed
 	float CollapseTarget = 1.0f;
-	bool bCollapseAnimating = false;
+	bool  bCollapseAnimating = false;
 };

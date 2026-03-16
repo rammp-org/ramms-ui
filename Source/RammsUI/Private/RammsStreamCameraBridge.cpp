@@ -18,7 +18,8 @@ void URammsStreamCameraBridge::BeginPlay()
 	Super::BeginPlay();
 
 	AActor* Owner = GetOwner();
-	if (!Owner) return;
+	if (!Owner)
+		return;
 
 	// Find or create a camera provider component on the same actor
 	CameraProvider = Owner->FindComponentByClass<URammsCameraProviderComponent>();
@@ -62,14 +63,15 @@ void URammsStreamCameraBridge::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void URammsStreamCameraBridge::OnStreamFrameReceived(
 	int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson)
 {
-	if (!CameraProvider || !Texture) return;
+	if (!CameraProvider || !Texture)
+		return;
 
 	FString StreamID = FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
 
 	// Parse metadata (needed for both registration and per-frame updates)
-	TSharedPtr<FJsonObject> Meta;
+	TSharedPtr<FJsonObject>	  Meta;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(MetadataJson);
-	const bool bHasMeta = FJsonSerializer::Deserialize(Reader, Meta) && Meta.IsValid();
+	const bool				  bHasMeta = FJsonSerializer::Deserialize(Reader, Meta) && Meta.IsValid();
 
 	// Auto-register the stream on first frame
 	if (!RegisteredChannels.Contains(ChannelID))

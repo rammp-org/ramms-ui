@@ -62,7 +62,8 @@ void URammsToolbar::BuildWidgetTree()
 		if (HBox)
 		{
 			UHorizontalBoxSlot* SlotEntry = HBox->AddChildToHorizontalBox(ToolbarContentSlot);
-			if (SlotEntry) SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			if (SlotEntry)
+				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
 	else
@@ -71,7 +72,8 @@ void URammsToolbar::BuildWidgetTree()
 		if (VBox)
 		{
 			UVerticalBoxSlot* SlotEntry = VBox->AddChildToVerticalBox(ToolbarContentSlot);
-			if (SlotEntry) SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			if (SlotEntry)
+				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
 	}
 
@@ -106,7 +108,8 @@ void URammsToolbar::RebuildItems()
 			if (HBox)
 			{
 				UHorizontalBoxSlot* ItemSlot = HBox->AddChildToHorizontalBox(Btn);
-				if (ItemSlot) ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
+				if (ItemSlot)
+					ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
 			}
 		}
 		else
@@ -115,7 +118,8 @@ void URammsToolbar::RebuildItems()
 			if (VBox)
 			{
 				UVerticalBoxSlot* ItemSlot = VBox->AddChildToVerticalBox(Btn);
-				if (ItemSlot) ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
+				if (ItemSlot)
+					ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
 			}
 		}
 	}
@@ -123,7 +127,7 @@ void URammsToolbar::RebuildItems()
 
 UButton* URammsToolbar::CreateItemButton(const FRammsToolbarItem& Item)
 {
-	FString BtnName = FString::Printf(TEXT("Btn_%s"), *Item.ItemID.ToString());
+	FString	 BtnName = FString::Printf(TEXT("Btn_%s"), *Item.ItemID.ToString());
 	UButton* Btn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), *BtnName);
 
 	// Add icon or label
@@ -137,7 +141,7 @@ UButton* URammsToolbar::CreateItemButton(const FRammsToolbarItem& Item)
 	}
 	else
 	{
-		FString LblName = FString::Printf(TEXT("Label_%s"), *Item.ItemID.ToString());
+		FString		LblName = FString::Printf(TEXT("Label_%s"), *Item.ItemID.ToString());
 		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *LblName);
 		Label->SetText(Item.Label);
 		Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
@@ -183,8 +187,8 @@ void URammsToolbar::ApplyStyle_Implementation()
 	{
 		FLinearColor Bg = Style->Colors.Surface;
 		Bg.A = 0.9f;
-		float Radius = Style->Border.CornerRadiusMedium;
-		float BorderW = Style->Border.BorderWidth;
+		float		Radius = Style->Border.CornerRadiusMedium;
+		float		BorderW = Style->Border.BorderWidth;
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(Bg, Radius, Style->Colors.Border, BorderW);
 		URammsUIStyle::ApplyRoundedBrushToBorder(ToolbarBorder, Brush);
 		ToolbarBorder->SetPadding(FMargin(BorderW + 2.0f));
@@ -200,7 +204,7 @@ void URammsToolbar::ApplyStyle_Implementation()
 void URammsToolbar::AddItem(FRammsToolbarItem Item)
 {
 	Items.Add(Item);
-	
+
 	if (ItemContainer && WidgetTree)
 	{
 		UButton* Btn = CreateItemButton(Item);
@@ -212,7 +216,8 @@ void URammsToolbar::AddItem(FRammsToolbarItem Item)
 			if (HBox)
 			{
 				UHorizontalBoxSlot* ItemSlot = HBox->AddChildToHorizontalBox(Btn);
-				if (ItemSlot) ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
+				if (ItemSlot)
+					ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
 			}
 		}
 		else
@@ -221,7 +226,8 @@ void URammsToolbar::AddItem(FRammsToolbarItem Item)
 			if (VBox)
 			{
 				UVerticalBoxSlot* ItemSlot = VBox->AddChildToVerticalBox(Btn);
-				if (ItemSlot) ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
+				if (ItemSlot)
+					ItemSlot->SetPadding(FMargin(ItemSpacing * 0.5f));
 			}
 		}
 	}

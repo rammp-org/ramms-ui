@@ -35,7 +35,7 @@ void URammsStatusPanel::BuildWidgetTree()
 	PanelBorder->AddChild(MainBox);
 
 	// Header row: HorizontalBox with HeaderText + ToggleButton
-	UHorizontalBox* HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
+	UHorizontalBox*	  HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
 	UVerticalBoxSlot* HeaderRowSlot = MainBox->AddChildToVerticalBox(HeaderRow);
 	if (HeaderRowSlot)
 	{
@@ -74,8 +74,7 @@ void URammsStatusPanel::BuildWidgetTree()
 	}
 
 	// Status text entries
-	auto AddStatusText = [this](const FString& Name, const FString& DefaultText) -> UTextBlock*
-	{
+	auto AddStatusText = [this](const FString& Name, const FString& DefaultText) -> UTextBlock* {
 		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *Name);
 		Text->SetText(FText::FromString(DefaultText));
 		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
@@ -166,8 +165,7 @@ void URammsStatusPanel::ApplyStyle_Implementation()
 	}
 
 	// Apply status text styling
-	auto ApplyStatusStyle = [this](UTextBlock* Text)
-	{
+	auto ApplyStatusStyle = [this](UTextBlock* Text) {
 		if (Text)
 		{
 			Text->SetFont(Style->Typography.Body);
@@ -317,8 +315,7 @@ void URammsStatusPanel::ApplyStateToDisplay(const FRammsRobotState& State)
 		float SpeedMagnitude = State.LinearVelocity.Size();
 		FText SpeedLabel = FText::Format(
 			FText::FromString(TEXT("Speed: {0} m/s")),
-			FText::AsNumber(SpeedMagnitude, &FNumberFormattingOptions::DefaultNoGrouping())
-		);
+			FText::AsNumber(SpeedMagnitude, &FNumberFormattingOptions::DefaultNoGrouping()));
 		SpeedText->SetText(SpeedLabel);
 		SpeedText->SetColorAndOpacity(FSlateColor(Style ? Style->Colors.TextPrimary : FLinearColor::White));
 	}
@@ -329,8 +326,7 @@ void URammsStatusPanel::ApplyStateToDisplay(const FRammsRobotState& State)
 		int32 BatteryPercent = FMath::RoundToInt(State.BatteryLevel * 100.0f);
 		FText BatteryLabel = FText::Format(
 			FText::FromString(TEXT("Battery: {0}%")),
-			FText::AsNumber(BatteryPercent)
-		);
+			FText::AsNumber(BatteryPercent));
 		BatteryText->SetText(BatteryLabel);
 		BatteryText->SetColorAndOpacity(FSlateColor(GetBatteryColor(State.BatteryLevel)));
 	}
@@ -341,20 +337,20 @@ void URammsStatusPanel::ApplyStateToDisplay(const FRammsRobotState& State)
 		FString ModeString;
 		switch (State.Mode)
 		{
-		case ERammsRobotMode::Standby:
-			ModeString = TEXT("Standby");
-			break;
-		case ERammsRobotMode::Manual:
-			ModeString = TEXT("Manual");
-			break;
-		case ERammsRobotMode::Autonomous:
-			ModeString = TEXT("Autonomous");
-			break;
-		case ERammsRobotMode::Emergency:
-			ModeString = TEXT("EMERGENCY");
-			break;
-		default:
-			ModeString = TEXT("Unknown");
+			case ERammsRobotMode::Standby:
+				ModeString = TEXT("Standby");
+				break;
+			case ERammsRobotMode::Manual:
+				ModeString = TEXT("Manual");
+				break;
+			case ERammsRobotMode::Autonomous:
+				ModeString = TEXT("Autonomous");
+				break;
+			case ERammsRobotMode::Emergency:
+				ModeString = TEXT("EMERGENCY");
+				break;
+			default:
+				ModeString = TEXT("Unknown");
 		}
 
 		if (State.bEmergencyStop)
@@ -364,8 +360,7 @@ void URammsStatusPanel::ApplyStateToDisplay(const FRammsRobotState& State)
 
 		FText ModeLabel = FText::Format(
 			FText::FromString(TEXT("Mode: {0}")),
-			FText::FromString(ModeString)
-		);
+			FText::FromString(ModeString));
 		ModeText->SetText(ModeLabel);
 		ModeText->SetColorAndOpacity(FSlateColor(GetModeColor(State.Mode)));
 	}
@@ -396,15 +391,15 @@ FLinearColor URammsStatusPanel::GetModeColor(ERammsRobotMode Mode) const
 
 	switch (Mode)
 	{
-	case ERammsRobotMode::Standby:
-		return Style->Colors.TextSecondary;
-	case ERammsRobotMode::Manual:
-		return Style->Colors.Info;
-	case ERammsRobotMode::Autonomous:
-		return Style->Colors.Success;
-	case ERammsRobotMode::Emergency:
-		return Style->Colors.Error;
-	default:
-		return Style->Colors.TextDisabled;
+		case ERammsRobotMode::Standby:
+			return Style->Colors.TextSecondary;
+		case ERammsRobotMode::Manual:
+			return Style->Colors.Info;
+		case ERammsRobotMode::Autonomous:
+			return Style->Colors.Success;
+		case ERammsRobotMode::Emergency:
+			return Style->Colors.Error;
+		default:
+			return Style->Colors.TextDisabled;
 	}
 }

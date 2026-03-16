@@ -330,7 +330,7 @@ void URammsCameraWidget::NativeConstruct()
 		if (UWorld* World = GetWorld())
 		{
 			// Collect all providers (actor-based and component-based)
-			TArray<UObject*> ProviderObjs;
+			TArray<UObject*>			  ProviderObjs;
 			TArray<IRammsCameraProvider*> ProviderIfaces;
 
 			for (TActorIterator<AActor> It(World); It; ++It)
@@ -365,7 +365,8 @@ void URammsCameraWidget::NativeConstruct()
 						break;
 					}
 				}
-				if (CameraProvider.GetInterface()) break;
+				if (CameraProvider.GetInterface())
+					break;
 			}
 
 			// Fall back to first provider if none had the stream yet
@@ -469,14 +470,16 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 
 	// Animate content height via HeightOverride (Auto slot during animation)
 	float ContentH = CachedContentHeight;
-	if (ContentH <= 0.0f) ContentH = 200.0f;
+	if (ContentH <= 0.0f)
+		ContentH = 200.0f;
 	CameraSizeBox->SetHeightOverride(ContentH * Alpha);
 	CameraSizeBox->SetRenderOpacity(Alpha);
 
 	// Also animate Canvas Panel slot if applicable
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
-	float TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
-	if (TitleH <= 0.0f) TitleH = 24.0f;
+	float			  TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
+	if (TitleH <= 0.0f)
+		TitleH = 24.0f;
 
 	if (CanvasSlot && CachedExpandedSlotSize.Y > 0.0f)
 	{
@@ -554,7 +557,7 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 	if (TitleBar)
 	{
 		TitleBar->SetVisibility(bShowLabel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		
+
 		// Set label text
 		FText LabelText = CustomLabel.IsEmpty() ? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID) : CustomLabel;
 		if (CameraLabel)
@@ -657,7 +660,8 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	}
 
 	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
-	if (ViewportScale <= 0.0f) ViewportScale = 1.0f;
+	if (ViewportScale <= 0.0f)
+		ViewportScale = 1.0f;
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
@@ -667,90 +671,92 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	switch (DisplayMode)
 	{
-	case ERammsCameraDisplayMode::Fullscreen:
-	{
-		if (CanvasSlot)
+		case ERammsCameraDisplayMode::Fullscreen:
 		{
-			// Stretch anchors fill entire Canvas Panel
-			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-			CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
-		}
-		else
-		{
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetPositionInViewport(FVector2D::ZeroVector, false);
-			SetDesiredSizeInViewport(FVector2D::ZeroVector);
-		}
-		WidgetPosition = FVector2D::ZeroVector;
-		if (bAnimate) ScaleIn();
-		break;
-	}
-
-	case ERammsCameraDisplayMode::Windowed:
-	{
-		if (CanvasSlot)
-		{
-			// Don't override Canvas Panel layout in Windowed mode —
-			// let the user's designer/anchor settings control position and size
-			CachedExpandedSlotSize = CanvasSlot->GetSize();
-		}
-		else
-		{
-			// Viewport-direct: center on screen
-			FVector2D SizeInUnits = CanvasSize * WindowedSize;
-			FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
-
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetDesiredSizeInViewport(SizeInUnits);
-			SetPositionInViewport(Position, false);
-			WidgetPosition = Position;
-		}
-		if (bAnimate) ScaleIn();
-		break;
-	}
-
-	case ERammsCameraDisplayMode::Corner:
-	{
-		FVector2D WidgetSize = CanvasSize * CornerSize;
-
-		// Compute anchor and alignment from corner alignment enums
-		float AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
-		float AnchorY = (CornerVAlign == VAlign_Bottom) ? 1.0f : (CornerVAlign == VAlign_Center ? 0.5f : 0.0f);
-		FVector2D Alignment(AnchorX, AnchorY);
-
-		// Padding offset: positive = inward from edge
-		FVector2D PadOffset(
-			(AnchorX > 0.5f) ? -CornerPadding.X : (AnchorX < 0.5f ? CornerPadding.X : 0.0f),
-			(AnchorY > 0.5f) ? -CornerPadding.Y : (AnchorY < 0.5f ? CornerPadding.Y : 0.0f)
-		);
-
-		if (CanvasSlot)
-		{
-			CanvasSlot->SetAnchors(FAnchors(AnchorX, AnchorY, AnchorX, AnchorY));
-			CanvasSlot->SetAlignment(Alignment);
-			CanvasSlot->SetPosition(PadOffset);
-			CanvasSlot->SetSize(WidgetSize);
-			CachedExpandedSlotSize = WidgetSize;
-		}
-		else
-		{
-			// Compute absolute position for viewport-direct
-			FVector2D AnchorPos = CanvasSize * FVector2D(AnchorX, AnchorY);
-			FVector2D Position = AnchorPos - WidgetSize * Alignment + PadOffset;
-
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetDesiredSizeInViewport(WidgetSize);
-			SetPositionInViewport(Position, false);
-			WidgetPosition = Position;
+			if (CanvasSlot)
+			{
+				// Stretch anchors fill entire Canvas Panel
+				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+			}
+			else
+			{
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetPositionInViewport(FVector2D::ZeroVector, false);
+				SetDesiredSizeInViewport(FVector2D::ZeroVector);
+			}
+			WidgetPosition = FVector2D::ZeroVector;
+			if (bAnimate)
+				ScaleIn();
+			break;
 		}
 
-		float SlideDir = (AnchorX > 0.5f) ? 200.0f : -200.0f;
-		if (bAnimate) SlideIn(FVector2D(SlideDir, 0));
-		break;
-	}
+		case ERammsCameraDisplayMode::Windowed:
+		{
+			if (CanvasSlot)
+			{
+				// Don't override Canvas Panel layout in Windowed mode —
+				// let the user's designer/anchor settings control position and size
+				CachedExpandedSlotSize = CanvasSlot->GetSize();
+			}
+			else
+			{
+				// Viewport-direct: center on screen
+				FVector2D SizeInUnits = CanvasSize * WindowedSize;
+				FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
+
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetDesiredSizeInViewport(SizeInUnits);
+				SetPositionInViewport(Position, false);
+				WidgetPosition = Position;
+			}
+			if (bAnimate)
+				ScaleIn();
+			break;
+		}
+
+		case ERammsCameraDisplayMode::Corner:
+		{
+			FVector2D WidgetSize = CanvasSize * CornerSize;
+
+			// Compute anchor and alignment from corner alignment enums
+			float	  AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
+			float	  AnchorY = (CornerVAlign == VAlign_Bottom) ? 1.0f : (CornerVAlign == VAlign_Center ? 0.5f : 0.0f);
+			FVector2D Alignment(AnchorX, AnchorY);
+
+			// Padding offset: positive = inward from edge
+			FVector2D PadOffset(
+				(AnchorX > 0.5f) ? -CornerPadding.X : (AnchorX < 0.5f ? CornerPadding.X : 0.0f),
+				(AnchorY > 0.5f) ? -CornerPadding.Y : (AnchorY < 0.5f ? CornerPadding.Y : 0.0f));
+
+			if (CanvasSlot)
+			{
+				CanvasSlot->SetAnchors(FAnchors(AnchorX, AnchorY, AnchorX, AnchorY));
+				CanvasSlot->SetAlignment(Alignment);
+				CanvasSlot->SetPosition(PadOffset);
+				CanvasSlot->SetSize(WidgetSize);
+				CachedExpandedSlotSize = WidgetSize;
+			}
+			else
+			{
+				// Compute absolute position for viewport-direct
+				FVector2D AnchorPos = CanvasSize * FVector2D(AnchorX, AnchorY);
+				FVector2D Position = AnchorPos - WidgetSize * Alignment + PadOffset;
+
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetDesiredSizeInViewport(WidgetSize);
+				SetPositionInViewport(Position, false);
+				WidgetPosition = Position;
+			}
+
+			float SlideDir = (AnchorX > 0.5f) ? 200.0f : -200.0f;
+			if (bAnimate)
+				SlideIn(FVector2D(SlideDir, 0));
+			break;
+		}
 	}
 }
 
@@ -881,7 +887,8 @@ FReply URammsCameraWidget::NativeOnMouseMove(const FGeometry& InGeometry, const 
 		{
 			// Mouse delta is in screen pixels; Canvas slot position is in DPI-scaled units
 			float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
-			if (Scale <= 0.0f) Scale = 1.0f;
+			if (Scale <= 0.0f)
+				Scale = 1.0f;
 			FVector2D NewPosition = DragStartWidgetPos + Delta / Scale;
 			CanvasSlot->SetPosition(NewPosition);
 			WidgetPosition = NewPosition;
@@ -1040,10 +1047,18 @@ void URammsCameraWidget::OnViewModeClicked()
 	// Cycle: RGB -> Depth -> SideBySide -> Overlay -> RGB
 	switch (ViewMode)
 	{
-	case ERammsCameraViewMode::RGB:       SetViewMode(ERammsCameraViewMode::Depth); break;
-	case ERammsCameraViewMode::Depth:     SetViewMode(ERammsCameraViewMode::SideBySide); break;
-	case ERammsCameraViewMode::SideBySide: SetViewMode(ERammsCameraViewMode::Overlay); break;
-	case ERammsCameraViewMode::Overlay:   SetViewMode(ERammsCameraViewMode::RGB); break;
+		case ERammsCameraViewMode::RGB:
+			SetViewMode(ERammsCameraViewMode::Depth);
+			break;
+		case ERammsCameraViewMode::Depth:
+			SetViewMode(ERammsCameraViewMode::SideBySide);
+			break;
+		case ERammsCameraViewMode::SideBySide:
+			SetViewMode(ERammsCameraViewMode::Overlay);
+			break;
+		case ERammsCameraViewMode::Overlay:
+			SetViewMode(ERammsCameraViewMode::RGB);
+			break;
 	}
 }
 
@@ -1054,10 +1069,18 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	{
 		switch (ViewMode)
 		{
-		case ERammsCameraViewMode::RGB:        ViewModeLabel->SetText(FText::FromString(TEXT("RGB"))); break;
-		case ERammsCameraViewMode::Depth:      ViewModeLabel->SetText(FText::FromString(TEXT("Depth"))); break;
-		case ERammsCameraViewMode::SideBySide: ViewModeLabel->SetText(FText::FromString(TEXT("SbS"))); break;
-		case ERammsCameraViewMode::Overlay:    ViewModeLabel->SetText(FText::FromString(TEXT("Ovly"))); break;
+			case ERammsCameraViewMode::RGB:
+				ViewModeLabel->SetText(FText::FromString(TEXT("RGB")));
+				break;
+			case ERammsCameraViewMode::Depth:
+				ViewModeLabel->SetText(FText::FromString(TEXT("Depth")));
+				break;
+			case ERammsCameraViewMode::SideBySide:
+				ViewModeLabel->SetText(FText::FromString(TEXT("SbS")));
+				break;
+			case ERammsCameraViewMode::Overlay:
+				ViewModeLabel->SetText(FText::FromString(TEXT("Ovly")));
+				break;
 		}
 	}
 
@@ -1065,7 +1088,8 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	if (DepthImage)
 	{
 		DepthImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
-			? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+				? ESlateVisibility::SelfHitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 
 	// Adjust corner radii based on whether side-by-side or single image
@@ -1077,7 +1101,7 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	// Compute inner radius from style or default
 	float OuterRadius = Style ? Style->Border.CornerRadiusMedium : 4.0f;
 	float R = FMath::Max(OuterRadius - BorderThickness, 0.0f);
-	bool bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
+	bool  bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
 
 	// FVector4 CornerRadii: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
 	FVector4 RGBRadii, DepthRadii;
@@ -1087,12 +1111,12 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 		// Header is above image — only bottom corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);   // bottom-left only
-			DepthRadii = FVector4(0.0f, 0.0f, R, 0.0f);  // bottom-right only
+			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);	// bottom-left only
+			DepthRadii = FVector4(0.0f, 0.0f, R, 0.0f); // bottom-right only
 		}
 		else
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, R, R);        // bottom corners
+			RGBRadii = FVector4(0.0f, 0.0f, R, R); // bottom corners
 			DepthRadii = FVector4(0.0f, 0.0f, R, R);
 		}
 	}
@@ -1101,19 +1125,19 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 		// Header overlays on image — all outer corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(R, 0.0f, 0.0f, R);        // left corners
-			DepthRadii = FVector4(0.0f, R, R, 0.0f);      // right corners
+			RGBRadii = FVector4(R, 0.0f, 0.0f, R);	 // left corners
+			DepthRadii = FVector4(0.0f, R, R, 0.0f); // right corners
 		}
 		else
 		{
-			RGBRadii = FVector4(R, R, R, R);               // all corners
+			RGBRadii = FVector4(R, R, R, R); // all corners
 			DepthRadii = FVector4(R, R, R, R);
 		}
 	}
 
-	auto ApplyRadii = [](UImage* Img, const FVector4& Radii)
-	{
-		if (!Img) return;
+	auto ApplyRadii = [](UImage* Img, const FVector4& Radii) {
+		if (!Img)
+			return;
 		FSlateBrush B = Img->GetBrush();
 		B.OutlineSettings.CornerRadii = Radii;
 		Img->SetBrush(B);
@@ -1149,7 +1173,8 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 	}
 
 	FLinearColor TitleBg = Style ? Style->Colors.Background : FLinearColor(0.0f, 0.0f, 0.0f, 0.6f);
-	if (Style) TitleBg.A = 0.7f;
+	if (Style)
+		TitleBg.A = 0.7f;
 	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(TitleBg, Radii);
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
 }
@@ -1265,67 +1290,67 @@ void URammsCameraWidget::UpdateDisplayedImages()
 
 	switch (ViewMode)
 	{
-	case ERammsCameraViewMode::RGB:
-		if (CameraImage && CurrentTexture)
-		{
-			SetImageBrushFromTexture(CameraImage, CurrentTexture);
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::Depth:
-		if (CameraImage && CurrentDepthTexture)
-		{
-			if (DepthMID)
-			{
-				DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				SetImageBrushFromMaterial(CameraImage, DepthMID, CurrentDepthTexture, DepthRT);
-			}
-			else
-			{
-				SetImageBrushFromTexture(CameraImage, CurrentDepthTexture);
-			}
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::SideBySide:
-		if (CameraImage && CurrentTexture)
-		{
-			SetImageBrushFromTexture(CameraImage, CurrentTexture);
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		if (DepthImage && CurrentDepthTexture)
-		{
-			if (DepthMID)
-			{
-				DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				SetImageBrushFromMaterial(DepthImage, DepthMID, CurrentDepthTexture, DepthRT);
-			}
-			else
-			{
-				SetImageBrushFromTexture(DepthImage, CurrentDepthTexture);
-			}
-			DepthImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::Overlay:
-		if (CameraImage && CurrentTexture)
-		{
-			if (OverlayMID && CurrentDepthTexture)
-			{
-				OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
-				OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
-				SetImageBrushFromMaterial(CameraImage, OverlayMID, CurrentTexture, OverlayRT);
-			}
-			else
+		case ERammsCameraViewMode::RGB:
+			if (CameraImage && CurrentTexture)
 			{
 				SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
+			break;
+
+		case ERammsCameraViewMode::Depth:
+			if (CameraImage && CurrentDepthTexture)
+			{
+				if (DepthMID)
+				{
+					DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+					SetImageBrushFromMaterial(CameraImage, DepthMID, CurrentDepthTexture, DepthRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(CameraImage, CurrentDepthTexture);
+				}
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
+
+		case ERammsCameraViewMode::SideBySide:
+			if (CameraImage && CurrentTexture)
+			{
+				SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			if (DepthImage && CurrentDepthTexture)
+			{
+				if (DepthMID)
+				{
+					DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+					SetImageBrushFromMaterial(DepthImage, DepthMID, CurrentDepthTexture, DepthRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(DepthImage, CurrentDepthTexture);
+				}
+				DepthImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
+
+		case ERammsCameraViewMode::Overlay:
+			if (CameraImage && CurrentTexture)
+			{
+				if (OverlayMID && CurrentDepthTexture)
+				{
+					OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
+					OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+					OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
+					SetImageBrushFromMaterial(CameraImage, OverlayMID, CurrentTexture, OverlayRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				}
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
 	}
 }

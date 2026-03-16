@@ -98,7 +98,7 @@ public:
 	 * Override this in derived classes to customize style application
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Style")
-	void ApplyStyle();
+	void		 ApplyStyle();
 	virtual void ApplyStyle_Implementation();
 
 	// ==================== Animation Helpers ====================
@@ -239,13 +239,18 @@ protected:
 private:
 	struct FAnimationState
 	{
-		bool bActive = false;
-		float ElapsedTime = 0.0f;
-		float Duration = 0.3f;
+		bool		   bActive = false;
+		float		   ElapsedTime = 0.0f;
+		float		   Duration = 0.3f;
 		ERammsUIEasing Easing = ERammsUIEasing::Linear;
 
 		// Animation type-specific data
-		enum class EType { Fade, Slide, Scale } Type;
+		enum class EType
+		{
+			Fade,
+			Slide,
+			Scale
+		} Type;
 		FVector2D StartValue = FVector2D::ZeroVector;
 		FVector2D TargetValue = FVector2D::ZeroVector;
 	};

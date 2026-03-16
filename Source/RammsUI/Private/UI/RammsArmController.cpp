@@ -47,7 +47,7 @@ void URammsArmController::BuildWidgetTree()
 	}
 
 	// Buttons row
-	UHorizontalBox* ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
+	UHorizontalBox*	  ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
 	UVerticalBoxSlot* RowSlot = VBox->AddChildToVerticalBox(ButtonRow);
 	if (RowSlot)
 	{
@@ -58,8 +58,10 @@ void URammsArmController::BuildWidgetTree()
 	HomeButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("HomeBtn"));
 	HomeButton->SetLabelText(FText::FromString(TEXT("Home")));
 	HomeButton->SetImageSize(ButtonImageSize);
-	if (HomeIcon) HomeButton->SetButtonImage(HomeIcon);
-	if (Style) HomeButton->SetStyle(Style);
+	if (HomeIcon)
+		HomeButton->SetButtonImage(HomeIcon);
+	if (Style)
+		HomeButton->SetStyle(Style);
 
 	UHorizontalBoxSlot* HomeSlot = ButtonRow->AddChildToHorizontalBox(HomeButton);
 	if (HomeSlot)
@@ -72,8 +74,10 @@ void URammsArmController::BuildWidgetTree()
 	RetractButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("RetractBtn"));
 	RetractButton->SetLabelText(FText::FromString(TEXT("Retract")));
 	RetractButton->SetImageSize(ButtonImageSize);
-	if (RetractIcon) RetractButton->SetButtonImage(RetractIcon);
-	if (Style) RetractButton->SetStyle(Style);
+	if (RetractIcon)
+		RetractButton->SetButtonImage(RetractIcon);
+	if (Style)
+		RetractButton->SetStyle(Style);
 
 	UHorizontalBoxSlot* RetractSlot = ButtonRow->AddChildToHorizontalBox(RetractButton);
 	if (RetractSlot)
@@ -121,8 +125,10 @@ void URammsArmController::ApplyStyle_Implementation()
 		HeaderText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
-	if (HomeButton) HomeButton->SetStyle(Style);
-	if (RetractButton) RetractButton->SetStyle(Style);
+	if (HomeButton)
+		HomeButton->SetStyle(Style);
+	if (RetractButton)
+		RetractButton->SetStyle(Style);
 }
 
 void URammsArmController::SynchronizeProperties()
@@ -131,12 +137,14 @@ void URammsArmController::SynchronizeProperties()
 
 	if (HomeButton)
 	{
-		if (HomeIcon) HomeButton->SetButtonImage(HomeIcon);
+		if (HomeIcon)
+			HomeButton->SetButtonImage(HomeIcon);
 		HomeButton->SetImageSize(ButtonImageSize);
 	}
 	if (RetractButton)
 	{
-		if (RetractIcon) RetractButton->SetButtonImage(RetractIcon);
+		if (RetractIcon)
+			RetractButton->SetButtonImage(RetractIcon);
 		RetractButton->SetImageSize(ButtonImageSize);
 	}
 	if (HeaderText)
@@ -149,14 +157,16 @@ void URammsArmController::SetActionIcon(ERammsArmAction Action, UTexture2D* Icon
 {
 	switch (Action)
 	{
-	case ERammsArmAction::Home:
-		HomeIcon = Icon;
-		if (HomeButton) HomeButton->SetButtonImage(Icon);
-		break;
-	case ERammsArmAction::Retract:
-		RetractIcon = Icon;
-		if (RetractButton) RetractButton->SetButtonImage(Icon);
-		break;
+		case ERammsArmAction::Home:
+			HomeIcon = Icon;
+			if (HomeButton)
+				HomeButton->SetButtonImage(Icon);
+			break;
+		case ERammsArmAction::Retract:
+			RetractIcon = Icon;
+			if (RetractButton)
+				RetractButton->SetButtonImage(Icon);
+			break;
 	}
 }
 
@@ -164,12 +174,14 @@ void URammsArmController::SetActionEnabled(ERammsArmAction Action, bool bEnabled
 {
 	switch (Action)
 	{
-	case ERammsArmAction::Home:
-		if (HomeButton) HomeButton->SetButtonEnabled(bEnabled);
-		break;
-	case ERammsArmAction::Retract:
-		if (RetractButton) RetractButton->SetButtonEnabled(bEnabled);
-		break;
+		case ERammsArmAction::Home:
+			if (HomeButton)
+				HomeButton->SetButtonEnabled(bEnabled);
+			break;
+		case ERammsArmAction::Retract:
+			if (RetractButton)
+				RetractButton->SetButtonEnabled(bEnabled);
+			break;
 	}
 }
 

@@ -23,7 +23,7 @@ class URammsCommandSink : public UInterface
 /**
  * Abstract interface for sending commands to external systems
  * Implementations: RemoteControl plugin, Socket.IO adapter, ROS 2 bridge
- * 
+ *
  * This interface allows UI components and game logic to send commands
  * without knowing the underlying transport mechanism.
  */
