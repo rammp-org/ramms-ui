@@ -92,6 +92,19 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
 	bool GetArmState(FRammsArmState& OutState) const;
 
+	// ── Arm Task Selection ───────────────────────────────────────
+
+	/**
+	 * Request an arm task (OpenDoor, OrderDrink, Drink, or None to cancel)
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
+	bool RequestArmTask(ERammsArmTask Task);
+
+	/** Get the currently active arm task */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
+	ERammsArmTask GetCurrentArmTask() const;
+
 	// ── MEBot / Chair Control ─────────────────────────────────────
 
 	/**

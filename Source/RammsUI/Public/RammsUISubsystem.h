@@ -108,6 +108,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
 	FOnTaskActionBroadcast OnTaskAction;
 
+	// ── UI Event Bus: Arm Task ────────────────────────────────────
+
+	/** Broadcast an arm task change to all listeners */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void BroadcastArmTaskChanged(ERammsArmTask NewTask, ERammsArmTask PreviousTask);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnArmTaskChanged, ERammsArmTask, NewTask, ERammsArmTask, PreviousTask);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
+	FOnArmTaskChanged OnArmTaskChanged;
+
 	// ── UI Event Bus: Toolbar ─────────────────────────────────────
 
 	/** Broadcast a toolbar item click to all listeners */

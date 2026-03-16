@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/RammsLayoutManager.h"
+#include "UI/RammsLayoutPresetAsset.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 
@@ -99,7 +100,8 @@ void URammsLayoutManager::SetWidgetPosition(URammsBaseWidget* Widget, FVector2D 
 			else
 			{
 				float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(Widget);
-				if (ViewportScale <= 0.0f) ViewportScale = 1.0f;
+				if (ViewportScale <= 0.0f)
+					ViewportScale = 1.0f;
 
 				Widget->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 				Widget->SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
@@ -169,25 +171,25 @@ void URammsLayoutManager::ApplyLayout(bool bAnimated)
 {
 	switch (CurrentPreset)
 	{
-	case ERammsLayoutPreset::SingleFullscreen:
-		ApplyFullscreenLayout(bAnimated);
-		break;
+		case ERammsLayoutPreset::SingleFullscreen:
+			ApplyFullscreenLayout(bAnimated);
+			break;
 
-	case ERammsLayoutPreset::Grid:
-		ApplyGridLayout(bAnimated);
-		break;
+		case ERammsLayoutPreset::Grid:
+			ApplyGridLayout(bAnimated);
+			break;
 
-	case ERammsLayoutPreset::PictureInPicture:
-		ApplyPIPLayout(bAnimated);
-		break;
+		case ERammsLayoutPreset::PictureInPicture:
+			ApplyPIPLayout(bAnimated);
+			break;
 
-	case ERammsLayoutPreset::SideBySide:
-		ApplySideBySideLayout(bAnimated);
-		break;
+		case ERammsLayoutPreset::SideBySide:
+			ApplySideBySideLayout(bAnimated);
+			break;
 
-	case ERammsLayoutPreset::Custom:
-		// Custom layout - positions set manually via SetWidgetPosition
-		break;
+		case ERammsLayoutPreset::Custom:
+			// Custom layout - positions set manually via SetWidgetPosition
+			break;
 	}
 }
 
@@ -200,7 +202,7 @@ void URammsLayoutManager::ApplyFullscreenLayout(bool bAnimated)
 	for (int32 i = 0; i < ManagedWidgets.Num(); ++i)
 	{
 		FRammsWidgetLayout& Layout = ManagedWidgets[i];
-		
+
 		if (i == 0)
 		{
 			Layout.TargetPosition = FVector2D::ZeroVector;
@@ -232,7 +234,7 @@ void URammsLayoutManager::ApplyGridLayout(bool bAnimated)
 		for (int32 Col = 0; Col < GridColumns && Index < Count; ++Col, ++Index)
 		{
 			FRammsWidgetLayout& Layout = ManagedWidgets[Index];
-			
+
 			Layout.TargetPosition = FVector2D(Col * CellWidth + SpacingNorm, Row * CellHeight + SpacingNorm);
 			Layout.TargetSize = FVector2D(CellWidth - 2 * SpacingNorm, CellHeight - 2 * SpacingNorm);
 			Layout.bVisible = true;
@@ -263,10 +265,10 @@ void URammsLayoutManager::ApplyPIPLayout(bool bAnimated)
 
 	// Additional widgets go in corners (20% size)
 	const FVector2D CornerPositions[] = {
-		FVector2D(0.75f, 0.05f),  // Top-right
-		FVector2D(0.75f, 0.75f),  // Bottom-right
-		FVector2D(0.05f, 0.75f),  // Bottom-left
-		FVector2D(0.05f, 0.05f)   // Top-left
+		FVector2D(0.75f, 0.05f), // Top-right
+		FVector2D(0.75f, 0.75f), // Bottom-right
+		FVector2D(0.05f, 0.75f), // Bottom-left
+		FVector2D(0.05f, 0.05f)	 // Top-left
 	};
 
 	for (int32 i = 1; i < ManagedWidgets.Num() && i < 5; ++i)
@@ -347,7 +349,8 @@ void URammsLayoutManager::UpdateZOrder()
 
 			// Re-apply stored position/size
 			float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(Layout.Widget);
-			if (ViewportScale <= 0.0f) ViewportScale = 1.0f;
+			if (ViewportScale <= 0.0f)
+				ViewportScale = 1.0f;
 
 			FVector2D PixelPosition = Layout.TargetPosition * ViewportSize;
 			FVector2D PixelSize = Layout.TargetSize * ViewportSize;
@@ -358,4 +361,134 @@ void URammsLayoutManager::UpdateZOrder()
 			Layout.Widget->SetPositionInViewport(PixelPosition, true);
 		}
 	}
+}
+
+// ── Data Asset Preset Support ─────────────────────────────────────
+
+void URammsLayoutManager::SetWidgetTag(URammsBaseWidget* Widget, FName Tag)
+{
+	if (!Widget)
+		return;
+
+	for (FRammsWidgetLayout& Layout : ManagedWidgets)
+	{
+		if (Layout.Widget == Widget)
+		{
+			Layout.WidgetTag = Tag;
+			return;
+		}
+	}
+}
+
+URammsBaseWidget* URammsLayoutManager::FindWidgetByTag(FName Tag) const
+{
+	for (const FRammsWidgetLayout& Layout : ManagedWidgets)
+	{
+		if (Layout.WidgetTag == Tag && Layout.Widget)
+		{
+			return Layout.Widget;
+		}
+	}
+	return nullptr;
+}
+
+void URammsLayoutManager::TransitionToPreset(URammsLayoutPresetAsset* PresetAsset, bool bAnimated, bool bAutoCreateWidgets)
+{
+	if (!PresetAsset)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("URammsLayoutManager::TransitionToPreset: null preset asset"));
+		return;
+	}
+
+	ActivePresetAsset = PresetAsset;
+	CurrentPreset = ERammsLayoutPreset::Custom;
+
+	// Determine transition duration
+	float Duration = TransitionDuration;
+	if (PresetAsset->TransitionDurationOverride >= 0.0f)
+	{
+		Duration = PresetAsset->TransitionDurationOverride;
+	}
+	float SavedDuration = TransitionDuration;
+	TransitionDuration = Duration;
+
+	// Track which managed widgets are referenced by the preset
+	TSet<URammsBaseWidget*> ReferencedWidgets;
+
+	for (const FRammsLayoutPresetEntry& Entry : PresetAsset->Entries)
+	{
+		// Find a managed widget matching this entry's tag
+		URammsBaseWidget* Widget = FindWidgetByTag(Entry.WidgetTag);
+
+		// Auto-create if requested and a class is specified
+		if (!Widget && bAutoCreateWidgets && Entry.WidgetClass)
+		{
+			UWorld*			   World = GetOwner() ? GetOwner()->GetWorld() : nullptr;
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			if (PC)
+			{
+				Widget = CreateWidget<URammsBaseWidget>(PC, Entry.WidgetClass);
+				if (Widget)
+				{
+					Widget->AddToViewport(Entry.ZOrder);
+					AddWidget(Widget, Entry.ZOrder);
+					SetWidgetTag(Widget, Entry.WidgetTag);
+				}
+			}
+		}
+
+		if (!Widget)
+		{
+			continue;
+		}
+
+		ReferencedWidgets.Add(Widget);
+
+		// Update layout entry
+		for (FRammsWidgetLayout& Layout : ManagedWidgets)
+		{
+			if (Layout.Widget == Widget)
+			{
+				Layout.ZOrder = Entry.ZOrder;
+				Layout.bVisible = Entry.bVisible;
+
+				if (Entry.bVisible)
+				{
+					SetWidgetPosition(Widget, Entry.Position, Entry.Size, bAnimated);
+				}
+				else
+				{
+					Widget->SetVisibility(ESlateVisibility::Collapsed);
+				}
+				break;
+			}
+		}
+	}
+
+	// Hide widgets not referenced by the preset
+	for (FRammsWidgetLayout& Layout : ManagedWidgets)
+	{
+		if (Layout.Widget && !ReferencedWidgets.Contains(Layout.Widget))
+		{
+			Layout.bVisible = false;
+			if (bAnimated)
+			{
+				Layout.Widget->FadeOut(Duration);
+			}
+			else
+			{
+				Layout.Widget->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
+	}
+
+	UpdateZOrder();
+
+	// Restore original duration
+	TransitionDuration = SavedDuration;
+
+	OnPresetChanged.Broadcast(PresetAsset);
+
+	UE_LOG(LogTemp, Log, TEXT("URammsLayoutManager: Transitioned to preset '%s'"),
+		*PresetAsset->PresetDisplayName.ToString());
 }

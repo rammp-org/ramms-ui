@@ -19,8 +19,8 @@
 UENUM(BlueprintType)
 enum class ERammsArmAction : uint8
 {
-	Home     UMETA(DisplayName = "Home"),
-	Retract  UMETA(DisplayName = "Retract")
+	Home	UMETA(DisplayName = "Home"),
+	Retract UMETA(DisplayName = "Retract")
 };
 
 // ── MEBot / Chair ────────────────────────────────────────────────
@@ -29,10 +29,22 @@ enum class ERammsArmAction : uint8
 UENUM(BlueprintType)
 enum class ERammsMebotMode : uint8
 {
-	None        UMETA(DisplayName = "None"),
-	SelfLevel   UMETA(DisplayName = "Self-Levelling"),
-	CurbAscent  UMETA(DisplayName = "Curb Ascent"),
+	None		UMETA(DisplayName = "None"),
+	SelfLevel	UMETA(DisplayName = "Self-Levelling"),
+	CurbAscent	UMETA(DisplayName = "Curb Ascent"),
 	CurbDescent UMETA(DisplayName = "Curb Descent")
+};
+
+// ── Arm Tasks ────────────────────────────────────────────────────
+
+/** Arm-level task selection (mutually exclusive) */
+UENUM(BlueprintType)
+enum class ERammsArmTask : uint8
+{
+	None	   UMETA(DisplayName = "None"),
+	OpenDoor   UMETA(DisplayName = "Open Door"),
+	OrderDrink UMETA(DisplayName = "Order Drink"),
+	Drink	   UMETA(DisplayName = "Drink")
 };
 
 // ── Task ─────────────────────────────────────────────────────────

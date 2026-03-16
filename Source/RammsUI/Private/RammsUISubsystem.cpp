@@ -54,8 +54,7 @@ void URammsUISubsystem::UnregisterRobotController(AActor* Actor)
 		return;
 	}
 
-	int32 Removed = RegisteredControllers.RemoveAll([Actor](const TWeakObjectPtr<AActor>& Weak)
-	{
+	int32 Removed = RegisteredControllers.RemoveAll([Actor](const TWeakObjectPtr<AActor>& Weak) {
 		return Weak.Get() == Actor;
 	});
 
@@ -126,8 +125,7 @@ int32 URammsUISubsystem::GetRobotControllerCount()
 
 void URammsUISubsystem::CleanupStaleControllers()
 {
-	RegisteredControllers.RemoveAll([](const TWeakObjectPtr<AActor>& Weak)
-	{
+	RegisteredControllers.RemoveAll([](const TWeakObjectPtr<AActor>& Weak) {
 		return !Weak.IsValid();
 	});
 }
@@ -137,6 +135,11 @@ void URammsUISubsystem::CleanupStaleControllers()
 void URammsUISubsystem::BroadcastTaskAction(ERammsTaskAction Action)
 {
 	OnTaskAction.Broadcast(Action);
+}
+
+void URammsUISubsystem::BroadcastArmTaskChanged(ERammsArmTask NewTask, ERammsArmTask PreviousTask)
+{
+	OnArmTaskChanged.Broadcast(NewTask, PreviousTask);
 }
 
 void URammsUISubsystem::BroadcastToolbarItemClicked(FName ItemID)
