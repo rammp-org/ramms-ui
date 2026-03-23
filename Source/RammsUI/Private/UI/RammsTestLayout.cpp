@@ -25,13 +25,13 @@ void URammsTestLayout::BuildWidgetTree()
 	{
 		UOverlay* MainSlot = WidgetTree->ConstructWidget<UOverlay>(
 			UOverlay::StaticClass(), TEXT("Main"));
-		UCanvasPanelSlot* Slot = Root->AddChildToCanvas(MainSlot);
-		if (Slot)
+		UCanvasPanelSlot* PanelSlot = Root->AddChildToCanvas(MainSlot);
+		if (PanelSlot)
 		{
 			// Fill the left 70% of the screen
-			Slot->SetAnchors(FAnchors(0.0f, 0.0f, 0.7f, 1.0f));
-			Slot->SetOffsets(FMargin(4.0f, 4.0f, 4.0f, 4.0f));
-			Slot->SetAlignment(FVector2D(0.0f, 0.0f));
+			PanelSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.7f, 1.0f));
+			PanelSlot->SetOffsets(FMargin(4.0f, 4.0f, 4.0f, 4.0f));
+			PanelSlot->SetAlignment(FVector2D(0.0f, 0.0f));
 		}
 		RegisterSlot(TEXT("Main"), MainSlot);
 
@@ -47,13 +47,13 @@ void URammsTestLayout::BuildWidgetTree()
 	{
 		UOverlay* SidebarSlot = WidgetTree->ConstructWidget<UOverlay>(
 			UOverlay::StaticClass(), TEXT("Sidebar"));
-		UCanvasPanelSlot* Slot = Root->AddChildToCanvas(SidebarSlot);
-		if (Slot)
+		UCanvasPanelSlot* PanelSlot = Root->AddChildToCanvas(SidebarSlot);
+		if (PanelSlot)
 		{
 			// Fill the right 30% of the screen
-			Slot->SetAnchors(FAnchors(0.7f, 0.0f, 1.0f, 1.0f));
-			Slot->SetOffsets(FMargin(4.0f, 4.0f, 4.0f, 4.0f));
-			Slot->SetAlignment(FVector2D(0.0f, 0.0f));
+			PanelSlot->SetAnchors(FAnchors(0.7f, 0.0f, 1.0f, 1.0f));
+			PanelSlot->SetOffsets(FMargin(4.0f, 4.0f, 4.0f, 4.0f));
+			PanelSlot->SetAlignment(FVector2D(0.0f, 0.0f));
 		}
 		RegisterSlot(TEXT("Sidebar"), SidebarSlot);
 
