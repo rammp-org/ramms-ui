@@ -118,6 +118,25 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|MEBot")
 	ERammsMebotMode GetCurrentMebotMode() const;
 
+	// ── Seat Control ─────────────────────────────────────────────
+
+	/**
+	 * Request a seat axis adjustment (incremental delta)
+	 * @param Axis - which seat axis to adjust
+	 * @param Delta - signed delta to apply (positive = increase)
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Seat")
+	bool RequestSeatAdjust(ERammsSeatAxis Axis, float Delta);
+
+	/**
+	 * Get the current seat state (all axes)
+	 * @param OutState - populated with current axis values
+	 * @return true if seat state is available
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Seat")
+	bool GetSeatState(FRammsSeatState& OutState) const;
+
 	// ── Movement ──────────────────────────────────────────────────
 
 	/**

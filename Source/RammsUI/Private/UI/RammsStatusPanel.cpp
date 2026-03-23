@@ -106,7 +106,7 @@ void URammsStatusPanel::NativeConstruct()
 	// Bind toggle button
 	if (ToggleButton)
 	{
-		ToggleButton->OnClicked.AddDynamic(this, &URammsStatusPanel::OnToggleClicked);
+		ToggleButton->OnClicked.AddUniqueDynamic(this, &URammsStatusPanel::OnToggleClicked);
 	}
 
 	// Subscribe to state updates if provider is set

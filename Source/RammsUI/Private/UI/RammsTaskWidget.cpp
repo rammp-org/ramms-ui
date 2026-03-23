@@ -117,11 +117,11 @@ void URammsTaskWidget::NativeConstruct()
 
 	if (ExitButton)
 	{
-		ExitButton->OnClicked.AddDynamic(this, &URammsTaskWidget::OnExitClicked);
+		ExitButton->OnClicked.AddUniqueDynamic(this, &URammsTaskWidget::OnExitClicked);
 	}
 	if (CancelButton)
 	{
-		CancelButton->OnClicked.AddDynamic(this, &URammsTaskWidget::OnCancelClicked);
+		CancelButton->OnClicked.AddUniqueDynamic(this, &URammsTaskWidget::OnCancelClicked);
 	}
 }
 

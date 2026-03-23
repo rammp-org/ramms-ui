@@ -142,6 +142,11 @@ void URammsUISubsystem::BroadcastArmTaskChanged(ERammsArmTask NewTask, ERammsArm
 	OnArmTaskChanged.Broadcast(NewTask, PreviousTask);
 }
 
+void URammsUISubsystem::BroadcastSeatStateChanged(ERammsSeatAxis Axis, float NewValue)
+{
+	OnSeatStateChanged.Broadcast(Axis, NewValue);
+}
+
 void URammsUISubsystem::BroadcastToolbarItemClicked(FName ItemID)
 {
 	OnToolbarItemClicked.Broadcast(ItemID);
@@ -170,4 +175,9 @@ void URammsUISubsystem::BroadcastHighlight(ERammsHighlightTarget Target, bool bH
 void URammsUISubsystem::BroadcastCustomUIEvent(const FRammsUIEvent& Event)
 {
 	OnCustomUIEvent.Broadcast(Event);
+}
+
+void URammsUISubsystem::BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated)
+{
+	OnLayoutTransitionRequested.Broadcast(LayoutName, bAnimated);
 }

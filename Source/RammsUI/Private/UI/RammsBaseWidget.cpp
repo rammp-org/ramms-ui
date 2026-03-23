@@ -400,7 +400,7 @@ void URammsBaseWidget::SubscribeToRegistryChanges()
 	{
 		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
 		{
-			Subsystem->OnControllerRegistryChanged.AddDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
+			Subsystem->OnControllerRegistryChanged.AddUniqueDynamic(this, &URammsBaseWidget::HandleControllerRegistryChanged);
 			bSubscribedToRegistry = true;
 		}
 	}

@@ -233,7 +233,7 @@ void URammsCollapsibleContainer::NativeConstruct()
 
 	if (ToggleButton)
 	{
-		ToggleButton->OnClicked.AddDynamic(this, &URammsCollapsibleContainer::OnToggleClicked);
+		ToggleButton->OnClicked.AddUniqueDynamic(this, &URammsCollapsibleContainer::OnToggleClicked);
 	}
 
 	UpdateToggleIcon();

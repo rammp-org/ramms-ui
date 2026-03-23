@@ -81,13 +81,13 @@ void URammsTestWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	if (FadeInButton)
-		FadeInButton->OnClicked.AddDynamic(this, &URammsTestWidget::OnFadeInClicked);
+		FadeInButton->OnClicked.AddUniqueDynamic(this, &URammsTestWidget::OnFadeInClicked);
 	if (FadeOutButton)
-		FadeOutButton->OnClicked.AddDynamic(this, &URammsTestWidget::OnFadeOutClicked);
+		FadeOutButton->OnClicked.AddUniqueDynamic(this, &URammsTestWidget::OnFadeOutClicked);
 	if (SlideInButton)
-		SlideInButton->OnClicked.AddDynamic(this, &URammsTestWidget::OnSlideInClicked);
+		SlideInButton->OnClicked.AddUniqueDynamic(this, &URammsTestWidget::OnSlideInClicked);
 	if (ScaleInButton)
-		ScaleInButton->OnClicked.AddDynamic(this, &URammsTestWidget::OnScaleInClicked);
+		ScaleInButton->OnClicked.AddUniqueDynamic(this, &URammsTestWidget::OnScaleInClicked);
 }
 
 void URammsTestWidget::ApplyStyle_Implementation()

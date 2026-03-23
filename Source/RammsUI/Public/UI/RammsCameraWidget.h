@@ -43,26 +43,87 @@ enum class ERammsCameraViewMode : uint8
 	/** Show RGB color image */
 	RGB UMETA(DisplayName = "RGB Color"),
 
-	/** Show depth image with colormap */
-	Depth UMETA(DisplayName = "Depth (Colorized)"),
+	/** Show data stream through visualization material */
+	Data UMETA(DisplayName = "Data (Visualized)"),
 
-	/** Side-by-side RGB + Depth */
+	/** Side-by-side RGB + Data */
 	SideBySide UMETA(DisplayName = "Side-by-Side"),
 
-	/** RGB with depth overlay (alpha blended) */
-	Overlay UMETA(DisplayName = "RGB + Depth Overlay")
+	/** RGB with data overlay (alpha blended) */
+	Overlay UMETA(DisplayName = "RGB + Data Overlay")
 };
 
 /**
- * Colormap for depth visualization
+ * A named option for a data stream visualization dropdown.
+ * Maps a user-facing display name to a material scalar parameter value
+ * (e.g. "Viridis" → 0.0, "Magma" → 1.0, "Turbo" → 2.0 for a ColormapIndex param).
  */
-UENUM(BlueprintType)
-enum class ERammsDepthColormap : uint8
+USTRUCT(BlueprintType)
+struct FRammsDataStreamOption
 {
-	Grayscale UMETA(DisplayName = "Grayscale"),
-	Jet		  UMETA(DisplayName = "Jet"),
-	Turbo	  UMETA(DisplayName = "Turbo"),
-	Inferno	  UMETA(DisplayName = "Inferno")
+	GENERATED_BODY()
+
+	/** Display name shown in the cycling button (e.g. "Viridis", "Magma") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	FText DisplayName;
+
+	/** Scalar value sent to the material parameter identified by OptionParamName */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	float Value = 0.0f;
+};
+
+/**
+ * Configuration for a data stream visualization material.
+ * Bundles the material(s) and their parameter names so the camera widget
+ * can visualize any data stream (depth, mask, flow, etc.) without
+ * hardcoding parameter names or material-specific logic.
+ */
+USTRUCT(BlueprintType)
+struct FRammsDataStreamMaterialConfig
+{
+	GENERATED_BODY()
+
+	/** Material for data-only view (e.g. depth colormap, mask colors, flow arrows) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	TObjectPtr<UMaterialInterface> VisualizationMaterial;
+
+	/** Material for RGB+data overlay blend */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	TObjectPtr<UMaterialInterface> OverlayMaterial;
+
+	/** Parameter name for the data texture input in both materials */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	FName DataTextureParam = "DataTexture";
+
+	/** Parameter name for the RGB texture in the overlay material */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	FName RGBTextureParam = "RGBTexture";
+
+	/** Parameter name for blend alpha in the overlay material */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	FName BlendAlphaParam = "BlendAlpha";
+
+	/** Additional scalar parameters passed to both materials (e.g. DepthMin, ColormapIndex) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	TMap<FName, float> ScalarParams;
+
+	/** Label shown on the view mode button (e.g. "Depth", "Mask", "Flow") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream")
+	FText DisplayLabel = FText::FromString(TEXT("Data"));
+
+	/**
+	 * Material parameter name driven by the option selector (e.g. "ColormapIndex").
+	 * Only used when Options is non-empty.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream|Options")
+	FName OptionParamName;
+
+	/** Named options for the cycling dropdown (e.g. colormap names). If empty, no option button is shown. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data Stream|Options")
+	TArray<FRammsDataStreamOption> Options;
+
+	/** Whether this config has any materials assigned */
+	bool IsValid() const { return VisualizationMaterial != nullptr || OverlayMaterial != nullptr; }
 };
 
 /**
@@ -87,25 +148,21 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	FString StreamID;
 
-	/** Depth stream ID (e.g., "camera/wrist/depth") — only used in Depth/SideBySide/Overlay modes */
+	/** Data stream ID (e.g., "camera/wrist/depth", "camera/wrist/mask") — used in Data/SideBySide/Overlay modes */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	FString DepthStreamID;
+	FString DataStreamID;
 
 	/** Which channel(s) to display */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	ERammsCameraViewMode ViewMode = ERammsCameraViewMode::RGB;
 
-	/** Colormap for depth visualization */
+	/** Data stream visualization config (materials, param names, scalar params) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	ERammsDepthColormap DepthColormap = ERammsDepthColormap::Turbo;
+	FRammsDataStreamMaterialConfig DataStreamConfig;
 
-	/** Depth range in meters (min, max) — values outside this range are clipped */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	FVector2D DepthRange = FVector2D(0.1f, 10.0f);
-
-	/** Overlay blend alpha (0 = RGB only, 1 = depth only) — used in Overlay view mode */
+	/** Overlay blend alpha (0 = RGB only, 1 = data only) — used in Overlay view mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float DepthOverlayAlpha = 0.4f;
+	float OverlayBlendAlpha = 0.4f;
 
 	/** Display mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
@@ -150,6 +207,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	bool bCollapsible = false;
 
+	/** Constrain image area to maintain aspect ratio (prevents stretching) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	bool bMaintainAspectRatio = true;
+
+	/** Target aspect ratio (width / height). Ignored when bAutoDetectAspectRatio is true and a texture has been received. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (EditCondition = "bMaintainAspectRatio", ClampMin = "0.1", ClampMax = "10.0"))
+	float AspectRatio = 16.0f / 9.0f;
+
+	/** Automatically update AspectRatio from the first received texture dimensions */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (EditCondition = "bMaintainAspectRatio"))
+	bool bAutoDetectAspectRatio = true;
+
 	/** Is currently collapsed (only relevant when bCollapsible is true) */
 	UPROPERTY(Transient)
 	bool bCameraCollapsed = false;
@@ -191,17 +260,21 @@ protected:
 	UPROPERTY()
 	TObjectPtr<USizeBox> CameraSizeBox;
 
+	/** SizeBox constraining the image area to maintain aspect ratio (created when bMaintainAspectRatio is true) */
+	UPROPERTY()
+	TObjectPtr<USizeBox> ImageAspectRatioBox;
+
 	/** Current texture being displayed (UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture> CurrentTexture;
 
-	/** Current depth texture (UTexture2D or UTextureRenderTarget2D) */
+	/** Current data texture (e.g. depth, mask, flow — UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
-	TObjectPtr<UTexture> CurrentDepthTexture;
+	TObjectPtr<UTexture> CurrentDataTexture;
 
-	/** Second image widget for side-by-side depth display */
+	/** Second image widget for side-by-side data display */
 	UPROPERTY()
-	TObjectPtr<UImage> DepthImage;
+	TObjectPtr<UImage> DataImage;
 
 	/** View-mode toggle button in title bar */
 	UPROPERTY()
@@ -210,27 +283,27 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UTextBlock> ViewModeLabel;
 
-	/** Optional material for depth colorization (set via DepthColormapMaterial property) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera",
-		meta = (ToolTip = "Material with 'DepthTexture', 'DepthMin', 'DepthMax', 'ColormapIndex' parameters"))
-	TObjectPtr<UMaterialInterface> DepthColormapMaterial;
+	/** Data stream option cycling button (shown only when DataStreamConfig.Options is non-empty) */
+	UPROPERTY()
+	TObjectPtr<UButton> OptionButton;
 
-	/** Optional material for overlay blending (set via OverlayBlendMaterial property) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera",
-		meta = (ToolTip = "Material with 'RGBTexture', 'DepthTexture', 'BlendAlpha', 'DepthMin', 'DepthMax', 'ColormapIndex' parameters"))
-	TObjectPtr<UMaterialInterface> OverlayBlendMaterial;
+	UPROPERTY()
+	TObjectPtr<UTextBlock> OptionLabel;
 
-	/** Dynamic material instance for depth image */
+	/** Current index into DataStreamConfig.Options */
+	int32 CurrentOptionIndex = 0;
+
+	/** Dynamic material instance for data visualization */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> DepthMID;
+	TObjectPtr<UMaterialInstanceDynamic> DataMID;
 
 	/** Dynamic material instance for overlay blend */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> OverlayMID;
 
-	/** Render target for depth material output (enables RoundedBox corners) */
+	/** Render target for data material output (enables RoundedBox corners) */
 	UPROPERTY(Transient)
-	TObjectPtr<UTextureRenderTarget2D> DepthRT;
+	TObjectPtr<UTextureRenderTarget2D> DataRT;
 
 	/** Render target for overlay material output (enables RoundedBox corners) */
 	UPROPERTY(Transient)
@@ -280,7 +353,7 @@ public:
 	ERammsCameraDisplayMode GetDisplayMode() const { return DisplayMode; }
 
 	/**
-	 * Set view mode (RGB, Depth, Side-by-Side, Overlay)
+	 * Set view mode (RGB, Data, Side-by-Side, Overlay)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void SetViewMode(ERammsCameraViewMode NewViewMode);
@@ -292,22 +365,57 @@ public:
 	ERammsCameraViewMode GetViewMode() const { return ViewMode; }
 
 	/**
-	 * Set depth colormap
+	 * Set the current data stream option by index (cycles the dropdown).
+	 * Only effective when DataStreamConfig.Options is non-empty.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void SetDepthColormap(ERammsDepthColormap NewColormap);
+	void SetOptionIndex(int32 Index);
 
 	/**
-	 * Set depth range (min, max) in meters
+	 * Get current option index
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void SetDepthRange(float MinDepth, float MaxDepth);
+	UFUNCTION(BlueprintPure, Category = "Camera")
+	int32 GetOptionIndex() const { return CurrentOptionIndex; }
 
 	/**
-	 * Set depth stream ID
+	 * Set the data stream visualization config (materials, param names, scalars).
+	 * Recreates dynamic material instances. Existing data texture is preserved.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void SetDepthStreamID(const FString& NewDepthStreamID);
+	void SetDataStreamConfig(const FRammsDataStreamMaterialConfig& Config);
+
+	/**
+	 * Update a single scalar parameter on both data and overlay materials.
+	 * Useful for tweaking values without swapping the full config.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetMaterialScalarParam(FName ParamName, float Value);
+
+	/**
+	 * Set overlay blend alpha (0 = RGB only, 1 = data only)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetOverlayBlendAlpha(float Alpha);
+
+	/**
+	 * Set data stream ID
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetDataStreamID(const FString& NewDataStreamID);
+
+	/**
+	 * Set both RGB and data stream IDs at once (convenience)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetStreams(const FString& RGBStreamID, const FString& NewDataStreamID);
+
+	/**
+	 * Set both stream IDs and the data visualization config in one call.
+	 * This is the recommended way to fully configure a camera widget.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void ConfigureStreams(const FString& RGBStreamID, const FString& NewDataStreamID,
+		const FRammsDataStreamMaterialConfig& Config);
 
 	/**
 	 * Manually set camera texture (for testing or manual control)
@@ -316,10 +424,10 @@ public:
 	void SetTexture(UTexture* Texture);
 
 	/**
-	 * Manually set depth texture (for testing or manual control)
+	 * Manually set data texture (for testing or manual control)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void SetDepthTexture(UTexture* Texture);
+	void SetDataTexture(UTexture* Texture);
 
 	/**
 	 * Enable or disable drag-to-move
@@ -350,6 +458,18 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Interaction")
 	bool IsCameraCollapsed() const { return bCameraCollapsed; }
+
+	/**
+	 * Set whether the image area maintains aspect ratio
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetMaintainAspectRatio(bool bMaintain);
+
+	/**
+	 * Set the target aspect ratio (width / height). Disables auto-detect.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetAspectRatio(float NewAspectRatio);
 
 protected:
 	// Mouse/Touch interaction overrides
@@ -383,11 +503,11 @@ protected:
 	/** Update header corner radii based on collapse state (all corners when collapsed, top only when expanded) */
 	void UpdateHeaderCornerRadii();
 
-	/** Create or update dynamic material instances for depth/overlay */
-	void EnsureDepthMaterials();
+	/** Create or update dynamic material instances for data stream visualization */
+	void EnsureDataMaterials();
 
-	/** Update depth material parameters (texture, range, colormap) */
-	void UpdateDepthMaterialParams();
+	/** Update data material parameters (texture, scalar params from config) */
+	void UpdateDataMaterialParams();
 
 	/** Update displayed images based on current textures and view mode */
 	void UpdateDisplayedImages();
@@ -395,6 +515,13 @@ protected:
 	/** Cycle view mode (called from button) */
 	UFUNCTION()
 	void OnViewModeClicked();
+
+	/** Cycle data stream option (called from option button) */
+	UFUNCTION()
+	void OnOptionClicked();
+
+	/** Update option button visibility and label based on current config */
+	void UpdateOptionButton();
 
 	/** Collapse toggle callback */
 	UFUNCTION()

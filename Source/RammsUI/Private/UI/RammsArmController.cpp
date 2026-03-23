@@ -99,11 +99,11 @@ void URammsArmController::NativeConstruct()
 
 	if (HomeButton)
 	{
-		HomeButton->OnClicked.AddDynamic(this, &URammsArmController::OnHomeClicked);
+		HomeButton->OnClicked.AddUniqueDynamic(this, &URammsArmController::OnHomeClicked);
 	}
 	if (RetractButton)
 	{
-		RetractButton->OnClicked.AddDynamic(this, &URammsArmController::OnRetractClicked);
+		RetractButton->OnClicked.AddUniqueDynamic(this, &URammsArmController::OnRetractClicked);
 	}
 }
 

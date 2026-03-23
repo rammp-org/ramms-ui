@@ -151,7 +151,7 @@ UButton* URammsToolbar::CreateItemButton(const FRammsToolbarItem& Item)
 	Btn->SetIsEnabled(Item.bIsEnabled);
 
 	// Store ItemID in button's tag for lookup
-	Btn->OnClicked.AddDynamic(this, &URammsToolbar::OnButtonClicked);
+	Btn->OnClicked.AddUniqueDynamic(this, &URammsToolbar::OnButtonClicked);
 
 	return Btn;
 }

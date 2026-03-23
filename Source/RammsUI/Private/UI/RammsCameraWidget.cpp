@@ -24,9 +24,12 @@ void URammsCameraWidget::ResetCachedWidgets()
 	CollapseButton = nullptr;
 	CollapseIcon = nullptr;
 	CameraSizeBox = nullptr;
-	DepthImage = nullptr;
+	DataImage = nullptr;
 	ViewModeButton = nullptr;
 	ViewModeLabel = nullptr;
+	OptionButton = nullptr;
+	OptionLabel = nullptr;
+	ImageAspectRatioBox = nullptr;
 }
 
 void URammsCameraWidget::BuildWidgetTree()
@@ -34,9 +37,21 @@ void URammsCameraWidget::BuildWidgetTree()
 	if (!WidgetTree || CameraBorder)
 		return;
 
-	// Root: Overlay
+	// Root: Overlay (optionally wrapped in aspect ratio SizeBox)
 	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
-	WidgetTree->RootWidget = RootOverlay;
+
+	if (bMaintainAspectRatio)
+	{
+		ImageAspectRatioBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ImageAspectRatioBox"));
+		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+		WidgetTree->RootWidget = ImageAspectRatioBox;
+		ImageAspectRatioBox->AddChild(RootOverlay);
+	}
+	else
+	{
+		WidgetTree->RootWidget = RootOverlay;
+	}
 
 	if (bCollapsible)
 	{
@@ -105,6 +120,22 @@ void URammsCameraWidget::BuildWidgetTree()
 		ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		ViewModeButton->AddChild(ViewModeLabel);
 
+		// Data stream option cycling button (hidden until config has options)
+		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
+		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		UHorizontalBoxSlot* OptBtnSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+		if (OptBtnSlot)
+		{
+			OptBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			OptBtnSlot->SetVerticalAlignment(VAlign_Center);
+			OptBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+		}
+		OptionLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("OptionLabel"));
+		OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
+		OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+		OptionButton->AddChild(OptionLabel);
+		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+
 		// SizeBox wrapping camera content(Fill = takes remaining space, for collapse animation)
 		CameraSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CameraSizeBox"));
 		CameraSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
@@ -124,7 +155,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
 		CameraSizeBox->AddChild(CameraBorder);
 
-		// HBox to hold RGB image and optional depth image side-by-side
+		// HBox to hold RGB image and optional data image side-by-side
 		UHorizontalBox* ImageHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageHBox"));
 		CameraBorder->AddChild(ImageHBox);
 
@@ -148,25 +179,25 @@ void URammsCameraWidget::BuildWidgetTree()
 			RGBSlot->SetVerticalAlignment(VAlign_Fill);
 		}
 
-		DepthImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DepthImage"));
-		DepthImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
+		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 		{
-			FSlateBrush ImgBrush = DepthImage->GetBrush();
+			FSlateBrush ImgBrush = DataImage->GetBrush();
 			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
 			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
 			ImgBrush.OutlineSettings.CornerRadii = FVector4(0.0f, 0.0f, InnerR, InnerR);
 			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 			ImgBrush.OutlineSettings.Width = 0.0f;
-			DepthImage->SetBrush(ImgBrush);
+			DataImage->SetBrush(ImgBrush);
 		}
-		DepthImage->SetVisibility(ESlateVisibility::Collapsed); // hidden unless SideBySide
-		UHorizontalBoxSlot* DepthSlot = ImageHBox->AddChildToHorizontalBox(DepthImage);
-		if (DepthSlot)
+		DataImage->SetVisibility(ESlateVisibility::Collapsed); // hidden unless SideBySide
+		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
+		if (DataSlot)
 		{
-			DepthSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			DepthSlot->SetHorizontalAlignment(HAlign_Fill);
-			DepthSlot->SetVerticalAlignment(VAlign_Fill);
-			DepthSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
+			DataSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			DataSlot->SetHorizontalAlignment(HAlign_Fill);
+			DataSlot->SetVerticalAlignment(VAlign_Fill);
+			DataSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
 		}
 
 		// Initial collapsed state: HeightOverride(0) + HitTestInvisible (stays in layout for width)
@@ -220,25 +251,25 @@ void URammsCameraWidget::BuildWidgetTree()
 			RGBSlot->SetVerticalAlignment(VAlign_Fill);
 		}
 
-		DepthImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DepthImage"));
-		DepthImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
+		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 		{
-			FSlateBrush ImgBrush = DepthImage->GetBrush();
+			FSlateBrush ImgBrush = DataImage->GetBrush();
 			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
 			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
 			ImgBrush.OutlineSettings.CornerRadii = FVector4(InnerR, InnerR, InnerR, InnerR);
 			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 			ImgBrush.OutlineSettings.Width = 0.0f;
-			DepthImage->SetBrush(ImgBrush);
+			DataImage->SetBrush(ImgBrush);
 		}
-		DepthImage->SetVisibility(ESlateVisibility::Collapsed);
-		UHorizontalBoxSlot* DepthSlot = ImageHBox->AddChildToHorizontalBox(DepthImage);
-		if (DepthSlot)
+		DataImage->SetVisibility(ESlateVisibility::Collapsed);
+		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
+		if (DataSlot)
 		{
-			DepthSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			DepthSlot->SetHorizontalAlignment(HAlign_Fill);
-			DepthSlot->SetVerticalAlignment(VAlign_Fill);
-			DepthSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
+			DataSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			DataSlot->SetHorizontalAlignment(HAlign_Fill);
+			DataSlot->SetVerticalAlignment(VAlign_Fill);
+			DataSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
 		}
 
 		if (bShowLabel)
@@ -285,6 +316,22 @@ void URammsCameraWidget::BuildWidgetTree()
 			ViewModeLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 			ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			ViewModeButton->AddChild(ViewModeLabel);
+
+			// Data stream option cycling button (hidden until config has options)
+			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
+			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			UHorizontalBoxSlot* OptSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+			if (OptSlot)
+			{
+				OptSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				OptSlot->SetVerticalAlignment(VAlign_Center);
+				OptSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			}
+			OptionLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("OptionLabel"));
+			OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
+			OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+			OptionButton->AddChild(OptionLabel);
+			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }
@@ -307,15 +354,22 @@ void URammsCameraWidget::NativeConstruct()
 	// Bind collapse button
 	if (CollapseButton && bCollapsible)
 	{
-		CollapseButton->OnClicked.AddDynamic(this, &URammsCameraWidget::OnCollapseClicked);
+		CollapseButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnCollapseClicked);
 	}
 	UpdateCollapseIcon();
 
 	// Bind view mode button
 	if (ViewModeButton)
 	{
-		ViewModeButton->OnClicked.AddDynamic(this, &URammsCameraWidget::OnViewModeClicked);
+		ViewModeButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnViewModeClicked);
 	}
+
+	// Bind option cycling button
+	if (OptionButton)
+	{
+		OptionButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnOptionClicked);
+	}
+	UpdateOptionButton();
 	ApplyViewModeLayout();
 
 	// Cache expanded slot size for Canvas Panel parents
@@ -644,9 +698,9 @@ void URammsCameraWidget::SetTexture(UTexture* Texture)
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthTexture(UTexture* Texture)
+void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 {
-	CurrentDepthTexture = Texture;
+	CurrentDataTexture = Texture;
 	UpdateDisplayedImages();
 }
 
@@ -703,7 +757,16 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			else
 			{
 				// Viewport-direct: center on screen
-				FVector2D SizeInUnits = CanvasSize * WindowedSize;
+				FVector2D SizeInUnits;
+				SizeInUnits.X = CanvasSize.X * WindowedSize.X;
+				if (bMaintainAspectRatio && AspectRatio > 0.0f)
+				{
+					SizeInUnits.Y = SizeInUnits.X / AspectRatio;
+				}
+				else
+				{
+					SizeInUnits.Y = CanvasSize.Y * WindowedSize.Y;
+				}
 				FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
 
 				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
@@ -719,7 +782,16 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Corner:
 		{
-			FVector2D WidgetSize = CanvasSize * CornerSize;
+			FVector2D WidgetSize;
+			WidgetSize.X = CanvasSize.X * CornerSize.X;
+			if (bMaintainAspectRatio && AspectRatio > 0.0f)
+			{
+				WidgetSize.Y = WidgetSize.X / AspectRatio;
+			}
+			else
+			{
+				WidgetSize.Y = CanvasSize.Y * CornerSize.Y;
+			}
 
 			// Compute anchor and alignment from corner alignment enums
 			float	  AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
@@ -765,11 +837,34 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	if (InStreamID == StreamID)
 	{
 		CurrentTexture = Texture;
+
+		// Auto-detect aspect ratio from incoming RGB texture
+		if (bMaintainAspectRatio && bAutoDetectAspectRatio && Texture)
+		{
+			float TexW = static_cast<float>(Texture->GetSurfaceWidth());
+			float TexH = static_cast<float>(Texture->GetSurfaceHeight());
+			if (TexH > 0.0f)
+			{
+				float DetectedAR = TexW / TexH;
+				if (!FMath::IsNearlyEqual(AspectRatio, DetectedAR, 0.01f))
+				{
+					AspectRatio = DetectedAR;
+					if (ImageAspectRatioBox)
+					{
+						ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+						ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+					}
+					// Re-compute widget size now that AR changed
+					UpdateLayout(false);
+				}
+			}
+		}
+
 		UpdateDisplayedImages();
 	}
-	else if (InStreamID == DepthStreamID)
+	else if (InStreamID == DataStreamID)
 	{
-		CurrentDepthTexture = Texture;
+		CurrentDataTexture = Texture;
 		UpdateDisplayedImages();
 	}
 }
@@ -808,14 +903,14 @@ void URammsCameraWidget::StartStream()
 			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"));
 	}
 
-	// Start depth stream if configured
-	if (!DepthStreamID.IsEmpty())
+	// Start data stream if configured
+	if (!DataStreamID.IsEmpty())
 	{
 		for (auto& Sub : ProviderSubscriptions)
 		{
 			if (Sub.Object.IsValid() && Sub.Interface)
 			{
-				Sub.Interface->StartStream(DepthStreamID);
+				Sub.Interface->StartStream(DataStreamID);
 			}
 		}
 	}
@@ -832,9 +927,9 @@ void URammsCameraWidget::StopStream()
 			{
 				Sub.Interface->StopStream(StreamID);
 			}
-			if (!DepthStreamID.IsEmpty())
+			if (!DataStreamID.IsEmpty())
 			{
-				Sub.Interface->StopStream(DepthStreamID);
+				Sub.Interface->StopStream(DataStreamID);
 			}
 		}
 	}
@@ -1006,51 +1101,91 @@ void URammsCameraWidget::SetViewMode(ERammsCameraViewMode NewViewMode)
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthColormap(ERammsDepthColormap NewColormap)
+void URammsCameraWidget::SetDataStreamConfig(const FRammsDataStreamMaterialConfig& Config)
 {
-	DepthColormap = NewColormap;
-	UpdateDepthMaterialParams();
+	DataStreamConfig = Config;
+	CurrentOptionIndex = 0;
+
+	// Force recreation of dynamic material instances
+	DataMID = nullptr;
+	OverlayMID = nullptr;
+
+	EnsureDataMaterials();
+	UpdateDataMaterialParams();
+	UpdateOptionButton();
+	ApplyViewModeLayout();
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthRange(float MinDepth, float MaxDepth)
+void URammsCameraWidget::SetMaterialScalarParam(FName ParamName, float Value)
 {
-	DepthRange = FVector2D(MinDepth, MaxDepth);
-	UpdateDepthMaterialParams();
+	DataStreamConfig.ScalarParams.Add(ParamName, Value);
+	UpdateDataMaterialParams();
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthStreamID(const FString& NewDepthStreamID)
+void URammsCameraWidget::SetOverlayBlendAlpha(float Alpha)
 {
-	if (DepthStreamID == NewDepthStreamID)
+	OverlayBlendAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	UpdateDataMaterialParams();
+	UpdateDisplayedImages();
+}
+
+void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
+{
+	if (DataStreamID == NewDataStreamID)
 		return;
 
-	// Stop existing depth stream
-	IRammsCameraProvider* Provider = CameraProvider.GetInterface();
-	if (Provider && !DepthStreamID.IsEmpty())
+	// Stop existing data stream on all providers
+	if (!DataStreamID.IsEmpty())
 	{
-		Provider->StopStream(DepthStreamID);
+		for (auto& Sub : ProviderSubscriptions)
+		{
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				Sub.Interface->StopStream(DataStreamID);
+			}
+		}
 	}
 
-	DepthStreamID = NewDepthStreamID;
-	CurrentDepthTexture = nullptr;
+	DataStreamID = NewDataStreamID;
+	CurrentDataTexture = nullptr;
 
-	// Start new depth stream
-	if (Provider && !DepthStreamID.IsEmpty())
+	// Start new data stream
+	if (!DataStreamID.IsEmpty())
 	{
-		Provider->StartStream(DepthStreamID);
+		for (auto& Sub : ProviderSubscriptions)
+		{
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				Sub.Interface->StartStream(DataStreamID);
+			}
+		}
 	}
+}
+
+void URammsCameraWidget::SetStreams(const FString& RGBStreamID, const FString& NewDataStreamID)
+{
+	SetStreamID(RGBStreamID);
+	SetDataStreamID(NewDataStreamID);
+}
+
+void URammsCameraWidget::ConfigureStreams(const FString& RGBStreamID, const FString& NewDataStreamID,
+	const FRammsDataStreamMaterialConfig& Config)
+{
+	SetDataStreamConfig(Config);
+	SetStreams(RGBStreamID, NewDataStreamID);
 }
 
 void URammsCameraWidget::OnViewModeClicked()
 {
-	// Cycle: RGB -> Depth -> SideBySide -> Overlay -> RGB
+	// Cycle: RGB -> Data -> SideBySide -> Overlay -> RGB
 	switch (ViewMode)
 	{
 		case ERammsCameraViewMode::RGB:
-			SetViewMode(ERammsCameraViewMode::Depth);
+			SetViewMode(ERammsCameraViewMode::Data);
 			break;
-		case ERammsCameraViewMode::Depth:
+		case ERammsCameraViewMode::Data:
 			SetViewMode(ERammsCameraViewMode::SideBySide);
 			break;
 		case ERammsCameraViewMode::SideBySide:
@@ -1060,6 +1195,86 @@ void URammsCameraWidget::OnViewModeClicked()
 			SetViewMode(ERammsCameraViewMode::RGB);
 			break;
 	}
+}
+
+void URammsCameraWidget::OnOptionClicked()
+{
+	if (DataStreamConfig.Options.Num() == 0)
+		return;
+
+	int32 NextIndex = (CurrentOptionIndex + 1) % DataStreamConfig.Options.Num();
+	SetOptionIndex(NextIndex);
+}
+
+void URammsCameraWidget::SetOptionIndex(int32 Index)
+{
+	if (DataStreamConfig.Options.Num() == 0 || !DataStreamConfig.OptionParamName.IsValid())
+		return;
+
+	CurrentOptionIndex = FMath::Clamp(Index, 0, DataStreamConfig.Options.Num() - 1);
+	const FRammsDataStreamOption& Opt = DataStreamConfig.Options[CurrentOptionIndex];
+
+	// Push the option value into ScalarParams and update materials
+	DataStreamConfig.ScalarParams.Add(DataStreamConfig.OptionParamName, Opt.Value);
+	UpdateDataMaterialParams();
+	UpdateDisplayedImages();
+	UpdateOptionButton();
+}
+
+void URammsCameraWidget::UpdateOptionButton()
+{
+	if (!OptionButton)
+		return;
+
+	if (DataStreamConfig.Options.Num() > 0 && DataStreamConfig.OptionParamName.IsValid())
+	{
+		OptionButton->SetVisibility(ESlateVisibility::Visible);
+		if (OptionLabel)
+		{
+			int32 SafeIdx = FMath::Clamp(CurrentOptionIndex, 0, DataStreamConfig.Options.Num() - 1);
+			OptionLabel->SetText(DataStreamConfig.Options[SafeIdx].DisplayName);
+		}
+	}
+	else
+	{
+		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void URammsCameraWidget::SetMaintainAspectRatio(bool bMaintain)
+{
+	if (bMaintainAspectRatio == bMaintain)
+		return;
+
+	bMaintainAspectRatio = bMaintain;
+
+	if (ImageAspectRatioBox)
+	{
+		if (bMaintainAspectRatio)
+		{
+			ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+			ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+		}
+		else
+		{
+			ImageAspectRatioBox->ClearMinAspectRatio();
+			ImageAspectRatioBox->ClearMaxAspectRatio();
+		}
+	}
+	UpdateLayout(false);
+}
+
+void URammsCameraWidget::SetAspectRatio(float NewAspectRatio)
+{
+	bAutoDetectAspectRatio = false;
+	AspectRatio = FMath::Clamp(NewAspectRatio, 0.1f, 10.0f);
+
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+	}
+	UpdateLayout(false);
 }
 
 void URammsCameraWidget::ApplyViewModeLayout()
@@ -1072,9 +1287,14 @@ void URammsCameraWidget::ApplyViewModeLayout()
 			case ERammsCameraViewMode::RGB:
 				ViewModeLabel->SetText(FText::FromString(TEXT("RGB")));
 				break;
-			case ERammsCameraViewMode::Depth:
-				ViewModeLabel->SetText(FText::FromString(TEXT("Depth")));
+			case ERammsCameraViewMode::Data:
+			{
+				FText Label = DataStreamConfig.DisplayLabel.IsEmpty()
+					? FText::FromString(TEXT("Data"))
+					: DataStreamConfig.DisplayLabel;
+				ViewModeLabel->SetText(Label);
 				break;
+			}
 			case ERammsCameraViewMode::SideBySide:
 				ViewModeLabel->SetText(FText::FromString(TEXT("SbS")));
 				break;
@@ -1084,10 +1304,10 @@ void URammsCameraWidget::ApplyViewModeLayout()
 		}
 	}
 
-	// Show/hide depth image for side-by-side mode
-	if (DepthImage)
+	// Show/hide data image for side-by-side mode
+	if (DataImage)
 	{
-		DepthImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
+		DataImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
 				? ESlateVisibility::SelfHitTestInvisible
 				: ESlateVisibility::Collapsed);
 	}
@@ -1104,20 +1324,20 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	bool  bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
 
 	// FVector4 CornerRadii: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
-	FVector4 RGBRadii, DepthRadii;
+	FVector4 RGBRadii, DataRadii;
 
 	if (bCollapsible)
 	{
 		// Header is above image — only bottom corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);	// bottom-left only
-			DepthRadii = FVector4(0.0f, 0.0f, R, 0.0f); // bottom-right only
+			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);  // bottom-left only
+			DataRadii = FVector4(0.0f, 0.0f, R, 0.0f); // bottom-right only
 		}
 		else
 		{
 			RGBRadii = FVector4(0.0f, 0.0f, R, R); // bottom corners
-			DepthRadii = FVector4(0.0f, 0.0f, R, R);
+			DataRadii = FVector4(0.0f, 0.0f, R, R);
 		}
 	}
 	else
@@ -1125,13 +1345,13 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 		// Header overlays on image — all outer corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(R, 0.0f, 0.0f, R);	 // left corners
-			DepthRadii = FVector4(0.0f, R, R, 0.0f); // right corners
+			RGBRadii = FVector4(R, 0.0f, 0.0f, R);	// left corners
+			DataRadii = FVector4(0.0f, R, R, 0.0f); // right corners
 		}
 		else
 		{
 			RGBRadii = FVector4(R, R, R, R); // all corners
-			DepthRadii = FVector4(R, R, R, R);
+			DataRadii = FVector4(R, R, R, R);
 		}
 	}
 
@@ -1144,7 +1364,7 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	};
 
 	ApplyRadii(CameraImage, RGBRadii);
-	ApplyRadii(DepthImage, DepthRadii);
+	ApplyRadii(DataImage, DataRadii);
 }
 
 void URammsCameraWidget::UpdateHeaderCornerRadii()
@@ -1179,51 +1399,55 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
 }
 
-void URammsCameraWidget::EnsureDepthMaterials()
+void URammsCameraWidget::EnsureDataMaterials()
 {
-	// Create depth colormap MID if material is assigned and MID doesn't exist
-	if (DepthColormapMaterial && !DepthMID)
+	// Create data visualization MID if material is assigned and MID doesn't exist
+	if (DataStreamConfig.VisualizationMaterial && !DataMID)
 	{
-		DepthMID = UMaterialInstanceDynamic::Create(DepthColormapMaterial, this);
-		UpdateDepthMaterialParams();
+		DataMID = UMaterialInstanceDynamic::Create(DataStreamConfig.VisualizationMaterial, this);
+		UpdateDataMaterialParams();
 	}
 
 	// Create overlay blend MID if material is assigned and MID doesn't exist
-	if (OverlayBlendMaterial && !OverlayMID)
+	if (DataStreamConfig.OverlayMaterial && !OverlayMID)
 	{
-		OverlayMID = UMaterialInstanceDynamic::Create(OverlayBlendMaterial, this);
-		UpdateDepthMaterialParams();
+		OverlayMID = UMaterialInstanceDynamic::Create(DataStreamConfig.OverlayMaterial, this);
+		UpdateDataMaterialParams();
 	}
 }
 
-void URammsCameraWidget::UpdateDepthMaterialParams()
+void URammsCameraWidget::UpdateDataMaterialParams()
 {
-	float ColormapIdx = static_cast<float>(static_cast<uint8>(DepthColormap));
-
-	if (DepthMID)
-	{
-		DepthMID->SetScalarParameterValue(TEXT("DepthMin"), DepthRange.X);
-		DepthMID->SetScalarParameterValue(TEXT("DepthMax"), DepthRange.Y);
-		DepthMID->SetScalarParameterValue(TEXT("ColormapIndex"), ColormapIdx);
-		if (CurrentDepthTexture)
+	// Apply all scalar params from config to both materials
+	auto ApplyScalarParams = [this](UMaterialInstanceDynamic* MID) {
+		if (!MID)
+			return;
+		for (const auto& Pair : DataStreamConfig.ScalarParams)
 		{
-			DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
+		}
+	};
+
+	if (DataMID)
+	{
+		ApplyScalarParams(DataMID);
+		if (CurrentDataTexture)
+		{
+			DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 		}
 	}
 
 	if (OverlayMID)
 	{
-		OverlayMID->SetScalarParameterValue(TEXT("DepthMin"), DepthRange.X);
-		OverlayMID->SetScalarParameterValue(TEXT("DepthMax"), DepthRange.Y);
-		OverlayMID->SetScalarParameterValue(TEXT("ColormapIndex"), ColormapIdx);
-		OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
+		ApplyScalarParams(OverlayMID);
+		OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
 		if (CurrentTexture)
 		{
-			OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
+			OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
 		}
-		if (CurrentDepthTexture)
+		if (CurrentDataTexture)
 		{
-			OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+			OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 		}
 	}
 }
@@ -1286,7 +1510,7 @@ void URammsCameraWidget::SetCameraSizeBoxSlotFill(bool bFill)
 
 void URammsCameraWidget::UpdateDisplayedImages()
 {
-	EnsureDepthMaterials();
+	EnsureDataMaterials();
 
 	switch (ViewMode)
 	{
@@ -1298,17 +1522,17 @@ void URammsCameraWidget::UpdateDisplayedImages()
 			}
 			break;
 
-		case ERammsCameraViewMode::Depth:
-			if (CameraImage && CurrentDepthTexture)
+		case ERammsCameraViewMode::Data:
+			if (CameraImage && CurrentDataTexture)
 			{
-				if (DepthMID)
+				if (DataMID)
 				{
-					DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-					SetImageBrushFromMaterial(CameraImage, DepthMID, CurrentDepthTexture, DepthRT);
+					DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					SetImageBrushFromMaterial(CameraImage, DataMID, CurrentDataTexture, DataRT);
 				}
 				else
 				{
-					SetImageBrushFromTexture(CameraImage, CurrentDepthTexture);
+					SetImageBrushFromTexture(CameraImage, CurrentDataTexture);
 				}
 				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
@@ -1320,29 +1544,29 @@ void URammsCameraWidget::UpdateDisplayedImages()
 				SetImageBrushFromTexture(CameraImage, CurrentTexture);
 				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
-			if (DepthImage && CurrentDepthTexture)
+			if (DataImage && CurrentDataTexture)
 			{
-				if (DepthMID)
+				if (DataMID)
 				{
-					DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-					SetImageBrushFromMaterial(DepthImage, DepthMID, CurrentDepthTexture, DepthRT);
+					DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					SetImageBrushFromMaterial(DataImage, DataMID, CurrentDataTexture, DataRT);
 				}
 				else
 				{
-					SetImageBrushFromTexture(DepthImage, CurrentDepthTexture);
+					SetImageBrushFromTexture(DataImage, CurrentDataTexture);
 				}
-				DepthImage->SetColorAndOpacity(FLinearColor::White);
+				DataImage->SetColorAndOpacity(FLinearColor::White);
 			}
 			break;
 
 		case ERammsCameraViewMode::Overlay:
 			if (CameraImage && CurrentTexture)
 			{
-				if (OverlayMID && CurrentDepthTexture)
+				if (OverlayMID && CurrentDataTexture)
 				{
-					OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
-					OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-					OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
+					OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
+					OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
 					SetImageBrushFromMaterial(CameraImage, OverlayMID, CurrentTexture, OverlayRT);
 				}
 				else

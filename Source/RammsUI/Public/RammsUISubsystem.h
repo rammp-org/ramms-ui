@@ -118,6 +118,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
 	FOnArmTaskChanged OnArmTaskChanged;
 
+	// ── UI Event Bus: Seat State ─────────────────────────────────
+
+	/** Broadcast a seat state change to all listeners */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void BroadcastSeatStateChanged(ERammsSeatAxis Axis, float NewValue);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSeatStateChanged, ERammsSeatAxis, Axis, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
+	FOnSeatStateChanged OnSeatStateChanged;
+
 	// ── UI Event Bus: Toolbar ─────────────────────────────────────
 
 	/** Broadcast a toolbar item click to all listeners */
@@ -161,6 +171,19 @@ public:
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHighlight, ERammsHighlightTarget, Target, bool, bHighlighted, FLinearColor, Color);
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Visualization")
 	FOnHighlight OnHighlight;
+
+	// ── UI Event Bus: Layout Transition Requests ────────────────
+
+	/**
+	 * Request a layout transition. Any widget can call this.
+	 * The LayoutHost subscribes and performs the actual transition.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Layout")
+	void BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated = true);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLayoutTransitionRequest, FName, LayoutName, bool, bAnimated);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Layout")
+	FOnLayoutTransitionRequest OnLayoutTransitionRequested;
 
 	// ── UI Event Bus: Custom Events (Blueprint-extensible) ───────
 

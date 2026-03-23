@@ -104,18 +104,18 @@ void URammsMebotController::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Bind button click events
+	// Bind button click events (AddUniqueDynamic prevents duplicate bindings on reparent)
 	if (SelfLevelButton)
 	{
-		SelfLevelButton->OnClicked.AddDynamic(this, &URammsMebotController::OnSelfLevelClicked);
+		SelfLevelButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnSelfLevelClicked);
 	}
 	if (CurbAscentButton)
 	{
-		CurbAscentButton->OnClicked.AddDynamic(this, &URammsMebotController::OnCurbAscentClicked);
+		CurbAscentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbAscentClicked);
 	}
 	if (CurbDescentButton)
 	{
-		CurbDescentButton->OnClicked.AddDynamic(this, &URammsMebotController::OnCurbDescentClicked);
+		CurbDescentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbDescentClicked);
 	}
 
 	UpdateModeButtons();

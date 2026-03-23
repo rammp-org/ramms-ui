@@ -38,7 +38,7 @@ void URammsStreamCameraBridge::BeginPlay()
 	Owner->GetComponents<URammsStreamSinkComponent>(Sinks);
 	for (URammsStreamSinkComponent* Sink : Sinks)
 	{
-		Sink->OnFrameReceived.AddDynamic(this, &URammsStreamCameraBridge::OnStreamFrameReceived);
+		Sink->OnFrameReceived.AddUniqueDynamic(this, &URammsStreamCameraBridge::OnStreamFrameReceived);
 	}
 
 	UE_LOG(LogRammsStreamBridge, Log, TEXT("StreamCameraBridge bound to %d sink(s) on %s"),

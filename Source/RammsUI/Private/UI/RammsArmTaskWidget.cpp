@@ -103,18 +103,18 @@ void URammsArmTaskWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Bind button click events
+	// Bind button click events (AddUniqueDynamic prevents duplicate bindings on reparent)
 	if (OpenDoorButton)
 	{
-		OpenDoorButton->OnClicked.AddDynamic(this, &URammsArmTaskWidget::OnOpenDoorClicked);
+		OpenDoorButton->OnClicked.AddUniqueDynamic(this, &URammsArmTaskWidget::OnOpenDoorClicked);
 	}
 	if (OrderDrinkButton)
 	{
-		OrderDrinkButton->OnClicked.AddDynamic(this, &URammsArmTaskWidget::OnOrderDrinkClicked);
+		OrderDrinkButton->OnClicked.AddUniqueDynamic(this, &URammsArmTaskWidget::OnOrderDrinkClicked);
 	}
 	if (DrinkButton)
 	{
-		DrinkButton->OnClicked.AddDynamic(this, &URammsArmTaskWidget::OnDrinkClicked);
+		DrinkButton->OnClicked.AddUniqueDynamic(this, &URammsArmTaskWidget::OnDrinkClicked);
 	}
 
 	UpdateTaskButtons();
