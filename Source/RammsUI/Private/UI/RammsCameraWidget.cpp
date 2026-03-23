@@ -11,6 +11,7 @@
 #include "Components/SizeBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/VerticalBox.h"
+#include "Widgets/Layout/SBox.h"
 #include "EngineUtils.h"
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
@@ -40,8 +41,9 @@ void URammsCameraWidget::BuildWidgetTree()
 	// Root: Overlay (optionally wrapped in aspect ratio SizeBox)
 	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
 
-	if (bMaintainAspectRatio)
+	if (bMaintainAspectRatio && !bCollapsible)
 	{
+		// Non-collapsible: AR box wraps entire widget (title overlays on image)
 		ImageAspectRatioBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ImageAspectRatioBox"));
 		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
 		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
@@ -153,6 +155,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			FLinearColor(0.1f, 0.1f, 0.1f, 1.0f), FVector4(0.0f, 0.0f, 4.0f, 4.0f));
 		CameraBorder->SetPadding(FMargin(BorderThickness));
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
+
 		CameraSizeBox->AddChild(CameraBorder);
 
 		// HBox to hold RGB image and optional data image side-by-side
@@ -209,6 +212,12 @@ void URammsCameraWidget::BuildWidgetTree()
 			CameraSizeBox->SetRenderOpacity(0.0f);
 			CollapseProgress = 0.0f;
 			CollapseTarget = 0.0f;
+			// Clear aspect ratio so collapsed header isn't forced to image AR
+			if (ImageAspectRatioBox && bMaintainAspectRatio)
+			{
+				ImageAspectRatioBox->ClearMinAspectRatio();
+				ImageAspectRatioBox->ClearMaxAspectRatio();
+			}
 		}
 	}
 	else
@@ -350,6 +359,16 @@ void URammsCameraWidget::NativeConstruct()
 	SetIsFocusable(true);
 
 	Super::NativeConstruct();
+
+	// SBox with aspect ratio constraint centers child vertically when VAlign=Fill.
+	// Force VAlign_Top so the widget anchors at the top of its slot.
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		if (TSharedPtr<SBox> SlateSizeBox = StaticCastSharedPtr<SBox>(ImageAspectRatioBox->GetCachedWidget()))
+		{
+			SlateSizeBox->SetVAlign(VAlign_Top);
+		}
+	}
 
 	// Bind collapse button
 	if (CollapseButton && bCollapsible)
@@ -505,6 +524,18 @@ void URammsCameraWidget::SynchronizeProperties()
 	{
 		UpdateCollapseIcon();
 	}
+
+	// Ensure SBox VAlign_Top for AR constraint (designer + runtime)
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		if (TSharedPtr<SBox> SlateSizeBox = StaticCastSharedPtr<SBox>(ImageAspectRatioBox->GetCachedWidget()))
+		{
+			SlateSizeBox->SetVAlign(VAlign_Top);
+		}
+	}
+
+	// Update layout in designer so CornerSize/WindowedSize/AR are reflected
+	UpdateLayout(false);
 }
 
 void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -534,11 +565,14 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	float			  TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
 	if (TitleH <= 0.0f)
 		TitleH = 24.0f;
+	// Minimum slot height = title bar (CameraBorder is inside CameraSizeBox which collapses to 0)
+	float MinSlotH = TitleH;
 
 	if (CanvasSlot && CachedExpandedSlotSize.Y > 0.0f)
 	{
-		float SlotContentH = CachedExpandedSlotSize.Y - TitleH;
-		CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, TitleH + SlotContentH * Alpha));
+		float SlotContentH = CachedExpandedSlotSize.Y - MinSlotH;
+		float NewH = FMath::Max(MinSlotH + SlotContentH * Alpha, MinSlotH);
+		CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, NewH));
 	}
 
 	if (FMath::IsNearlyEqual(CollapseProgress, CollapseTarget, 0.01f))
@@ -557,6 +591,12 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 			{
 				CanvasSlot->SetSize(CachedExpandedSlotSize);
 			}
+			// Restore aspect ratio constraint now that fully expanded
+			if (ImageAspectRatioBox && bMaintainAspectRatio)
+			{
+				ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+				ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+			}
 		}
 		else
 		{
@@ -565,6 +605,15 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 			CameraSizeBox->SetHeightOverride(0.0f);
 			CameraSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
 			CameraSizeBox->SetRenderOpacity(0.0f);
+			// Clamp canvas slot to minimum header size
+			if (CanvasSlot)
+			{
+				FVector2D SlotSize = CanvasSlot->GetSize();
+				if (SlotSize.Y < MinSlotH)
+				{
+					CanvasSlot->SetSize(FVector2D(SlotSize.X, MinSlotH));
+				}
+			}
 		}
 	}
 }
@@ -720,6 +769,14 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
 
+	// Title bar height to reserve when collapsible (header sits above image)
+	float TitleH = 0.0f;
+	if (bCollapsible && TitleBar)
+	{
+		FVector2D TitleSize = TitleBar->GetDesiredSize();
+		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : 24.0f;
+	}
+
 	// Detect if we're inside a Canvas Panel or added directly to viewport
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 
@@ -748,25 +805,44 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Windowed:
 		{
+			FVector2D MaxBounds;
+			MaxBounds.X = CanvasSize.X * WindowedSize.X;
+			MaxBounds.Y = CanvasSize.Y * WindowedSize.Y;
+
+			FVector2D SizeInUnits;
+			if (bMaintainAspectRatio && AspectRatio > 0.0f)
+			{
+				float AvailH = MaxBounds.Y - TitleH;
+				if (AvailH < 1.0f)
+					AvailH = 1.0f;
+				float FitW, FitH;
+				if (MaxBounds.X / AspectRatio <= AvailH)
+				{
+					FitW = MaxBounds.X;
+					FitH = MaxBounds.X / AspectRatio;
+				}
+				else
+				{
+					FitH = AvailH;
+					FitW = AvailH * AspectRatio;
+				}
+				SizeInUnits.X = FitW;
+				SizeInUnits.Y = FitH + TitleH;
+			}
+			else
+			{
+				SizeInUnits = MaxBounds;
+			}
+
 			if (CanvasSlot)
 			{
-				// Don't override Canvas Panel layout in Windowed mode —
-				// let the user's designer/anchor settings control position and size
-				CachedExpandedSlotSize = CanvasSlot->GetSize();
+				// Set computed size on slot; preserve designer-set anchors/position
+				CanvasSlot->SetSize(SizeInUnits);
+				CachedExpandedSlotSize = SizeInUnits;
 			}
 			else
 			{
 				// Viewport-direct: center on screen
-				FVector2D SizeInUnits;
-				SizeInUnits.X = CanvasSize.X * WindowedSize.X;
-				if (bMaintainAspectRatio && AspectRatio > 0.0f)
-				{
-					SizeInUnits.Y = SizeInUnits.X / AspectRatio;
-				}
-				else
-				{
-					SizeInUnits.Y = CanvasSize.Y * WindowedSize.Y;
-				}
 				FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
 
 				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
@@ -782,15 +858,36 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Corner:
 		{
+			FVector2D MaxBounds;
+			MaxBounds.X = CanvasSize.X * CornerSize.X;
+			MaxBounds.Y = CanvasSize.Y * CornerSize.Y;
+
 			FVector2D WidgetSize;
-			WidgetSize.X = CanvasSize.X * CornerSize.X;
 			if (bMaintainAspectRatio && AspectRatio > 0.0f)
 			{
-				WidgetSize.Y = WidgetSize.X / AspectRatio;
+				// Available space for image = max bounds minus title bar
+				float AvailH = MaxBounds.Y - TitleH;
+				if (AvailH < 1.0f)
+					AvailH = 1.0f;
+
+				// Fit AR within MaxBounds.X x AvailH
+				float FitW, FitH;
+				if (MaxBounds.X / AspectRatio <= AvailH)
+				{
+					FitW = MaxBounds.X;
+					FitH = MaxBounds.X / AspectRatio;
+				}
+				else
+				{
+					FitH = AvailH;
+					FitW = AvailH * AspectRatio;
+				}
+				WidgetSize.X = FitW;
+				WidgetSize.Y = FitH + TitleH;
 			}
 			else
 			{
-				WidgetSize.Y = CanvasSize.Y * CornerSize.Y;
+				WidgetSize = MaxBounds;
 			}
 
 			// Compute anchor and alignment from corner alignment enums
@@ -1074,6 +1171,29 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 
 	UpdateCollapseIcon();
 	UpdateHeaderCornerRadii();
+
+	// When collapsing: clear aspect ratio constraint immediately so the header
+	// isn't forced to an image-sized AR.
+	// When expanding: defer AR restore until animation completes (NativeTick)
+	// to avoid the widget flashing to full expanded size before animating.
+	if (ImageAspectRatioBox && bMaintainAspectRatio && bCollapsed)
+	{
+		ImageAspectRatioBox->ClearMinAspectRatio();
+		ImageAspectRatioBox->ClearMaxAspectRatio();
+	}
+
+	// When expanding, set the canvas slot to the collapsed size so the animation
+	// starts from the current (collapsed) size rather than jumping to zero or full.
+	if (!bCollapsed)
+	{
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			float TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
+			if (TitleH <= 0.0f)
+				TitleH = 24.0f;
+			CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, TitleH));
+		}
+	}
 }
 
 void URammsCameraWidget::OnCollapseClicked()
