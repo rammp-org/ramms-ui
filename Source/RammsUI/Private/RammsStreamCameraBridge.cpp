@@ -61,9 +61,17 @@ void URammsStreamCameraBridge::EndPlay(const EEndPlayReason::Type EndPlayReason)
 }
 
 void URammsStreamCameraBridge::OnStreamFrameReceived(
-	int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson)
+	int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson, ERammsStreamMessageType MessageType)
 {
 	if (!CameraProvider || !Texture)
+		return;
+
+	// Category-based filter
+	if (bVisualOnly && GetFrameCategory(MessageType) != ERammsFrameCategory::Visual)
+		return;
+
+	// Explicit channel exclusion
+	if (ExcludeChannels.Contains(ChannelID))
 		return;
 
 	FString StreamID = FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
@@ -84,6 +92,7 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 		Info.DisplayName = FString::Printf(TEXT("Stream Channel %d"), ChannelID);
 		Info.Width = Width;
 		Info.Height = Height;
+		Info.FrameCategory = GetFrameCategory(MessageType);
 
 		if (bHasMeta)
 		{

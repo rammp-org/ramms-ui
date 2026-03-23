@@ -55,6 +55,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	bool bAutoCreateProjectors = true;
 
+	/** Skip depth streams when auto-creating projectors */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
+	bool bSkipDepthStreams = true;
+
+	/** Stream IDs to never create projectors for (e.g. "stream/100"). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
+	TArray<FString> ExcludeStreamIDs;
+
 	// ── Blueprint API ──────────────────────────────────
 
 	/** Connect to a camera provider — starts listening for streams */

@@ -241,7 +241,11 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 			*Info.StreamID, Info.bIsDepth ? 1 : 0, Info.Width, Info.Height,
 			Info.Intrinsics.Num(), Info.bHasExtrinsic ? 1 : 0);
 
-		if (Info.bIsDepth || Projectors.Contains(Info.StreamID))
+		if (Info.FrameCategory != ERammsFrameCategory::Visual || Projectors.Contains(Info.StreamID))
+			continue;
+		if (bSkipDepthStreams && Info.bIsDepth)
+			continue;
+		if (ExcludeStreamIDs.Contains(Info.StreamID))
 			continue;
 
 		URammsCameraProjectorComponent* Projector = AddProjector(Info.StreamID);
@@ -390,8 +394,12 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 		if (Iface)
 		{
 			FRammsCameraStreamInfo Info;
-			if (Iface->GetStreamInfo(StreamID, Info) && !Info.bIsDepth)
+			if (Iface->GetStreamInfo(StreamID, Info) && Info.FrameCategory == ERammsFrameCategory::Visual)
 			{
+				if ((bSkipDepthStreams && Info.bIsDepth) || ExcludeStreamIDs.Contains(StreamID))
+				{
+					return;
+				}
 				URammsCameraProjectorComponent* Projector = AddProjector(StreamID);
 				if (Projector)
 				{

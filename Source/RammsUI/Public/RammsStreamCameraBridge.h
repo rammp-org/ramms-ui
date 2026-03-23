@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "RammsStreamProtocol.h"
 #include "RammsStreamCameraBridge.generated.h"
 
 class URammsStreamSinkComponent;
@@ -34,6 +35,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Streaming")
 	FString StreamPrefix = TEXT("stream");
 
+	/** When true, only forward frames categorised as Visual (RGB, depth, masks).
+	 *  Data-only frames (motion vectors, point clouds, etc.) are silently
+	 *  dropped.  Default is false — all frames are forwarded to the provider
+	 *  so downstream consumers (projection manager, widgets) can filter
+	 *  themselves. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Streaming")
+	bool bVisualOnly = false;
+
+	/** Channels to explicitly exclude from forwarding to the camera provider.
+	 *  Checked after the bVisualOnly filter. Empty = no exclusions. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Streaming")
+	TArray<int32> ExcludeChannels;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -47,7 +61,7 @@ private:
 
 	/** Bound to URammsStreamSinkComponent::OnFrameReceived. */
 	UFUNCTION()
-	void OnStreamFrameReceived(int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson);
+	void OnStreamFrameReceived(int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson, ERammsStreamMessageType MessageType);
 
 	/** Extract a transform from parsed JSON metadata. */
 	bool ParseTransformFromMeta(const TSharedPtr<FJsonObject>& Meta, FTransform& OutTransform) const;

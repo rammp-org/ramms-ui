@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
 #include "Engine/Texture2D.h"
+#include "RammsStreamProtocol.h"
 #include "IRammsCameraProvider.generated.h"
 
 /**
@@ -42,6 +43,11 @@ struct FRammsCameraStreamInfo
 	/** Whether this is a depth camera stream */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	bool bIsDepth = false;
+
+	/** High-level category: Visual streams are renderable, Data streams
+	 *  carry auxiliary information (motion vectors, point clouds, etc.). */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	ERammsFrameCategory FrameCategory = ERammsFrameCategory::Visual;
 
 	/** Camera intrinsics (fx, fy, cx, cy) - empty if not available */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
