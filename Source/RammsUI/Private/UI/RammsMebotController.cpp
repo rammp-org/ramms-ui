@@ -80,18 +80,15 @@ void URammsMebotController::BuildWidgetTree()
 	CurbAscentButton = CreateModeButton(TEXT("CurbAscentBtn"), FText::FromString(TEXT("Curb Ascent")), CurbAscentIcon);
 	CurbDescentButton = CreateModeButton(TEXT("CurbDescentBtn"), FText::FromString(TEXT("Curb Descent")), CurbDescentIcon);
 
-	// Add to grid
-	// Row 0: all three buttons
-	UUniformGridSlot* S0 = ModeGrid->AddChildToUniformGrid(SelfLevelButton, 0, 0);
-	UUniformGridSlot* S1 = ModeGrid->AddChildToUniformGrid(CurbAscentButton, 0, 1);
-	UUniformGridSlot* S2 = ModeGrid->AddChildToUniformGrid(CurbDescentButton, 0, 2);
-
-	if (S0)
-		S0->SetHorizontalAlignment(HAlign_Center);
-	if (S1)
-		S1->SetHorizontalAlignment(HAlign_Center);
-	if (S2)
-		S2->SetHorizontalAlignment(HAlign_Center);
+	// Add to grid using GridColumns for layout
+	const int32				   Cols = FMath::Max(GridColumns, 1);
+	TArray<URammsImageButton*> Buttons = { SelfLevelButton, CurbAscentButton, CurbDescentButton };
+	for (int32 i = 0; i < Buttons.Num(); ++i)
+	{
+		UUniformGridSlot* CellSlot = ModeGrid->AddChildToUniformGrid(Buttons[i], i / Cols, i % Cols);
+		if (CellSlot)
+			CellSlot->SetHorizontalAlignment(HAlign_Center);
+	}
 }
 
 void URammsMebotController::NativeOnInitialized()

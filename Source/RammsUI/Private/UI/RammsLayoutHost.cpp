@@ -48,6 +48,23 @@ void URammsLayoutHost::NativeConstruct()
 	}
 }
 
+void URammsLayoutHost::NativeDestruct()
+{
+	if (bSubscribedToTransitionRequests)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+			{
+				Subsystem->OnLayoutTransitionRequested.RemoveDynamic(this, &URammsLayoutHost::HandleLayoutTransitionRequest);
+			}
+		}
+		bSubscribedToTransitionRequests = false;
+	}
+
+	Super::NativeDestruct();
+}
+
 void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -218,6 +235,11 @@ void URammsLayoutHost::AddPoolWidget(FName WidgetTag, URammsBaseWidget* Widget)
 		{
 			Entry.Widget = Widget;
 
+			if (Style)
+			{
+				Widget->SetStyle(Style);
+			}
+
 			// If active, inject immediately
 			if (URammsLayoutBase* Active = GetActiveLayout())
 			{
@@ -330,10 +352,9 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 		if (Incoming)
 		{
 			Incoming->SetRenderOpacity(0.0f);
-			// Use SelfHitTestInvisible (not HitTestInvisible) so children
-			// stay registered in the hit-test grid throughout the fade.
-			// At 0 opacity they are effectively non-clickable anyway.
-			Incoming->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			// Block all input on the incoming layout during the fade
+			// (render opacity does not affect hit-testing in UMG)
+			Incoming->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 
 		// Collapse the outgoing layout immediately (switcher already moved)
@@ -433,6 +454,7 @@ void URammsLayoutHost::FinishTransition()
 	{
 		Incoming->SetRenderOpacity(1.0f);
 		Incoming->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Incoming->InvalidateLayoutAndVolatility();
 	}
 
 	// Outgoing layout: collapsed and non-interactive
