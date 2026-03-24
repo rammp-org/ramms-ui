@@ -7,11 +7,52 @@
 #include "EngineUtils.h"
 #include "TimerManager.h"
 
+#if WITH_EDITOR
+void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Update all projectors when manager settings change
+	for (auto& Pair : Projectors)
+	{
+		URammsCameraProjectorComponent* P = Pair.Value;
+		if (!P) continue;
+
+		P->ProjectionMaterial = ProjectionMaterial;
+		P->FadeWidth = DefaultFadeWidth;
+		P->MaxProjectionDistance = DefaultMaxDistance;
+		P->TargetStencilValue = DefaultTargetStencil;
+
+		P->bEnablePGM = bEnablePGM;
+		P->PGMMaterial = PGMMaterial;
+		P->MaxEdgeStretchCM = MaxEdgeStretchCM;
+		P->DepthScaleToCM = DepthScaleToCM;
+		P->MinDepthCM = MinDepthCM;
+		P->MaxDepthCM = MaxDepthCM;
+		P->Decimation = Decimation;
+		P->SensorBaselineY = SensorBaselineY;
+		P->SyncThresholdMS = SyncThresholdMS;
+
+		P->RefreshMaterialParameters();
+	}
+}
+#endif
+
 DEFINE_LOG_CATEGORY_STATIC(LogRammsProjection, Log, All);
 
 URammsCameraProjectionManager::URammsCameraProjectionManager()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	
+	// Default PGM settings matching URammsCameraProjectorComponent
+	bEnablePGM = false;
+	MaxEdgeStretchCM = 50.0f;
+	DepthScaleToCM = 1.0f;
+	MinDepthCM = 10.0f;
+	MaxDepthCM = 1000.0f;
+	Decimation = 4;
+	SensorBaselineY = 0.0f;
+	SyncThresholdMS = 100.0f;
 }
 
 void URammsCameraProjectionManager::BeginPlay()
@@ -266,6 +307,17 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 	Projector->MaxProjectionDistance  = DefaultMaxDistance;
 	Projector->TargetStencilValue    = DefaultTargetStencil;
 
+	// Copy PGM settings
+	Projector->bEnablePGM            = bEnablePGM;
+	Projector->PGMMaterial           = PGMMaterial;
+	Projector->MaxEdgeStretchCM      = MaxEdgeStretchCM;
+	Projector->DepthScaleToCM        = DepthScaleToCM;
+	Projector->MinDepthCM            = MinDepthCM;
+	Projector->MaxDepthCM            = MaxDepthCM;
+	Projector->Decimation            = Decimation;
+	Projector->SensorBaselineY       = SensorBaselineY;
+	Projector->SyncThresholdMS       = SyncThresholdMS;
+
 	Projector->SetupAttachment(Owner->GetRootComponent());
 	Projector->RegisterComponent();
 
@@ -297,6 +349,37 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		if (Tex)
 		{
 			Projector->SetCameraTexture(Tex);
+		}
+
+		// --- Auto-Link Depth Stream ---
+		FString PotentialDepthID;
+		if (StreamID.Len() >= 3)
+		{
+			FString Prefix = StreamID.Left(StreamID.Len() - 3);
+			FString Suffix = StreamID.Right(3);
+			if (Suffix == "001") PotentialDepthID = Prefix + "101";
+			else if (Suffix == "002") PotentialDepthID = Prefix + "102";
+			else if (Suffix == "003") PotentialDepthID = Prefix + "103";
+			else if (Suffix == "000") PotentialDepthID = Prefix + "100";
+		}
+
+		if (!PotentialDepthID.IsEmpty())
+		{
+			FRammsCameraStreamInfo DepthInfo;
+			if (Iface->GetStreamInfo(PotentialDepthID, DepthInfo))
+			{
+				Projector->DepthStreamID = PotentialDepthID;
+				if (!Iface->IsStreamActive(PotentialDepthID))
+				{
+					Iface->StartStream(PotentialDepthID);
+				}
+				UTexture* DepthTex = Iface->GetStreamTexture(PotentialDepthID);
+				if (DepthTex)
+				{
+					Projector->SetDepthTexture(DepthTex, Iface->GetLastFrameTimestamp(PotentialDepthID));
+				}
+				UE_LOG(LogRammsProjection, Log, TEXT("Linked depth stream '%s' to projector '%s'"), *PotentialDepthID, *StreamID);
+			}
 		}
 
 		UE_LOG(LogRammsProjection, Log,
@@ -363,9 +446,21 @@ TArray<FString> URammsCameraProjectionManager::GetProjectorStreamIDs() const
 
 void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp)
 {
+	// 1. Try to find a projector where this is the primary (color) stream
 	if (TObjectPtr<URammsCameraProjectorComponent>* Found = Projectors.Find(StreamID))
 	{
-		(*Found)->SetCameraTexture(Texture);
+		(*Found)->SetColorTexture(Texture, Timestamp);
+		return;
+	}
+
+	// 2. Try to find a projector where this is the secondary (depth) stream
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value && Pair.Value->DepthStreamID == StreamID)
+		{
+			Pair.Value->SetDepthTexture(Texture, Timestamp);
+			return;
+		}
 	}
 }
 

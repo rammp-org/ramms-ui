@@ -32,7 +32,8 @@ public class RammsUI : ModuleRules
 				"RHI", "RenderCore", // Needed to use the RenderRequest / RHI framework
 				"Projects",
 				"UMG", // For UUserWidget and UMG components
-				"Slate", "SlateCore" // For Slate/UMG styling (FSlateFontInfo, etc.)
+				"Slate", "SlateCore", // For Slate/UMG styling (FSlateFontInfo, etc.)
+				"ProceduralMeshComponent"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -43,6 +44,7 @@ public class RammsUI : ModuleRules
 			{
 				"Json",           // FJsonObject/FJsonSerializer used by StreamCameraBridge
 				"RammsStreaming", // For stream sink → camera provider bridge
+				"CameraCapture"
 			}
 			);
 
