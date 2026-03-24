@@ -5,8 +5,6 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
-#include "Components/WidgetSwitcher.h"
-#include "Components/WidgetSwitcherSlot.h"
 
 URammsLayoutHost::URammsLayoutHost(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -69,7 +67,7 @@ void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!bTransitioning || !Switcher)
+	if (!bTransitioning || !RootOverlay)
 	{
 		return;
 	}
@@ -87,10 +85,14 @@ void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	// Smooth crossfade: ease in/out
 	float T = FMath::InterpEaseInOut(0.0f, 1.0f, TransitionAlpha, 2.0f);
 
-	// The incoming layout fades in; hit-testing is disabled until fully opaque
+	// Incoming fades in, outgoing fades out
 	if (URammsLayoutBase* Incoming = GetLayout(TransitionToName))
 	{
 		Incoming->SetRenderOpacity(T);
+	}
+	if (URammsLayoutBase* Outgoing = GetLayout(TransitionFromName))
+	{
+		Outgoing->SetRenderOpacity(1.0f - T);
 	}
 }
 
@@ -101,20 +103,10 @@ void URammsLayoutHost::BuildHostTree()
 		return;
 	}
 
-	// Overlay as root (fills the entire host)
+	// Overlay as root — layouts are direct children, stacked for crossfade
 	RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
 	RootOverlay->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	WidgetTree->RootWidget = RootOverlay;
-
-	// WidgetSwitcher inside the overlay
-	Switcher = WidgetTree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(), TEXT("LayoutSwitcher"));
-	Switcher->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-	UOverlaySlot* SwitcherSlot = RootOverlay->AddChildToOverlay(Switcher);
-	if (SwitcherSlot)
-	{
-		SwitcherSlot->SetHorizontalAlignment(HAlign_Fill);
-		SwitcherSlot->SetVerticalAlignment(VAlign_Fill);
-	}
 }
 
 // ── Layout Registration ───────────────────────────────────────────
@@ -159,16 +151,27 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 		return;
 	}
 
+	// Ensure the host tree (Overlay) is built before adding children
+	if (!RootOverlay)
+	{
+		BuildHostTree();
+	}
+
 	LayoutMap.Add(LayoutName, Layout);
 	LayoutOrder.Add(LayoutName);
 
 	// Set back-reference so the layout can find its host
 	Layout->SetOwningHost(this);
 
-	// Add to the widget switcher
-	if (Switcher)
+	// Add to the overlay (stacked — visibility controls which is shown)
+	if (RootOverlay)
 	{
-		Switcher->AddChild(Layout);
+		UOverlaySlot* LayoutSlot = RootOverlay->AddChildToOverlay(Layout);
+		if (LayoutSlot)
+		{
+			LayoutSlot->SetHorizontalAlignment(HAlign_Fill);
+			LayoutSlot->SetVerticalAlignment(VAlign_Fill);
+		}
 	}
 
 	// Propagate style
@@ -183,10 +186,6 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 		ActiveLayoutName = LayoutName;
 		Layout->SetRenderOpacity(1.0f);
 		Layout->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-		if (Switcher)
-		{
-			Switcher->SetActiveWidgetIndex(0);
-		}
 		InjectPoolWidgets(Layout);
 	}
 	else
@@ -328,13 +327,6 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 		Outgoing->ClearAllSlots();
 	}
 
-	// Switch the WidgetSwitcher to the target index
-	int32 TargetIndex = LayoutOrder.IndexOfByKey(LayoutName);
-	if (Switcher && TargetIndex != INDEX_NONE)
-	{
-		Switcher->SetActiveWidgetIndex(TargetIndex);
-	}
-
 	// Inject pool widgets into the incoming layout
 	URammsLayoutBase* Incoming = GetLayout(LayoutName);
 	if (Incoming)
@@ -345,23 +337,23 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 
 	if (bAnimated && CrossfadeDuration > 0.0f)
 	{
-		// Start crossfade: incoming starts transparent
+		// Real crossfade: both layouts visible in the overlay,
+		// incoming fades in while outgoing fades out.
 		bTransitioning = true;
 		TransitionAlpha = 0.0f;
 
 		if (Incoming)
 		{
 			Incoming->SetRenderOpacity(0.0f);
-			// Block all input on the incoming layout during the fade
-			// (render opacity does not affect hit-testing in UMG)
+			// Block input on the incoming layout during the fade
 			Incoming->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 
-		// Collapse the outgoing layout immediately (switcher already moved)
+		// Keep the outgoing layout visible so it can fade out
 		if (Outgoing)
 		{
-			Outgoing->SetVisibility(ESlateVisibility::Collapsed);
-			Outgoing->SetRenderOpacity(0.0f);
+			Outgoing->SetRenderOpacity(1.0f);
+			Outgoing->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 
 		OnLayoutTransitionStarted.Broadcast(TransitionToName, TransitionFromName);

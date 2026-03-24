@@ -67,6 +67,7 @@ void URammsLayoutManager::ClearWidgets()
 void URammsLayoutManager::TransitionTo(ERammsLayoutPreset Preset, bool bAnimated)
 {
 	CurrentPreset = Preset;
+	ActivePresetAsset = nullptr;
 	ApplyLayout(bAnimated);
 }
 

@@ -9,7 +9,6 @@
 #include "UI/RammsUIStyle.h"
 #include "RammsLayoutHost.generated.h"
 
-class UWidgetSwitcher;
 class UOverlay;
 
 /**
@@ -32,20 +31,23 @@ struct RAMMSUI_API FRammsPoolEntry
 };
 
 /**
- * Root host widget that manages layout transitions using a WidgetSwitcher.
+ * Root host widget that manages layout transitions using an Overlay.
  *
  * ## Architecture
  *
  *   LayoutHost (added to viewport once)
  *   └─ Overlay
- *      └─ WidgetSwitcher
- *         ├─ WBP_SystemOverview  (URammsLayoutBase subclass)
- *         ├─ WBP_BaseCentered    (URammsLayoutBase subclass)
- *         └─ WBP_ArmCentered    (URammsLayoutBase subclass)
+ *      ├─ WBP_SystemOverview  (URammsLayoutBase subclass)
+ *      ├─ WBP_BaseCentered    (URammsLayoutBase subclass)
+ *      └─ WBP_ArmCentered    (URammsLayoutBase subclass)
  *
  * Each layout is a URammsLayoutBase subclass with NamedSlots.
  * Functional widgets (camera, arm tasks, status) live in a **widget pool**
  * and are reparented into the active layout's slots on transition.
+ *
+ * All layouts are direct children of the Overlay, stacked on top of each
+ * other. Visibility is controlled per-layout: inactive layouts are Collapsed,
+ * the active layout is SelfHitTestInvisible with full opacity.
  *
  * ## Usage
  *
@@ -57,12 +59,12 @@ struct RAMMSUI_API FRammsPoolEntry
  *
  * ## Transition Animation
  *
- * Crossfade: the outgoing layout fades out while the incoming layout fades
- * in. Pool widgets are reparented during the transition — they are removed
- * from the outgoing layout's slots and injected into the incoming layout.
- *
- * The crossfade uses render opacity on the WidgetSwitcher children so that
- * the widgets themselves don't flicker during reparenting.
+ * True crossfade: the outgoing layout fades out (opacity 1→0) while the
+ * incoming layout fades in (opacity 0→1). Both are visible simultaneously
+ * in the Overlay during the transition. Pool widgets are reparented into the
+ * incoming layout at the start of the transition. Hit-testing on both
+ * layouts is disabled during the crossfade and restored on the incoming
+ * layout when the transition completes.
  */
 UCLASS(Blueprintable, meta = (DisplayName = "Ramms Layout Host"))
 class RAMMSUI_API URammsLayoutHost : public UUserWidget
@@ -186,19 +188,15 @@ protected:
 	void BuildHostTree();
 
 private:
-	/** Root overlay */
+	/** Root overlay — layouts are direct children, stacked for crossfade */
 	UPROPERTY()
 	TObjectPtr<UOverlay> RootOverlay;
-
-	/** Widget switcher holding all layouts */
-	UPROPERTY()
-	TObjectPtr<UWidgetSwitcher> Switcher;
 
 	/** Registered layouts: name → instance */
 	UPROPERTY()
 	TMap<FName, TObjectPtr<URammsLayoutBase>> LayoutMap;
 
-	/** Ordered list of layout names (matches switcher child order) */
+	/** Ordered list of layout names */
 	UPROPERTY()
 	TArray<FName> LayoutOrder;
 
