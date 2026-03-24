@@ -9,11 +9,14 @@
 
 class UDecalComponent;
 class UMaterialInstanceDynamic;
+class UProceduralMeshComponent;
 
 /**
- * Projects a single camera feed onto scene surfaces using a deferred decal.
+ * Projects a single camera feed onto scene surfaces using a deferred decal
+ * and/or a 3D Projective Grid Mesh (PGM).
  *
- * Place this component at the camera's world pose (extrinsic). The component
+ * Place this component at the camera's world pose (extrinsic).
+ The component
  * creates a UDecalComponent internally and drives a projection material with
  * the camera's intrinsic parameters.
  *
@@ -79,11 +82,61 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	int32 TargetStencilValue = 200;
 
+	// ── PGM Configuration ──────────────────────────────
+
+	/** Enable/disable Projective Grid Mesh (3D Point Cloud/Mesh) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM")
+	bool bEnablePGM = false;
+
+	/** Material used for PGM rendering (requires Vertex Color node) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	TObjectPtr<UMaterialInterface> PGMMaterial;
+
+	/** Maximum allowed edge length between vertices to form a face (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float MaxEdgeStretchCM = 50.0f;
+
+	/** Multiplier to convert raw depth texture values to Centimeters */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float DepthScaleToCM = 1.0f;
+
+	/** Minimum depth to consider valid (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float MinDepthCM = 10.0f;
+
+	/** Maximum depth to consider valid (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float MaxDepthCM = 1000.0f;
+
+	/** Decimation factor (1 = full res, 2 = half res, 4 = quarter res) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM", ClampMin = "1"))
+	int32 Decimation = 4;
+
+	/** Offset applied to RGB sampling due to sensor displacement (cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float SensorBaselineY = 0.0f;
+
+	/** Sync threshold between RGB and Depth frames (milliseconds) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	float SyncThresholdMS = 100.0f;
+
+	/** The ID of the corresponding depth stream */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM")
+	FString DepthStreamID;
+
 	// ── Blueprint API ──────────────────────────────────
 
 	/** Set the camera texture to project */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetCameraTexture(UTexture* Texture);
+
+	/** Set the depth texture for PGM generation */
+	UFUNCTION(BlueprintCallable, Category = "Projection")
+	void SetDepthTexture(UTexture* Texture, int64 Timestamp);
+
+	/** Updated camera texture set with timestamp for sync */
+	UFUNCTION(BlueprintCallable, Category = "Projection")
+	void SetColorTexture(UTexture* Texture, int64 Timestamp);
 
 	/** Populate intrinsics from a camera stream info struct */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
@@ -114,9 +167,21 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MaterialInstance;
 
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> ProcMeshComponent;
+
 private:
 	void EnsureDecalCreated();
+	void EnsurePGMCreated();
 	void UpdateDecalSize();
 	void UpdateMaterialParameters();
 	void UpdateCameraTransformParameters();
+
+	void UpdatePGM();
+
+	// State trackers
+	TObjectPtr<UTexture> CurrentColorTexture;
+	TObjectPtr<UTexture> CurrentDepthTexture;
+	int64 LastColorTimestamp = 0;
+	int64 LastDepthTimestamp = 0;
 };

@@ -7,11 +7,52 @@
 #include "EngineUtils.h"
 #include "TimerManager.h"
 
+#if WITH_EDITOR
+void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Update all projectors when manager settings change
+	for (auto& Pair : Projectors)
+	{
+		URammsCameraProjectorComponent* P = Pair.Value;
+		if (!P) continue;
+
+		P->ProjectionMaterial = ProjectionMaterial;
+		P->FadeWidth = DefaultFadeWidth;
+		P->MaxProjectionDistance = DefaultMaxDistance;
+		P->TargetStencilValue = DefaultTargetStencil;
+
+		P->bEnablePGM = bEnablePGM;
+		P->PGMMaterial = PGMMaterial;
+		P->MaxEdgeStretchCM = MaxEdgeStretchCM;
+		P->DepthScaleToCM = DepthScaleToCM;
+		P->MinDepthCM = MinDepthCM;
+		P->MaxDepthCM = MaxDepthCM;
+		P->Decimation = Decimation;
+		P->SensorBaselineY = SensorBaselineY;
+		P->SyncThresholdMS = SyncThresholdMS;
+
+		P->RefreshMaterialParameters();
+	}
+}
+#endif
+
 DEFINE_LOG_CATEGORY_STATIC(LogRammsProjection, Log, All);
 
 URammsCameraProjectionManager::URammsCameraProjectionManager()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	
+	// Default PGM settings matching URammsCameraProjectorComponent
+	bEnablePGM = false;
+	MaxEdgeStretchCM = 50.0f;
+	DepthScaleToCM = 1.0f;
+	MinDepthCM = 10.0f;
+	MaxDepthCM = 1000.0f;
+	Decimation = 4;
+	SensorBaselineY = 0.0f;
+	SyncThresholdMS = 100.0f;
 }
 
 void URammsCameraProjectionManager::BeginPlay()
@@ -33,12 +74,13 @@ void URammsCameraProjectionManager::BeginPlay()
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().SetTimer(
-				DeferredDiscoveryHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
+				DeferredDiscoveryHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+				{
 					UE_LOG(LogRammsProjection, Log, TEXT("Deferred discovery timer fired"));
 					DiscoverProviders();
 				}),
-				0.1f, // small delay to ensure all BeginPlays have completed
-				false // one-shot
+				0.1f,  // small delay to ensure all BeginPlays have completed
+				false   // one-shot
 			);
 		}
 	}
@@ -60,8 +102,7 @@ void URammsCameraProjectionManager::EndPlay(EEndPlayReason::Type EndPlayReason)
 void URammsCameraProjectionManager::DiscoverProviders()
 {
 	UWorld* World = GetWorld();
-	if (!World)
-		return;
+	if (!World) return;
 
 	int32 NewCount = 0;
 
@@ -70,10 +111,8 @@ void URammsCameraProjectionManager::DiscoverProviders()
 	UGameplayStatics::GetAllActorsWithInterface(World, URammsCameraProvider::StaticClass(), ProviderActors);
 	for (AActor* Actor : ProviderActors)
 	{
-		if (Actor == GetOwner())
-			continue;
-		if (IsProviderBound(Actor))
-			continue;
+		if (Actor == GetOwner()) continue;
+		if (IsProviderBound(Actor)) continue;
 		if (IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Actor))
 		{
 			BindProvider(Actor, Iface);
@@ -92,8 +131,7 @@ void URammsCameraProjectionManager::DiscoverProviders()
 		(*It)->GetComponents<URammsCameraProviderComponent>(Comps);
 		for (URammsCameraProviderComponent* Comp : Comps)
 		{
-			if (IsProviderBound(Comp))
-				continue;
+			if (IsProviderBound(Comp)) continue;
 			BindProvider(Comp, static_cast<IRammsCameraProvider*>(Comp));
 			CreateProjectorsForProvider(static_cast<IRammsCameraProvider*>(Comp));
 			UE_LOG(LogRammsProjection, Log,
@@ -156,12 +194,10 @@ void URammsCameraProjectionManager::SetCameraProvider(TScriptInterface<IRammsCam
 	UnbindAllProviders();
 
 	UObject* Obj = Provider.GetObject();
-	if (!Obj)
-		return;
+	if (!Obj) return;
 
 	IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Obj);
-	if (!Iface)
-		return;
+	if (!Iface) return;
 
 	BindProvider(Obj, Iface);
 
@@ -174,14 +210,11 @@ void URammsCameraProjectionManager::SetCameraProvider(TScriptInterface<IRammsCam
 void URammsCameraProjectionManager::AddCameraProvider(TScriptInterface<IRammsCameraProvider> Provider)
 {
 	UObject* Obj = Provider.GetObject();
-	if (!Obj)
-		return;
-	if (IsProviderBound(Obj))
-		return;
+	if (!Obj) return;
+	if (IsProviderBound(Obj)) return;
 
 	IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Obj);
-	if (!Iface)
-		return;
+	if (!Iface) return;
 
 	BindProvider(Obj, Iface);
 
@@ -228,8 +261,7 @@ void URammsCameraProjectionManager::UnbindAllProviders()
 
 void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProvider* Iface)
 {
-	if (!Iface)
-		return;
+	if (!Iface) return;
 
 	TArray<FRammsCameraStreamInfo> Streams = Iface->GetAvailableStreams();
 	UE_LOG(LogRammsProjection, Log, TEXT("CreateProjectorsForProvider: %d available stream(s)"), Streams.Num());
@@ -241,8 +273,12 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 			*Info.StreamID, Info.bIsDepth ? 1 : 0, Info.Width, Info.Height,
 			Info.Intrinsics.Num(), Info.bHasExtrinsic ? 1 : 0);
 
-		if (Info.FrameCategory != ERammsFrameCategory::Visual || Projectors.Contains(Info.StreamID))
+		// TODO: @alex ask William about this filtering intention, my merge has made this weird
+	    if (Info.FrameCategory != ERammsFrameCategory::Visual)
 			continue;
+		if (Info.bIsDepth || Projectors.Contains(Info.StreamID))
+			continue;
+		// TODO: @alex check if these exclusions and skips mess up PGM
 		if (bSkipDepthStreams && Info.bIsDepth)
 			continue;
 		if (ExcludeStreamIDs.Contains(Info.StreamID))
@@ -274,10 +310,21 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		return nullptr;
 
 	URammsCameraProjectorComponent* Projector = NewObject<URammsCameraProjectorComponent>(Owner);
-	Projector->ProjectionMaterial = ProjectionMaterial;
-	Projector->FadeWidth = DefaultFadeWidth;
-	Projector->MaxProjectionDistance = DefaultMaxDistance;
-	Projector->TargetStencilValue = DefaultTargetStencil;
+	Projector->ProjectionMaterial    = ProjectionMaterial;
+	Projector->FadeWidth             = DefaultFadeWidth;
+	Projector->MaxProjectionDistance  = DefaultMaxDistance;
+	Projector->TargetStencilValue    = DefaultTargetStencil;
+
+	// Copy PGM settings
+	Projector->bEnablePGM            = bEnablePGM;
+	Projector->PGMMaterial           = PGMMaterial;
+	Projector->MaxEdgeStretchCM      = MaxEdgeStretchCM;
+	Projector->DepthScaleToCM        = DepthScaleToCM;
+	Projector->MinDepthCM            = MinDepthCM;
+	Projector->MaxDepthCM            = MaxDepthCM;
+	Projector->Decimation            = Decimation;
+	Projector->SensorBaselineY       = SensorBaselineY;
+	Projector->SyncThresholdMS       = SyncThresholdMS;
 
 	Projector->SetupAttachment(Owner->GetRootComponent());
 	Projector->RegisterComponent();
@@ -310,6 +357,37 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		if (Tex)
 		{
 			Projector->SetCameraTexture(Tex);
+		}
+
+		// --- Auto-Link Depth Stream ---
+		FString PotentialDepthID;
+		if (StreamID.Len() >= 3)
+		{
+			FString Prefix = StreamID.Left(StreamID.Len() - 3);
+			FString Suffix = StreamID.Right(3);
+			if (Suffix == "001") PotentialDepthID = Prefix + "101";
+			else if (Suffix == "002") PotentialDepthID = Prefix + "102";
+			else if (Suffix == "003") PotentialDepthID = Prefix + "103";
+			else if (Suffix == "000") PotentialDepthID = Prefix + "100";
+		}
+
+		if (!PotentialDepthID.IsEmpty())
+		{
+			FRammsCameraStreamInfo DepthInfo;
+			if (Iface->GetStreamInfo(PotentialDepthID, DepthInfo))
+			{
+				Projector->DepthStreamID = PotentialDepthID;
+				if (!Iface->IsStreamActive(PotentialDepthID))
+				{
+					Iface->StartStream(PotentialDepthID);
+				}
+				UTexture* DepthTex = Iface->GetStreamTexture(PotentialDepthID);
+				if (DepthTex)
+				{
+					Projector->SetDepthTexture(DepthTex, Iface->GetLastFrameTimestamp(PotentialDepthID));
+				}
+				UE_LOG(LogRammsProjection, Log, TEXT("Linked depth stream '%s' to projector '%s'"), *PotentialDepthID, *StreamID);
+			}
 		}
 
 		UE_LOG(LogRammsProjection, Log,
@@ -376,9 +454,21 @@ TArray<FString> URammsCameraProjectionManager::GetProjectorStreamIDs() const
 
 void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp)
 {
+	// 1. Try to find a projector where this is the primary (color) stream
 	if (TObjectPtr<URammsCameraProjectorComponent>* Found = Projectors.Find(StreamID))
 	{
-		(*Found)->SetCameraTexture(Texture);
+		(*Found)->SetColorTexture(Texture, Timestamp);
+		return;
+	}
+
+	// 2. Try to find a projector where this is the secondary (depth) stream
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value && Pair.Value->DepthStreamID == StreamID)
+		{
+			Pair.Value->SetDepthTexture(Texture, Timestamp);
+			return;
+		}
 	}
 }
 
@@ -394,12 +484,8 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 		if (Iface)
 		{
 			FRammsCameraStreamInfo Info;
-			if (Iface->GetStreamInfo(StreamID, Info) && Info.FrameCategory == ERammsFrameCategory::Visual)
+			if (Iface->GetStreamInfo(StreamID, Info) && !Info.bIsDepth)
 			{
-				if ((bSkipDepthStreams && Info.bIsDepth) || ExcludeStreamIDs.Contains(StreamID))
-				{
-					return;
-				}
 				URammsCameraProjectorComponent* Projector = AddProjector(StreamID);
 				if (Projector)
 				{

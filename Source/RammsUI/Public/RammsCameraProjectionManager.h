@@ -63,6 +63,44 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
 	TArray<FString> ExcludeStreamIDs;
 
+	// ── PGM Configuration ──────────────────────────────
+
+	/** Enable/disable Projective Grid Mesh (3D Point Cloud/Mesh) globally */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM")
+	bool bEnablePGM = false;
+
+	/** Material used for PGM rendering (requires Vertex Color node) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	TObjectPtr<UMaterialInterface> PGMMaterial;
+
+	/** Maximum allowed edge length between vertices to form a face (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float MaxEdgeStretchCM = 50.0f;
+
+	/** Multiplier to convert raw depth texture values to Centimeters */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float DepthScaleToCM = 1.0f;
+
+	/** Minimum depth to consider valid (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float MinDepthCM = 10.0f;
+
+	/** Maximum depth to consider valid (in cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float MaxDepthCM = 1000.0f;
+
+	/** Decimation factor (1 = full res, 2 = half res, 4 = quarter res) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM", ClampMin = "1"))
+	int32 Decimation = 4;
+
+	/** Offset applied to RGB sampling due to sensor displacement (cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float SensorBaselineY = 0.0f;
+
+	/** Sync threshold between RGB and Depth frames (milliseconds) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	float SyncThresholdMS = 100.0f;
+
 	// ── Blueprint API ──────────────────────────────────
 
 	/** Connect to a camera provider — starts listening for streams */
@@ -105,6 +143,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 	UPROPERTY()
 	TMap<FString, TObjectPtr<URammsCameraProjectorComponent>> Projectors;
 
@@ -113,9 +155,9 @@ private:
 	struct FProviderBinding
 	{
 		TWeakObjectPtr<UObject> Object;
-		FDelegateHandle			FrameReadyHandle;
-		FDelegateHandle			StreamStatusHandle;
-		FDelegateHandle			ExtrinsicUpdatedHandle;
+		FDelegateHandle FrameReadyHandle;
+		FDelegateHandle StreamStatusHandle;
+		FDelegateHandle ExtrinsicUpdatedHandle;
 	};
 
 	TArray<FProviderBinding> ProviderBindings;

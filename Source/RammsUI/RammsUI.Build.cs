@@ -33,7 +33,8 @@ public class RammsUI : ModuleRules
 				"Projects",
 				"UMG", // For UUserWidget and UMG components
 				"Slate", "SlateCore", // For Slate/UMG styling (FSlateFontInfo, etc.)
-				"RammsStreaming" // Public: RammsStreamProtocol.h exposed via RammsStreamCameraBridge.h
+				"RammsStreaming", // Public: RammsStreamProtocol.h exposed via RammsStreamCameraBridge.h
+				"ProceduralMeshComponent"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -43,6 +44,7 @@ public class RammsUI : ModuleRules
 			new string[]
 			{
 				"Json",           // FJsonObject/FJsonSerializer used by StreamCameraBridge
+				"CameraCapture"   // TODO: @alex check if I need this as a private dependency 
 			}
 			);
 
