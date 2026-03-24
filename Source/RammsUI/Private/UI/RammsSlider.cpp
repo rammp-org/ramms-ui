@@ -35,7 +35,7 @@ void URammsSlider::BuildWidgetTree()
 	ContainerBorder->AddChild(ContentVBox);
 
 	// Row 1: HorizontalBox with SliderLabel (left) + ValueLabel (right)
-	UHorizontalBox* LabelRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("LabelRow"));
+	UHorizontalBox*	  LabelRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("LabelRow"));
 	UVerticalBoxSlot* LabelRowSlot = ContentVBox->AddChildToVerticalBox(LabelRow);
 	if (LabelRowSlot)
 	{

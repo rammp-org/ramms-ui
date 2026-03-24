@@ -233,7 +233,7 @@ void URammsCollapsibleContainer::NativeConstruct()
 
 	if (ToggleButton)
 	{
-		ToggleButton->OnClicked.AddDynamic(this, &URammsCollapsibleContainer::OnToggleClicked);
+		ToggleButton->OnClicked.AddUniqueDynamic(this, &URammsCollapsibleContainer::OnToggleClicked);
 	}
 
 	UpdateToggleIcon();
@@ -678,8 +678,12 @@ void URammsCollapsibleContainer::UpdateParentSlotSize(float Alpha)
 		}
 	}
 
-	float ContentH = CachedExpandedSlotSize.Y - HeaderH;
-	float NewHeight = HeaderH + ContentH * Alpha;
+	// Account for container border padding (top + bottom)
+	float BorderPad = ContainerBorder ? ContainerBorder->GetPadding().GetTotalSpaceAlong<Orient_Vertical>() : 2.0f;
+	float MinHeight = HeaderH + BorderPad;
+
+	float ContentH = CachedExpandedSlotSize.Y - MinHeight;
+	float NewHeight = FMath::Max(MinHeight + ContentH * Alpha, MinHeight);
 	CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, NewHeight));
 }
 

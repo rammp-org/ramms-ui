@@ -146,8 +146,8 @@ public:
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void RebuildItems();
-	UButton* CreateItemButton(const FRammsToolbarItem& Item);
+	void		 RebuildItems();
+	UButton*	 CreateItemButton(const FRammsToolbarItem& Item);
 
 	UFUNCTION()
 	void OnButtonClicked();

@@ -34,5 +34,5 @@ void FRammsUIModule::ShutdownModule()
 }
 
 #undef LOCTEXT_NAMESPACE
-	
+
 IMPLEMENT_MODULE(FRammsUIModule, RammsUI)

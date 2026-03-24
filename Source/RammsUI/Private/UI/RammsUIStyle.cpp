@@ -28,7 +28,7 @@ void URammsUIStyle::ApplyScrollBarStyle(UScrollBox* ScrollBox, const FRammsScrol
 	float R = SBS.CornerRadius;
 
 	// Thumb brushes (rounded, semi-transparent)
-	FSlateBrush ThumbNormal  = MakeRoundedBoxBrush(SBS.ThumbNormalColor, R);
+	FSlateBrush ThumbNormal = MakeRoundedBoxBrush(SBS.ThumbNormalColor, R);
 	FSlateBrush ThumbHovered = MakeRoundedBoxBrush(SBS.ThumbHoveredColor, R);
 	FSlateBrush ThumbDragged = MakeRoundedBoxBrush(SBS.ThumbDraggedColor, R);
 
@@ -55,7 +55,7 @@ void URammsUIStyle::ApplyScrollBarStyle(UScrollBox* ScrollBox, const FRammsScrol
 	if (SBS.bDisableEdgeShadows)
 	{
 		FScrollBoxStyle BoxStyle = ScrollBox->GetWidgetStyle();
-		FSlateBrush EmptyBrush;
+		FSlateBrush		EmptyBrush;
 		EmptyBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
 		BoxStyle.SetTopShadowBrush(EmptyBrush);
 		BoxStyle.SetBottomShadowBrush(EmptyBrush);
@@ -88,7 +88,7 @@ void URammsUIStyle::ApplySliderStyle(USlider* Slider, const FRammsSliderStyle& S
 	BarNormal.SetImageSize(FVector2D(SS.BarThickness, SS.BarThickness));
 
 	FLinearColor BarHoverColor = FLinearColor::LerpUsingHSV(SS.TrackColor, SS.ActiveBarColor, 0.15f);
-	FSlateBrush BarHovered = MakeRoundedBoxBrush(BarHoverColor, BarRadius);
+	FSlateBrush	 BarHovered = MakeRoundedBoxBrush(BarHoverColor, BarRadius);
 	BarHovered.SetImageSize(FVector2D(SS.BarThickness, SS.BarThickness));
 
 	FSlateBrush BarDisabled = MakeRoundedBoxBrush(SS.DisabledColor, BarRadius);

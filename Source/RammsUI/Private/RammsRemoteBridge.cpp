@@ -258,8 +258,7 @@ bool URammsRemoteBridge::ShowNotification(const FString& Message,
 		FText::FromString(Message),
 		Level,
 		Duration,
-		Title.IsEmpty() ? FText() : FText::FromString(Title)
-	);
+		Title.IsEmpty() ? FText() : FText::FromString(Title));
 
 	// Add to the container's vertical box
 	Container->AddNotification(Notification);

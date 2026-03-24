@@ -82,7 +82,7 @@ void URammsRadioButton::NativeDestruct()
 	if (GroupID != NAME_None && RadioGroups.Contains(GroupID))
 	{
 		RadioGroups[GroupID].Remove(this);
-		
+
 		// Clean up empty groups
 		if (RadioGroups[GroupID].Num() == 0)
 		{

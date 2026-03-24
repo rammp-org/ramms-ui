@@ -92,6 +92,19 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
 	bool GetArmState(FRammsArmState& OutState) const;
 
+	// ── Arm Task Selection ───────────────────────────────────────
+
+	/**
+	 * Request an arm task (OpenDoor, OrderDrink, Drink, or None to cancel)
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
+	bool RequestArmTask(ERammsArmTask Task);
+
+	/** Get the currently active arm task */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
+	ERammsArmTask GetCurrentArmTask() const;
+
 	// ── MEBot / Chair Control ─────────────────────────────────────
 
 	/**
@@ -104,6 +117,25 @@ public:
 	/** Get the currently active MEBot mode */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|MEBot")
 	ERammsMebotMode GetCurrentMebotMode() const;
+
+	// ── Seat Control ─────────────────────────────────────────────
+
+	/**
+	 * Request a seat axis adjustment (incremental delta)
+	 * @param Axis - which seat axis to adjust
+	 * @param Delta - signed delta to apply (positive = increase)
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Seat")
+	bool RequestSeatAdjust(ERammsSeatAxis Axis, float Delta);
+
+	/**
+	 * Get the current seat state (all axes)
+	 * @param OutState - populated with current axis values
+	 * @return true if seat state is available
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Seat")
+	bool GetSeatState(FRammsSeatState& OutState) const;
 
 	// ── Movement ──────────────────────────────────────────────────
 

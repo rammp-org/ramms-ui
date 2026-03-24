@@ -11,6 +11,7 @@
 #include "Components/SizeBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/VerticalBox.h"
+#include "Widgets/Layout/SBox.h"
 #include "EngineUtils.h"
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
@@ -24,9 +25,12 @@ void URammsCameraWidget::ResetCachedWidgets()
 	CollapseButton = nullptr;
 	CollapseIcon = nullptr;
 	CameraSizeBox = nullptr;
-	DepthImage = nullptr;
+	DataImage = nullptr;
 	ViewModeButton = nullptr;
 	ViewModeLabel = nullptr;
+	OptionButton = nullptr;
+	OptionLabel = nullptr;
+	ImageAspectRatioBox = nullptr;
 }
 
 void URammsCameraWidget::BuildWidgetTree()
@@ -34,9 +38,22 @@ void URammsCameraWidget::BuildWidgetTree()
 	if (!WidgetTree || CameraBorder)
 		return;
 
-	// Root: Overlay
+	// Root: Overlay (optionally wrapped in aspect ratio SizeBox)
 	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
-	WidgetTree->RootWidget = RootOverlay;
+
+	if (bMaintainAspectRatio && !bCollapsible)
+	{
+		// Non-collapsible: AR box wraps entire widget (title overlays on image)
+		ImageAspectRatioBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ImageAspectRatioBox"));
+		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+		WidgetTree->RootWidget = ImageAspectRatioBox;
+		ImageAspectRatioBox->AddChild(RootOverlay);
+	}
+	else
+	{
+		WidgetTree->RootWidget = RootOverlay;
+	}
 
 	if (bCollapsible)
 	{
@@ -105,6 +122,22 @@ void URammsCameraWidget::BuildWidgetTree()
 		ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		ViewModeButton->AddChild(ViewModeLabel);
 
+		// Data stream option cycling button (hidden until config has options)
+		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
+		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		UHorizontalBoxSlot* OptBtnSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+		if (OptBtnSlot)
+		{
+			OptBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			OptBtnSlot->SetVerticalAlignment(VAlign_Center);
+			OptBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+		}
+		OptionLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("OptionLabel"));
+		OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
+		OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+		OptionButton->AddChild(OptionLabel);
+		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+
 		// SizeBox wrapping camera content(Fill = takes remaining space, for collapse animation)
 		CameraSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CameraSizeBox"));
 		CameraSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
@@ -122,9 +155,10 @@ void URammsCameraWidget::BuildWidgetTree()
 			FLinearColor(0.1f, 0.1f, 0.1f, 1.0f), FVector4(0.0f, 0.0f, 4.0f, 4.0f));
 		CameraBorder->SetPadding(FMargin(BorderThickness));
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
+
 		CameraSizeBox->AddChild(CameraBorder);
 
-		// HBox to hold RGB image and optional depth image side-by-side
+		// HBox to hold RGB image and optional data image side-by-side
 		UHorizontalBox* ImageHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageHBox"));
 		CameraBorder->AddChild(ImageHBox);
 
@@ -148,25 +182,25 @@ void URammsCameraWidget::BuildWidgetTree()
 			RGBSlot->SetVerticalAlignment(VAlign_Fill);
 		}
 
-		DepthImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DepthImage"));
-		DepthImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
+		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 		{
-			FSlateBrush ImgBrush = DepthImage->GetBrush();
+			FSlateBrush ImgBrush = DataImage->GetBrush();
 			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
 			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
 			ImgBrush.OutlineSettings.CornerRadii = FVector4(0.0f, 0.0f, InnerR, InnerR);
 			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 			ImgBrush.OutlineSettings.Width = 0.0f;
-			DepthImage->SetBrush(ImgBrush);
+			DataImage->SetBrush(ImgBrush);
 		}
-		DepthImage->SetVisibility(ESlateVisibility::Collapsed); // hidden unless SideBySide
-		UHorizontalBoxSlot* DepthSlot = ImageHBox->AddChildToHorizontalBox(DepthImage);
-		if (DepthSlot)
+		DataImage->SetVisibility(ESlateVisibility::Collapsed); // hidden unless SideBySide
+		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
+		if (DataSlot)
 		{
-			DepthSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			DepthSlot->SetHorizontalAlignment(HAlign_Fill);
-			DepthSlot->SetVerticalAlignment(VAlign_Fill);
-			DepthSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
+			DataSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			DataSlot->SetHorizontalAlignment(HAlign_Fill);
+			DataSlot->SetVerticalAlignment(VAlign_Fill);
+			DataSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
 		}
 
 		// Initial collapsed state: HeightOverride(0) + HitTestInvisible (stays in layout for width)
@@ -178,6 +212,12 @@ void URammsCameraWidget::BuildWidgetTree()
 			CameraSizeBox->SetRenderOpacity(0.0f);
 			CollapseProgress = 0.0f;
 			CollapseTarget = 0.0f;
+			// Clear aspect ratio so collapsed header isn't forced to image AR
+			if (ImageAspectRatioBox && bMaintainAspectRatio)
+			{
+				ImageAspectRatioBox->ClearMinAspectRatio();
+				ImageAspectRatioBox->ClearMaxAspectRatio();
+			}
 		}
 	}
 	else
@@ -220,25 +260,25 @@ void URammsCameraWidget::BuildWidgetTree()
 			RGBSlot->SetVerticalAlignment(VAlign_Fill);
 		}
 
-		DepthImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DepthImage"));
-		DepthImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
+		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 		{
-			FSlateBrush ImgBrush = DepthImage->GetBrush();
+			FSlateBrush ImgBrush = DataImage->GetBrush();
 			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
 			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
 			ImgBrush.OutlineSettings.CornerRadii = FVector4(InnerR, InnerR, InnerR, InnerR);
 			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 			ImgBrush.OutlineSettings.Width = 0.0f;
-			DepthImage->SetBrush(ImgBrush);
+			DataImage->SetBrush(ImgBrush);
 		}
-		DepthImage->SetVisibility(ESlateVisibility::Collapsed);
-		UHorizontalBoxSlot* DepthSlot = ImageHBox->AddChildToHorizontalBox(DepthImage);
-		if (DepthSlot)
+		DataImage->SetVisibility(ESlateVisibility::Collapsed);
+		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
+		if (DataSlot)
 		{
-			DepthSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			DepthSlot->SetHorizontalAlignment(HAlign_Fill);
-			DepthSlot->SetVerticalAlignment(VAlign_Fill);
-			DepthSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
+			DataSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			DataSlot->SetHorizontalAlignment(HAlign_Fill);
+			DataSlot->SetVerticalAlignment(VAlign_Fill);
+			DataSlot->SetPadding(FMargin(2.0f, 0.0f, 0.0f, 0.0f));
 		}
 
 		if (bShowLabel)
@@ -285,6 +325,22 @@ void URammsCameraWidget::BuildWidgetTree()
 			ViewModeLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 			ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			ViewModeButton->AddChild(ViewModeLabel);
+
+			// Data stream option cycling button (hidden until config has options)
+			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
+			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			UHorizontalBoxSlot* OptSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+			if (OptSlot)
+			{
+				OptSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				OptSlot->SetVerticalAlignment(VAlign_Center);
+				OptSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			}
+			OptionLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("OptionLabel"));
+			OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
+			OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+			OptionButton->AddChild(OptionLabel);
+			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }
@@ -304,18 +360,35 @@ void URammsCameraWidget::NativeConstruct()
 
 	Super::NativeConstruct();
 
+	// SBox with aspect ratio constraint centers child vertically when VAlign=Fill.
+	// Force VAlign_Top so the widget anchors at the top of its slot.
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		if (TSharedPtr<SBox> SlateSizeBox = StaticCastSharedPtr<SBox>(ImageAspectRatioBox->GetCachedWidget()))
+		{
+			SlateSizeBox->SetVAlign(VAlign_Top);
+		}
+	}
+
 	// Bind collapse button
 	if (CollapseButton && bCollapsible)
 	{
-		CollapseButton->OnClicked.AddDynamic(this, &URammsCameraWidget::OnCollapseClicked);
+		CollapseButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnCollapseClicked);
 	}
 	UpdateCollapseIcon();
 
 	// Bind view mode button
 	if (ViewModeButton)
 	{
-		ViewModeButton->OnClicked.AddDynamic(this, &URammsCameraWidget::OnViewModeClicked);
+		ViewModeButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnViewModeClicked);
 	}
+
+	// Bind option cycling button
+	if (OptionButton)
+	{
+		OptionButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnOptionClicked);
+	}
+	UpdateOptionButton();
 	ApplyViewModeLayout();
 
 	// Cache expanded slot size for Canvas Panel parents
@@ -330,7 +403,7 @@ void URammsCameraWidget::NativeConstruct()
 		if (UWorld* World = GetWorld())
 		{
 			// Collect all providers (actor-based and component-based)
-			TArray<UObject*> ProviderObjs;
+			TArray<UObject*>			  ProviderObjs;
 			TArray<IRammsCameraProvider*> ProviderIfaces;
 
 			for (TActorIterator<AActor> It(World); It; ++It)
@@ -365,7 +438,8 @@ void URammsCameraWidget::NativeConstruct()
 						break;
 					}
 				}
-				if (CameraProvider.GetInterface()) break;
+				if (CameraProvider.GetInterface())
+					break;
 			}
 
 			// Fall back to first provider if none had the stream yet
@@ -450,6 +524,18 @@ void URammsCameraWidget::SynchronizeProperties()
 	{
 		UpdateCollapseIcon();
 	}
+
+	// Ensure SBox VAlign_Top for AR constraint (designer + runtime)
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		if (TSharedPtr<SBox> SlateSizeBox = StaticCastSharedPtr<SBox>(ImageAspectRatioBox->GetCachedWidget()))
+		{
+			SlateSizeBox->SetVAlign(VAlign_Top);
+		}
+	}
+
+	// Update layout in designer so CornerSize/WindowedSize/AR are reflected
+	UpdateLayout(false);
 }
 
 void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -469,19 +555,24 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 
 	// Animate content height via HeightOverride (Auto slot during animation)
 	float ContentH = CachedContentHeight;
-	if (ContentH <= 0.0f) ContentH = 200.0f;
+	if (ContentH <= 0.0f)
+		ContentH = 200.0f;
 	CameraSizeBox->SetHeightOverride(ContentH * Alpha);
 	CameraSizeBox->SetRenderOpacity(Alpha);
 
 	// Also animate Canvas Panel slot if applicable
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
-	float TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
-	if (TitleH <= 0.0f) TitleH = 24.0f;
+	float			  TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
+	if (TitleH <= 0.0f)
+		TitleH = 24.0f;
+	// Minimum slot height = title bar (CameraBorder is inside CameraSizeBox which collapses to 0)
+	float MinSlotH = TitleH;
 
 	if (CanvasSlot && CachedExpandedSlotSize.Y > 0.0f)
 	{
-		float SlotContentH = CachedExpandedSlotSize.Y - TitleH;
-		CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, TitleH + SlotContentH * Alpha));
+		float SlotContentH = CachedExpandedSlotSize.Y - MinSlotH;
+		float NewH = FMath::Max(MinSlotH + SlotContentH * Alpha, MinSlotH);
+		CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, NewH));
 	}
 
 	if (FMath::IsNearlyEqual(CollapseProgress, CollapseTarget, 0.01f))
@@ -500,6 +591,12 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 			{
 				CanvasSlot->SetSize(CachedExpandedSlotSize);
 			}
+			// Restore aspect ratio constraint now that fully expanded
+			if (ImageAspectRatioBox && bMaintainAspectRatio)
+			{
+				ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+				ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+			}
 		}
 		else
 		{
@@ -508,6 +605,15 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 			CameraSizeBox->SetHeightOverride(0.0f);
 			CameraSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
 			CameraSizeBox->SetRenderOpacity(0.0f);
+			// Clamp canvas slot to minimum header size
+			if (CanvasSlot)
+			{
+				FVector2D SlotSize = CanvasSlot->GetSize();
+				if (SlotSize.Y < MinSlotH)
+				{
+					CanvasSlot->SetSize(FVector2D(SlotSize.X, MinSlotH));
+				}
+			}
 		}
 	}
 }
@@ -554,7 +660,7 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 	if (TitleBar)
 	{
 		TitleBar->SetVisibility(bShowLabel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		
+
 		// Set label text
 		FText LabelText = CustomLabel.IsEmpty() ? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID) : CustomLabel;
 		if (CameraLabel)
@@ -641,9 +747,9 @@ void URammsCameraWidget::SetTexture(UTexture* Texture)
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthTexture(UTexture* Texture)
+void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 {
-	CurrentDepthTexture = Texture;
+	CurrentDataTexture = Texture;
 	UpdateDisplayedImages();
 }
 
@@ -657,100 +763,169 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	}
 
 	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
-	if (ViewportScale <= 0.0f) ViewportScale = 1.0f;
+	if (ViewportScale <= 0.0f)
+		ViewportScale = 1.0f;
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
+
+	// Title bar height to reserve when collapsible (header sits above image)
+	float TitleH = 0.0f;
+	if (bCollapsible && TitleBar)
+	{
+		FVector2D TitleSize = TitleBar->GetDesiredSize();
+		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : 24.0f;
+	}
 
 	// Detect if we're inside a Canvas Panel or added directly to viewport
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 
 	switch (DisplayMode)
 	{
-	case ERammsCameraDisplayMode::Fullscreen:
-	{
-		if (CanvasSlot)
+		case ERammsCameraDisplayMode::Fullscreen:
 		{
-			// Stretch anchors fill entire Canvas Panel
-			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-			CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
-		}
-		else
-		{
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetPositionInViewport(FVector2D::ZeroVector, false);
-			SetDesiredSizeInViewport(FVector2D::ZeroVector);
-		}
-		WidgetPosition = FVector2D::ZeroVector;
-		if (bAnimate) ScaleIn();
-		break;
-	}
-
-	case ERammsCameraDisplayMode::Windowed:
-	{
-		if (CanvasSlot)
-		{
-			// Don't override Canvas Panel layout in Windowed mode —
-			// let the user's designer/anchor settings control position and size
-			CachedExpandedSlotSize = CanvasSlot->GetSize();
-		}
-		else
-		{
-			// Viewport-direct: center on screen
-			FVector2D SizeInUnits = CanvasSize * WindowedSize;
-			FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
-
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetDesiredSizeInViewport(SizeInUnits);
-			SetPositionInViewport(Position, false);
-			WidgetPosition = Position;
-		}
-		if (bAnimate) ScaleIn();
-		break;
-	}
-
-	case ERammsCameraDisplayMode::Corner:
-	{
-		FVector2D WidgetSize = CanvasSize * CornerSize;
-
-		// Compute anchor and alignment from corner alignment enums
-		float AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
-		float AnchorY = (CornerVAlign == VAlign_Bottom) ? 1.0f : (CornerVAlign == VAlign_Center ? 0.5f : 0.0f);
-		FVector2D Alignment(AnchorX, AnchorY);
-
-		// Padding offset: positive = inward from edge
-		FVector2D PadOffset(
-			(AnchorX > 0.5f) ? -CornerPadding.X : (AnchorX < 0.5f ? CornerPadding.X : 0.0f),
-			(AnchorY > 0.5f) ? -CornerPadding.Y : (AnchorY < 0.5f ? CornerPadding.Y : 0.0f)
-		);
-
-		if (CanvasSlot)
-		{
-			CanvasSlot->SetAnchors(FAnchors(AnchorX, AnchorY, AnchorX, AnchorY));
-			CanvasSlot->SetAlignment(Alignment);
-			CanvasSlot->SetPosition(PadOffset);
-			CanvasSlot->SetSize(WidgetSize);
-			CachedExpandedSlotSize = WidgetSize;
-		}
-		else
-		{
-			// Compute absolute position for viewport-direct
-			FVector2D AnchorPos = CanvasSize * FVector2D(AnchorX, AnchorY);
-			FVector2D Position = AnchorPos - WidgetSize * Alignment + PadOffset;
-
-			SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
-			SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-			SetDesiredSizeInViewport(WidgetSize);
-			SetPositionInViewport(Position, false);
-			WidgetPosition = Position;
+			if (CanvasSlot)
+			{
+				// Stretch anchors fill entire Canvas Panel
+				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+			}
+			else
+			{
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetPositionInViewport(FVector2D::ZeroVector, false);
+				SetDesiredSizeInViewport(FVector2D::ZeroVector);
+			}
+			WidgetPosition = FVector2D::ZeroVector;
+			if (bAnimate)
+				ScaleIn();
+			break;
 		}
 
-		float SlideDir = (AnchorX > 0.5f) ? 200.0f : -200.0f;
-		if (bAnimate) SlideIn(FVector2D(SlideDir, 0));
-		break;
-	}
+		case ERammsCameraDisplayMode::Windowed:
+		{
+			FVector2D MaxBounds;
+			MaxBounds.X = CanvasSize.X * WindowedSize.X;
+			MaxBounds.Y = CanvasSize.Y * WindowedSize.Y;
+
+			FVector2D SizeInUnits;
+			if (bMaintainAspectRatio && AspectRatio > 0.0f)
+			{
+				float AvailH = MaxBounds.Y - TitleH;
+				if (AvailH < 1.0f)
+					AvailH = 1.0f;
+				float FitW, FitH;
+				if (MaxBounds.X / AspectRatio <= AvailH)
+				{
+					FitW = MaxBounds.X;
+					FitH = MaxBounds.X / AspectRatio;
+				}
+				else
+				{
+					FitH = AvailH;
+					FitW = AvailH * AspectRatio;
+				}
+				SizeInUnits.X = FitW;
+				SizeInUnits.Y = FitH + TitleH;
+			}
+			else
+			{
+				SizeInUnits = MaxBounds;
+			}
+
+			if (CanvasSlot)
+			{
+				// Set computed size on slot; preserve designer-set anchors/position
+				CanvasSlot->SetSize(SizeInUnits);
+				CachedExpandedSlotSize = SizeInUnits;
+			}
+			else
+			{
+				// Viewport-direct: center on screen
+				FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
+
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetDesiredSizeInViewport(SizeInUnits);
+				SetPositionInViewport(Position, false);
+				WidgetPosition = Position;
+			}
+			if (bAnimate)
+				ScaleIn();
+			break;
+		}
+
+		case ERammsCameraDisplayMode::Corner:
+		{
+			FVector2D MaxBounds;
+			MaxBounds.X = CanvasSize.X * CornerSize.X;
+			MaxBounds.Y = CanvasSize.Y * CornerSize.Y;
+
+			FVector2D WidgetSize;
+			if (bMaintainAspectRatio && AspectRatio > 0.0f)
+			{
+				// Available space for image = max bounds minus title bar
+				float AvailH = MaxBounds.Y - TitleH;
+				if (AvailH < 1.0f)
+					AvailH = 1.0f;
+
+				// Fit AR within MaxBounds.X x AvailH
+				float FitW, FitH;
+				if (MaxBounds.X / AspectRatio <= AvailH)
+				{
+					FitW = MaxBounds.X;
+					FitH = MaxBounds.X / AspectRatio;
+				}
+				else
+				{
+					FitH = AvailH;
+					FitW = AvailH * AspectRatio;
+				}
+				WidgetSize.X = FitW;
+				WidgetSize.Y = FitH + TitleH;
+			}
+			else
+			{
+				WidgetSize = MaxBounds;
+			}
+
+			// Compute anchor and alignment from corner alignment enums
+			float	  AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
+			float	  AnchorY = (CornerVAlign == VAlign_Bottom) ? 1.0f : (CornerVAlign == VAlign_Center ? 0.5f : 0.0f);
+			FVector2D Alignment(AnchorX, AnchorY);
+
+			// Padding offset: positive = inward from edge
+			FVector2D PadOffset(
+				(AnchorX > 0.5f) ? -CornerPadding.X : (AnchorX < 0.5f ? CornerPadding.X : 0.0f),
+				(AnchorY > 0.5f) ? -CornerPadding.Y : (AnchorY < 0.5f ? CornerPadding.Y : 0.0f));
+
+			if (CanvasSlot)
+			{
+				CanvasSlot->SetAnchors(FAnchors(AnchorX, AnchorY, AnchorX, AnchorY));
+				CanvasSlot->SetAlignment(Alignment);
+				CanvasSlot->SetPosition(PadOffset);
+				CanvasSlot->SetSize(WidgetSize);
+				CachedExpandedSlotSize = WidgetSize;
+			}
+			else
+			{
+				// Compute absolute position for viewport-direct
+				FVector2D AnchorPos = CanvasSize * FVector2D(AnchorX, AnchorY);
+				FVector2D Position = AnchorPos - WidgetSize * Alignment + PadOffset;
+
+				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+				SetDesiredSizeInViewport(WidgetSize);
+				SetPositionInViewport(Position, false);
+				WidgetPosition = Position;
+			}
+
+			float SlideDir = (AnchorX > 0.5f) ? 200.0f : -200.0f;
+			if (bAnimate)
+				SlideIn(FVector2D(SlideDir, 0));
+			break;
+		}
 	}
 }
 
@@ -759,11 +934,34 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	if (InStreamID == StreamID)
 	{
 		CurrentTexture = Texture;
+
+		// Auto-detect aspect ratio from incoming RGB texture
+		if (bMaintainAspectRatio && bAutoDetectAspectRatio && Texture)
+		{
+			float TexW = static_cast<float>(Texture->GetSurfaceWidth());
+			float TexH = static_cast<float>(Texture->GetSurfaceHeight());
+			if (TexH > 0.0f)
+			{
+				float DetectedAR = TexW / TexH;
+				if (!FMath::IsNearlyEqual(AspectRatio, DetectedAR, 0.01f))
+				{
+					AspectRatio = DetectedAR;
+					if (ImageAspectRatioBox)
+					{
+						ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+						ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+					}
+					// Re-compute widget size now that AR changed
+					UpdateLayout(false);
+				}
+			}
+		}
+
 		UpdateDisplayedImages();
 	}
-	else if (InStreamID == DepthStreamID)
+	else if (InStreamID == DataStreamID)
 	{
-		CurrentDepthTexture = Texture;
+		CurrentDataTexture = Texture;
 		UpdateDisplayedImages();
 	}
 }
@@ -802,14 +1000,14 @@ void URammsCameraWidget::StartStream()
 			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"));
 	}
 
-	// Start depth stream if configured
-	if (!DepthStreamID.IsEmpty())
+	// Start data stream if configured
+	if (!DataStreamID.IsEmpty())
 	{
 		for (auto& Sub : ProviderSubscriptions)
 		{
 			if (Sub.Object.IsValid() && Sub.Interface)
 			{
-				Sub.Interface->StartStream(DepthStreamID);
+				Sub.Interface->StartStream(DataStreamID);
 			}
 		}
 	}
@@ -826,9 +1024,9 @@ void URammsCameraWidget::StopStream()
 			{
 				Sub.Interface->StopStream(StreamID);
 			}
-			if (!DepthStreamID.IsEmpty())
+			if (!DataStreamID.IsEmpty())
 			{
-				Sub.Interface->StopStream(DepthStreamID);
+				Sub.Interface->StopStream(DataStreamID);
 			}
 		}
 	}
@@ -881,7 +1079,8 @@ FReply URammsCameraWidget::NativeOnMouseMove(const FGeometry& InGeometry, const 
 		{
 			// Mouse delta is in screen pixels; Canvas slot position is in DPI-scaled units
 			float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
-			if (Scale <= 0.0f) Scale = 1.0f;
+			if (Scale <= 0.0f)
+				Scale = 1.0f;
 			FVector2D NewPosition = DragStartWidgetPos + Delta / Scale;
 			CanvasSlot->SetPosition(NewPosition);
 			WidgetPosition = NewPosition;
@@ -972,6 +1171,29 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 
 	UpdateCollapseIcon();
 	UpdateHeaderCornerRadii();
+
+	// When collapsing: clear aspect ratio constraint immediately so the header
+	// isn't forced to an image-sized AR.
+	// When expanding: defer AR restore until animation completes (NativeTick)
+	// to avoid the widget flashing to full expanded size before animating.
+	if (ImageAspectRatioBox && bMaintainAspectRatio && bCollapsed)
+	{
+		ImageAspectRatioBox->ClearMinAspectRatio();
+		ImageAspectRatioBox->ClearMaxAspectRatio();
+	}
+
+	// When expanding, set the canvas slot to the collapsed size so the animation
+	// starts from the current (collapsed) size rather than jumping to zero or full.
+	if (!bCollapsed)
+	{
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			float TitleH = TitleBar ? TitleBar->GetDesiredSize().Y : 24.0f;
+			if (TitleH <= 0.0f)
+				TitleH = 24.0f;
+			CanvasSlot->SetSize(FVector2D(CachedExpandedSlotSize.X, TitleH));
+		}
+	}
 }
 
 void URammsCameraWidget::OnCollapseClicked()
@@ -999,52 +1221,180 @@ void URammsCameraWidget::SetViewMode(ERammsCameraViewMode NewViewMode)
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthColormap(ERammsDepthColormap NewColormap)
+void URammsCameraWidget::SetDataStreamConfig(const FRammsDataStreamMaterialConfig& Config)
 {
-	DepthColormap = NewColormap;
-	UpdateDepthMaterialParams();
+	DataStreamConfig = Config;
+	CurrentOptionIndex = 0;
+
+	// Force recreation of dynamic material instances
+	DataMID = nullptr;
+	OverlayMID = nullptr;
+
+	EnsureDataMaterials();
+	UpdateDataMaterialParams();
+	UpdateOptionButton();
+	ApplyViewModeLayout();
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthRange(float MinDepth, float MaxDepth)
+void URammsCameraWidget::SetMaterialScalarParam(FName ParamName, float Value)
 {
-	DepthRange = FVector2D(MinDepth, MaxDepth);
-	UpdateDepthMaterialParams();
+	DataStreamConfig.ScalarParams.Add(ParamName, Value);
+	UpdateDataMaterialParams();
 	UpdateDisplayedImages();
 }
 
-void URammsCameraWidget::SetDepthStreamID(const FString& NewDepthStreamID)
+void URammsCameraWidget::SetOverlayBlendAlpha(float Alpha)
 {
-	if (DepthStreamID == NewDepthStreamID)
+	OverlayBlendAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	UpdateDataMaterialParams();
+	UpdateDisplayedImages();
+}
+
+void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
+{
+	if (DataStreamID == NewDataStreamID)
 		return;
 
-	// Stop existing depth stream
-	IRammsCameraProvider* Provider = CameraProvider.GetInterface();
-	if (Provider && !DepthStreamID.IsEmpty())
+	// Stop existing data stream on all providers
+	if (!DataStreamID.IsEmpty())
 	{
-		Provider->StopStream(DepthStreamID);
+		for (auto& Sub : ProviderSubscriptions)
+		{
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				Sub.Interface->StopStream(DataStreamID);
+			}
+		}
 	}
 
-	DepthStreamID = NewDepthStreamID;
-	CurrentDepthTexture = nullptr;
+	DataStreamID = NewDataStreamID;
+	CurrentDataTexture = nullptr;
 
-	// Start new depth stream
-	if (Provider && !DepthStreamID.IsEmpty())
+	// Start new data stream
+	if (!DataStreamID.IsEmpty())
 	{
-		Provider->StartStream(DepthStreamID);
+		for (auto& Sub : ProviderSubscriptions)
+		{
+			if (Sub.Object.IsValid() && Sub.Interface)
+			{
+				Sub.Interface->StartStream(DataStreamID);
+			}
+		}
 	}
+}
+
+void URammsCameraWidget::SetStreams(const FString& RGBStreamID, const FString& NewDataStreamID)
+{
+	SetStreamID(RGBStreamID);
+	SetDataStreamID(NewDataStreamID);
+}
+
+void URammsCameraWidget::ConfigureStreams(const FString& RGBStreamID, const FString& NewDataStreamID,
+	const FRammsDataStreamMaterialConfig& Config)
+{
+	SetDataStreamConfig(Config);
+	SetStreams(RGBStreamID, NewDataStreamID);
 }
 
 void URammsCameraWidget::OnViewModeClicked()
 {
-	// Cycle: RGB -> Depth -> SideBySide -> Overlay -> RGB
+	// Cycle: RGB -> Data -> SideBySide -> Overlay -> RGB
 	switch (ViewMode)
 	{
-	case ERammsCameraViewMode::RGB:       SetViewMode(ERammsCameraViewMode::Depth); break;
-	case ERammsCameraViewMode::Depth:     SetViewMode(ERammsCameraViewMode::SideBySide); break;
-	case ERammsCameraViewMode::SideBySide: SetViewMode(ERammsCameraViewMode::Overlay); break;
-	case ERammsCameraViewMode::Overlay:   SetViewMode(ERammsCameraViewMode::RGB); break;
+		case ERammsCameraViewMode::RGB:
+			SetViewMode(ERammsCameraViewMode::Data);
+			break;
+		case ERammsCameraViewMode::Data:
+			SetViewMode(ERammsCameraViewMode::SideBySide);
+			break;
+		case ERammsCameraViewMode::SideBySide:
+			SetViewMode(ERammsCameraViewMode::Overlay);
+			break;
+		case ERammsCameraViewMode::Overlay:
+			SetViewMode(ERammsCameraViewMode::RGB);
+			break;
 	}
+}
+
+void URammsCameraWidget::OnOptionClicked()
+{
+	if (DataStreamConfig.Options.Num() == 0)
+		return;
+
+	int32 NextIndex = (CurrentOptionIndex + 1) % DataStreamConfig.Options.Num();
+	SetOptionIndex(NextIndex);
+}
+
+void URammsCameraWidget::SetOptionIndex(int32 Index)
+{
+	if (DataStreamConfig.Options.Num() == 0 || !DataStreamConfig.OptionParamName.IsValid())
+		return;
+
+	CurrentOptionIndex = FMath::Clamp(Index, 0, DataStreamConfig.Options.Num() - 1);
+	const FRammsDataStreamOption& Opt = DataStreamConfig.Options[CurrentOptionIndex];
+
+	// Push the option value into ScalarParams and update materials
+	DataStreamConfig.ScalarParams.Add(DataStreamConfig.OptionParamName, Opt.Value);
+	UpdateDataMaterialParams();
+	UpdateDisplayedImages();
+	UpdateOptionButton();
+}
+
+void URammsCameraWidget::UpdateOptionButton()
+{
+	if (!OptionButton)
+		return;
+
+	if (DataStreamConfig.Options.Num() > 0 && DataStreamConfig.OptionParamName.IsValid())
+	{
+		OptionButton->SetVisibility(ESlateVisibility::Visible);
+		if (OptionLabel)
+		{
+			int32 SafeIdx = FMath::Clamp(CurrentOptionIndex, 0, DataStreamConfig.Options.Num() - 1);
+			OptionLabel->SetText(DataStreamConfig.Options[SafeIdx].DisplayName);
+		}
+	}
+	else
+	{
+		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void URammsCameraWidget::SetMaintainAspectRatio(bool bMaintain)
+{
+	if (bMaintainAspectRatio == bMaintain)
+		return;
+
+	bMaintainAspectRatio = bMaintain;
+
+	if (ImageAspectRatioBox)
+	{
+		if (bMaintainAspectRatio)
+		{
+			ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+			ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+		}
+		else
+		{
+			ImageAspectRatioBox->ClearMinAspectRatio();
+			ImageAspectRatioBox->ClearMaxAspectRatio();
+		}
+	}
+	UpdateLayout(false);
+}
+
+void URammsCameraWidget::SetAspectRatio(float NewAspectRatio)
+{
+	bAutoDetectAspectRatio = false;
+	AspectRatio = FMath::Clamp(NewAspectRatio, 0.1f, 10.0f);
+
+	if (ImageAspectRatioBox && bMaintainAspectRatio)
+	{
+		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+	}
+	UpdateLayout(false);
 }
 
 void URammsCameraWidget::ApplyViewModeLayout()
@@ -1054,18 +1404,32 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	{
 		switch (ViewMode)
 		{
-		case ERammsCameraViewMode::RGB:        ViewModeLabel->SetText(FText::FromString(TEXT("RGB"))); break;
-		case ERammsCameraViewMode::Depth:      ViewModeLabel->SetText(FText::FromString(TEXT("Depth"))); break;
-		case ERammsCameraViewMode::SideBySide: ViewModeLabel->SetText(FText::FromString(TEXT("SbS"))); break;
-		case ERammsCameraViewMode::Overlay:    ViewModeLabel->SetText(FText::FromString(TEXT("Ovly"))); break;
+			case ERammsCameraViewMode::RGB:
+				ViewModeLabel->SetText(FText::FromString(TEXT("RGB")));
+				break;
+			case ERammsCameraViewMode::Data:
+			{
+				FText Label = DataStreamConfig.DisplayLabel.IsEmpty()
+					? FText::FromString(TEXT("Data"))
+					: DataStreamConfig.DisplayLabel;
+				ViewModeLabel->SetText(Label);
+				break;
+			}
+			case ERammsCameraViewMode::SideBySide:
+				ViewModeLabel->SetText(FText::FromString(TEXT("SbS")));
+				break;
+			case ERammsCameraViewMode::Overlay:
+				ViewModeLabel->SetText(FText::FromString(TEXT("Ovly")));
+				break;
 		}
 	}
 
-	// Show/hide depth image for side-by-side mode
-	if (DepthImage)
+	// Show/hide data image for side-by-side mode
+	if (DataImage)
 	{
-		DepthImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
-			? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		DataImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
+				? ESlateVisibility::SelfHitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 
 	// Adjust corner radii based on whether side-by-side or single image
@@ -1077,23 +1441,23 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	// Compute inner radius from style or default
 	float OuterRadius = Style ? Style->Border.CornerRadiusMedium : 4.0f;
 	float R = FMath::Max(OuterRadius - BorderThickness, 0.0f);
-	bool bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
+	bool  bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
 
 	// FVector4 CornerRadii: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
-	FVector4 RGBRadii, DepthRadii;
+	FVector4 RGBRadii, DataRadii;
 
 	if (bCollapsible)
 	{
 		// Header is above image — only bottom corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);   // bottom-left only
-			DepthRadii = FVector4(0.0f, 0.0f, R, 0.0f);  // bottom-right only
+			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);  // bottom-left only
+			DataRadii = FVector4(0.0f, 0.0f, R, 0.0f); // bottom-right only
 		}
 		else
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, R, R);        // bottom corners
-			DepthRadii = FVector4(0.0f, 0.0f, R, R);
+			RGBRadii = FVector4(0.0f, 0.0f, R, R); // bottom corners
+			DataRadii = FVector4(0.0f, 0.0f, R, R);
 		}
 	}
 	else
@@ -1101,26 +1465,26 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 		// Header overlays on image — all outer corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(R, 0.0f, 0.0f, R);        // left corners
-			DepthRadii = FVector4(0.0f, R, R, 0.0f);      // right corners
+			RGBRadii = FVector4(R, 0.0f, 0.0f, R);	// left corners
+			DataRadii = FVector4(0.0f, R, R, 0.0f); // right corners
 		}
 		else
 		{
-			RGBRadii = FVector4(R, R, R, R);               // all corners
-			DepthRadii = FVector4(R, R, R, R);
+			RGBRadii = FVector4(R, R, R, R); // all corners
+			DataRadii = FVector4(R, R, R, R);
 		}
 	}
 
-	auto ApplyRadii = [](UImage* Img, const FVector4& Radii)
-	{
-		if (!Img) return;
+	auto ApplyRadii = [](UImage* Img, const FVector4& Radii) {
+		if (!Img)
+			return;
 		FSlateBrush B = Img->GetBrush();
 		B.OutlineSettings.CornerRadii = Radii;
 		Img->SetBrush(B);
 	};
 
 	ApplyRadii(CameraImage, RGBRadii);
-	ApplyRadii(DepthImage, DepthRadii);
+	ApplyRadii(DataImage, DataRadii);
 }
 
 void URammsCameraWidget::UpdateHeaderCornerRadii()
@@ -1149,56 +1513,61 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 	}
 
 	FLinearColor TitleBg = Style ? Style->Colors.Background : FLinearColor(0.0f, 0.0f, 0.0f, 0.6f);
-	if (Style) TitleBg.A = 0.7f;
+	if (Style)
+		TitleBg.A = 0.7f;
 	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(TitleBg, Radii);
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
 }
 
-void URammsCameraWidget::EnsureDepthMaterials()
+void URammsCameraWidget::EnsureDataMaterials()
 {
-	// Create depth colormap MID if material is assigned and MID doesn't exist
-	if (DepthColormapMaterial && !DepthMID)
+	// Create data visualization MID if material is assigned and MID doesn't exist
+	if (DataStreamConfig.VisualizationMaterial && !DataMID)
 	{
-		DepthMID = UMaterialInstanceDynamic::Create(DepthColormapMaterial, this);
-		UpdateDepthMaterialParams();
+		DataMID = UMaterialInstanceDynamic::Create(DataStreamConfig.VisualizationMaterial, this);
+		UpdateDataMaterialParams();
 	}
 
 	// Create overlay blend MID if material is assigned and MID doesn't exist
-	if (OverlayBlendMaterial && !OverlayMID)
+	if (DataStreamConfig.OverlayMaterial && !OverlayMID)
 	{
-		OverlayMID = UMaterialInstanceDynamic::Create(OverlayBlendMaterial, this);
-		UpdateDepthMaterialParams();
+		OverlayMID = UMaterialInstanceDynamic::Create(DataStreamConfig.OverlayMaterial, this);
+		UpdateDataMaterialParams();
 	}
 }
 
-void URammsCameraWidget::UpdateDepthMaterialParams()
+void URammsCameraWidget::UpdateDataMaterialParams()
 {
-	float ColormapIdx = static_cast<float>(static_cast<uint8>(DepthColormap));
-
-	if (DepthMID)
-	{
-		DepthMID->SetScalarParameterValue(TEXT("DepthMin"), DepthRange.X);
-		DepthMID->SetScalarParameterValue(TEXT("DepthMax"), DepthRange.Y);
-		DepthMID->SetScalarParameterValue(TEXT("ColormapIndex"), ColormapIdx);
-		if (CurrentDepthTexture)
+	// Apply all scalar params from config to both materials
+	auto ApplyScalarParams = [this](UMaterialInstanceDynamic* MID) {
+		if (!MID)
+			return;
+		for (const auto& Pair : DataStreamConfig.ScalarParams)
 		{
-			DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
+		}
+	};
+
+	if (DataMID)
+	{
+		ApplyScalarParams(DataMID);
+		if (CurrentDataTexture)
+		{
+			DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 		}
 	}
 
 	if (OverlayMID)
 	{
-		OverlayMID->SetScalarParameterValue(TEXT("DepthMin"), DepthRange.X);
-		OverlayMID->SetScalarParameterValue(TEXT("DepthMax"), DepthRange.Y);
-		OverlayMID->SetScalarParameterValue(TEXT("ColormapIndex"), ColormapIdx);
-		OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
+		ApplyScalarParams(OverlayMID);
+		OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
 		if (CurrentTexture)
 		{
-			OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
+			OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
 		}
-		if (CurrentDepthTexture)
+		if (CurrentDataTexture)
 		{
-			OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
+			OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 		}
 	}
 }
@@ -1261,71 +1630,71 @@ void URammsCameraWidget::SetCameraSizeBoxSlotFill(bool bFill)
 
 void URammsCameraWidget::UpdateDisplayedImages()
 {
-	EnsureDepthMaterials();
+	EnsureDataMaterials();
 
 	switch (ViewMode)
 	{
-	case ERammsCameraViewMode::RGB:
-		if (CameraImage && CurrentTexture)
-		{
-			SetImageBrushFromTexture(CameraImage, CurrentTexture);
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::Depth:
-		if (CameraImage && CurrentDepthTexture)
-		{
-			if (DepthMID)
-			{
-				DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				SetImageBrushFromMaterial(CameraImage, DepthMID, CurrentDepthTexture, DepthRT);
-			}
-			else
-			{
-				SetImageBrushFromTexture(CameraImage, CurrentDepthTexture);
-			}
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::SideBySide:
-		if (CameraImage && CurrentTexture)
-		{
-			SetImageBrushFromTexture(CameraImage, CurrentTexture);
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		if (DepthImage && CurrentDepthTexture)
-		{
-			if (DepthMID)
-			{
-				DepthMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				SetImageBrushFromMaterial(DepthImage, DepthMID, CurrentDepthTexture, DepthRT);
-			}
-			else
-			{
-				SetImageBrushFromTexture(DepthImage, CurrentDepthTexture);
-			}
-			DepthImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
-
-	case ERammsCameraViewMode::Overlay:
-		if (CameraImage && CurrentTexture)
-		{
-			if (OverlayMID && CurrentDepthTexture)
-			{
-				OverlayMID->SetTextureParameterValue(TEXT("RGBTexture"), CurrentTexture);
-				OverlayMID->SetTextureParameterValue(TEXT("DepthTexture"), CurrentDepthTexture);
-				OverlayMID->SetScalarParameterValue(TEXT("BlendAlpha"), DepthOverlayAlpha);
-				SetImageBrushFromMaterial(CameraImage, OverlayMID, CurrentTexture, OverlayRT);
-			}
-			else
+		case ERammsCameraViewMode::RGB:
+			if (CameraImage && CurrentTexture)
 			{
 				SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
-			CameraImage->SetColorAndOpacity(FLinearColor::White);
-		}
-		break;
+			break;
+
+		case ERammsCameraViewMode::Data:
+			if (CameraImage && CurrentDataTexture)
+			{
+				if (DataMID)
+				{
+					DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					SetImageBrushFromMaterial(CameraImage, DataMID, CurrentDataTexture, DataRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(CameraImage, CurrentDataTexture);
+				}
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
+
+		case ERammsCameraViewMode::SideBySide:
+			if (CameraImage && CurrentTexture)
+			{
+				SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			if (DataImage && CurrentDataTexture)
+			{
+				if (DataMID)
+				{
+					DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					SetImageBrushFromMaterial(DataImage, DataMID, CurrentDataTexture, DataRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(DataImage, CurrentDataTexture);
+				}
+				DataImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
+
+		case ERammsCameraViewMode::Overlay:
+			if (CameraImage && CurrentTexture)
+			{
+				if (OverlayMID && CurrentDataTexture)
+				{
+					OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
+					OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
+					OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
+					SetImageBrushFromMaterial(CameraImage, OverlayMID, CurrentTexture, OverlayRT);
+				}
+				else
+				{
+					SetImageBrushFromTexture(CameraImage, CurrentTexture);
+				}
+				CameraImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			break;
 	}
 }

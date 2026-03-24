@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "UI/RammsBaseWidget.h"
+#include "UI/RammsLayoutPresetAsset.h"
 #include "RammsLayoutManager.generated.h"
 
 /**
@@ -15,16 +16,16 @@ enum class ERammsLayoutPreset : uint8
 {
 	/** Single fullscreen widget */
 	SingleFullscreen,
-	
+
 	/** Multiple widgets in grid */
 	Grid,
-	
+
 	/** Picture-in-picture (one large, others in corners) */
 	PictureInPicture,
-	
+
 	/** Side-by-side split */
 	SideBySide,
-	
+
 	/** Custom (user-defined positions) */
 	Custom
 };
@@ -40,6 +41,10 @@ struct FRammsWidgetLayout
 	/** Widget to manage */
 	UPROPERTY()
 	TObjectPtr<URammsBaseWidget> Widget;
+
+	/** Tag for matching against preset entries */
+	UPROPERTY()
+	FName WidgetTag;
 
 	/** Target position (0-1 normalized) */
 	UPROPERTY()
@@ -145,6 +150,43 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Layout")
 	int32 GetWidgetCount() const { return ManagedWidgets.Num(); }
 
+	// ── Data Asset Preset Support ────────────────────────────────
+
+	/**
+	 * Transition to a layout defined by a data asset preset.
+	 * Resolves entries by WidgetTag against registered widgets.
+	 * Widgets not referenced by the preset are hidden.
+	 * @param PresetAsset - The layout preset data asset
+	 * @param bAnimated - Whether to animate the transition
+	 * @param bAutoCreateWidgets - If true, auto-create widgets for entries with a WidgetClass but no matching tag
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void TransitionToPreset(URammsLayoutPresetAsset* PresetAsset, bool bAnimated = true, bool bAutoCreateWidgets = false);
+
+	/**
+	 * Get the currently active preset asset (null if using built-in presets)
+	 */
+	UFUNCTION(BlueprintPure, Category = "Layout")
+	URammsLayoutPresetAsset* GetActivePresetAsset() const { return ActivePresetAsset; }
+
+	/**
+	 * Set a tag on a managed widget so it can be resolved by preset entries.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetWidgetTag(URammsBaseWidget* Widget, FName Tag);
+
+	/**
+	 * Find a managed widget by its tag.
+	 * @return The first widget with the matching tag, or nullptr
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	URammsBaseWidget* FindWidgetByTag(FName Tag) const;
+
+	/** Fired when transitioning to a new preset */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPresetChanged, URammsLayoutPresetAsset*, NewPreset);
+	UPROPERTY(BlueprintAssignable, Category = "Layout")
+	FOnPresetChanged OnPresetChanged;
+
 protected:
 	/** Apply layout based on current preset */
 	void ApplyLayout(bool bAnimated);
@@ -163,4 +205,8 @@ protected:
 
 	/** Update Z-order of all widgets */
 	void UpdateZOrder();
+
+	/** Currently active preset asset (null if using built-in presets) */
+	UPROPERTY()
+	TObjectPtr<URammsLayoutPresetAsset> ActivePresetAsset;
 };

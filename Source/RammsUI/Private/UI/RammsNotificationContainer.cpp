@@ -96,7 +96,7 @@ void URammsNotificationContainer::AddNotification(URammsNotificationWidget* Noti
 
 int32 URammsNotificationContainer::DismissAll()
 {
-	int32 Count = 0;
+	int32											 Count = 0;
 	TArray<TWeakObjectPtr<URammsNotificationWidget>> Copy = ActiveNotifications;
 	for (auto& Ptr : Copy)
 	{

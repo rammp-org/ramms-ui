@@ -119,7 +119,7 @@ public:
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void UpdateVisualState();
+	void		 UpdateVisualState();
 
 	UFUNCTION()
 	void HandleClicked();

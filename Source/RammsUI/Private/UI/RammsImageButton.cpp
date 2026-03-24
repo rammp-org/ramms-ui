@@ -35,7 +35,7 @@ void URammsImageButton::BuildWidgetTree()
 	}
 
 	// Overlay wraps the image so we can put an active border on it
-	UOverlay* ImageOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ImageOverlay"));
+	UOverlay*		  ImageOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ImageOverlay"));
 	UVerticalBoxSlot* OverlaySlot = VBox->AddChildToVerticalBox(ImageOverlay);
 	if (OverlaySlot)
 	{
@@ -263,7 +263,7 @@ void URammsImageButton::UpdateVisualState()
 	FLinearColor BgColor(0.15f, 0.15f, 0.18f);
 	FLinearColor BorderColor(0.0f, 0.478f, 0.8f, 0.0f); // Transparent default
 	FLinearColor TextColor = FLinearColor::White;
-	float Opacity = 1.0f;
+	float		 Opacity = 1.0f;
 
 	if (Style)
 	{

@@ -33,13 +33,12 @@ void URammsCameraProjectionManager::BeginPlay()
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().SetTimer(
-				DeferredDiscoveryHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
-				{
+				DeferredDiscoveryHandle, FTimerDelegate::CreateWeakLambda(this, [this]() {
 					UE_LOG(LogRammsProjection, Log, TEXT("Deferred discovery timer fired"));
 					DiscoverProviders();
 				}),
-				0.1f,  // small delay to ensure all BeginPlays have completed
-				false   // one-shot
+				0.1f, // small delay to ensure all BeginPlays have completed
+				false // one-shot
 			);
 		}
 	}
@@ -61,7 +60,8 @@ void URammsCameraProjectionManager::EndPlay(EEndPlayReason::Type EndPlayReason)
 void URammsCameraProjectionManager::DiscoverProviders()
 {
 	UWorld* World = GetWorld();
-	if (!World) return;
+	if (!World)
+		return;
 
 	int32 NewCount = 0;
 
@@ -70,8 +70,10 @@ void URammsCameraProjectionManager::DiscoverProviders()
 	UGameplayStatics::GetAllActorsWithInterface(World, URammsCameraProvider::StaticClass(), ProviderActors);
 	for (AActor* Actor : ProviderActors)
 	{
-		if (Actor == GetOwner()) continue;
-		if (IsProviderBound(Actor)) continue;
+		if (Actor == GetOwner())
+			continue;
+		if (IsProviderBound(Actor))
+			continue;
 		if (IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Actor))
 		{
 			BindProvider(Actor, Iface);
@@ -90,7 +92,8 @@ void URammsCameraProjectionManager::DiscoverProviders()
 		(*It)->GetComponents<URammsCameraProviderComponent>(Comps);
 		for (URammsCameraProviderComponent* Comp : Comps)
 		{
-			if (IsProviderBound(Comp)) continue;
+			if (IsProviderBound(Comp))
+				continue;
 			BindProvider(Comp, static_cast<IRammsCameraProvider*>(Comp));
 			CreateProjectorsForProvider(static_cast<IRammsCameraProvider*>(Comp));
 			UE_LOG(LogRammsProjection, Log,
@@ -153,10 +156,12 @@ void URammsCameraProjectionManager::SetCameraProvider(TScriptInterface<IRammsCam
 	UnbindAllProviders();
 
 	UObject* Obj = Provider.GetObject();
-	if (!Obj) return;
+	if (!Obj)
+		return;
 
 	IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Obj);
-	if (!Iface) return;
+	if (!Iface)
+		return;
 
 	BindProvider(Obj, Iface);
 
@@ -169,11 +174,14 @@ void URammsCameraProjectionManager::SetCameraProvider(TScriptInterface<IRammsCam
 void URammsCameraProjectionManager::AddCameraProvider(TScriptInterface<IRammsCameraProvider> Provider)
 {
 	UObject* Obj = Provider.GetObject();
-	if (!Obj) return;
-	if (IsProviderBound(Obj)) return;
+	if (!Obj)
+		return;
+	if (IsProviderBound(Obj))
+		return;
 
 	IRammsCameraProvider* Iface = Cast<IRammsCameraProvider>(Obj);
-	if (!Iface) return;
+	if (!Iface)
+		return;
 
 	BindProvider(Obj, Iface);
 
@@ -220,7 +228,8 @@ void URammsCameraProjectionManager::UnbindAllProviders()
 
 void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProvider* Iface)
 {
-	if (!Iface) return;
+	if (!Iface)
+		return;
 
 	TArray<FRammsCameraStreamInfo> Streams = Iface->GetAvailableStreams();
 	UE_LOG(LogRammsProjection, Log, TEXT("CreateProjectorsForProvider: %d available stream(s)"), Streams.Num());
@@ -232,7 +241,11 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 			*Info.StreamID, Info.bIsDepth ? 1 : 0, Info.Width, Info.Height,
 			Info.Intrinsics.Num(), Info.bHasExtrinsic ? 1 : 0);
 
-		if (Info.bIsDepth || Projectors.Contains(Info.StreamID))
+		if (Info.FrameCategory != ERammsFrameCategory::Visual || Projectors.Contains(Info.StreamID))
+			continue;
+		if (bSkipDepthStreams && Info.bIsDepth)
+			continue;
+		if (ExcludeStreamIDs.Contains(Info.StreamID))
 			continue;
 
 		URammsCameraProjectorComponent* Projector = AddProjector(Info.StreamID);
@@ -261,10 +274,10 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		return nullptr;
 
 	URammsCameraProjectorComponent* Projector = NewObject<URammsCameraProjectorComponent>(Owner);
-	Projector->ProjectionMaterial    = ProjectionMaterial;
-	Projector->FadeWidth             = DefaultFadeWidth;
-	Projector->MaxProjectionDistance  = DefaultMaxDistance;
-	Projector->TargetStencilValue    = DefaultTargetStencil;
+	Projector->ProjectionMaterial = ProjectionMaterial;
+	Projector->FadeWidth = DefaultFadeWidth;
+	Projector->MaxProjectionDistance = DefaultMaxDistance;
+	Projector->TargetStencilValue = DefaultTargetStencil;
 
 	Projector->SetupAttachment(Owner->GetRootComponent());
 	Projector->RegisterComponent();
@@ -381,8 +394,12 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 		if (Iface)
 		{
 			FRammsCameraStreamInfo Info;
-			if (Iface->GetStreamInfo(StreamID, Info) && !Info.bIsDepth)
+			if (Iface->GetStreamInfo(StreamID, Info) && Info.FrameCategory == ERammsFrameCategory::Visual)
 			{
+				if ((bSkipDepthStreams && Info.bIsDepth) || ExcludeStreamIDs.Contains(StreamID))
+				{
+					return;
+				}
 				URammsCameraProjectorComponent* Projector = AddProjector(StreamID);
 				if (Projector)
 				{

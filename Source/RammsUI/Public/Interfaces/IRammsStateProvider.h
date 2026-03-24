@@ -142,7 +142,7 @@ class URammsStateProvider : public UInterface
 /**
  * Abstract interface for receiving robot state information
  * Implementations: RemoteControl plugin, Socket.IO adapter, ROS 2 bridge
- * 
+ *
  * Provides structured access to robot state, arm state, and navigation data.
  */
 class RAMMSUI_API IRammsStateProvider
@@ -188,6 +188,6 @@ public:
 
 	// Delegate accessors
 	virtual FOnRobotStateUpdate& OnRobotStateUpdate() = 0;
-	virtual FOnArmStateUpdate& OnArmStateUpdate() = 0;
-	virtual FOnCurbInfoUpdate& OnCurbInfoUpdate() = 0;
+	virtual FOnArmStateUpdate&	 OnArmStateUpdate() = 0;
+	virtual FOnCurbInfoUpdate&	 OnCurbInfoUpdate() = 0;
 };

@@ -60,8 +60,7 @@ void URammsMebotController::BuildWidgetTree()
 	}
 
 	// Create mode buttons
-	auto CreateModeButton = [this](const FName& Name, const FText& LabelText, UTexture2D* Icon) -> URammsImageButton*
-	{
+	auto CreateModeButton = [this](const FName& Name, const FText& LabelText, UTexture2D* Icon) -> URammsImageButton* {
 		URammsImageButton* Btn = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), Name);
 		// Set properties via the public API after construction
 		Btn->SetLabelText(LabelText);
@@ -81,15 +80,15 @@ void URammsMebotController::BuildWidgetTree()
 	CurbAscentButton = CreateModeButton(TEXT("CurbAscentBtn"), FText::FromString(TEXT("Curb Ascent")), CurbAscentIcon);
 	CurbDescentButton = CreateModeButton(TEXT("CurbDescentBtn"), FText::FromString(TEXT("Curb Descent")), CurbDescentIcon);
 
-	// Add to grid
-	// Row 0: all three buttons
-	UUniformGridSlot* S0 = ModeGrid->AddChildToUniformGrid(SelfLevelButton, 0, 0);
-	UUniformGridSlot* S1 = ModeGrid->AddChildToUniformGrid(CurbAscentButton, 0, 1);
-	UUniformGridSlot* S2 = ModeGrid->AddChildToUniformGrid(CurbDescentButton, 0, 2);
-
-	if (S0) S0->SetHorizontalAlignment(HAlign_Center);
-	if (S1) S1->SetHorizontalAlignment(HAlign_Center);
-	if (S2) S2->SetHorizontalAlignment(HAlign_Center);
+	// Add to grid using GridColumns for layout
+	const int32				   Cols = FMath::Max(GridColumns, 1);
+	TArray<URammsImageButton*> Buttons = { SelfLevelButton, CurbAscentButton, CurbDescentButton };
+	for (int32 i = 0; i < Buttons.Num(); ++i)
+	{
+		UUniformGridSlot* CellSlot = ModeGrid->AddChildToUniformGrid(Buttons[i], i / Cols, i % Cols);
+		if (CellSlot)
+			CellSlot->SetHorizontalAlignment(HAlign_Center);
+	}
 }
 
 void URammsMebotController::NativeOnInitialized()
@@ -102,18 +101,18 @@ void URammsMebotController::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Bind button click events
+	// Bind button click events (AddUniqueDynamic prevents duplicate bindings on reparent)
 	if (SelfLevelButton)
 	{
-		SelfLevelButton->OnClicked.AddDynamic(this, &URammsMebotController::OnSelfLevelClicked);
+		SelfLevelButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnSelfLevelClicked);
 	}
 	if (CurbAscentButton)
 	{
-		CurbAscentButton->OnClicked.AddDynamic(this, &URammsMebotController::OnCurbAscentClicked);
+		CurbAscentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbAscentClicked);
 	}
 	if (CurbDescentButton)
 	{
-		CurbDescentButton->OnClicked.AddDynamic(this, &URammsMebotController::OnCurbDescentClicked);
+		CurbDescentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbDescentClicked);
 	}
 
 	UpdateModeButtons();
@@ -138,9 +137,12 @@ void URammsMebotController::ApplyStyle_Implementation()
 	}
 
 	// Propagate style to child buttons
-	if (SelfLevelButton) SelfLevelButton->SetStyle(Style);
-	if (CurbAscentButton) CurbAscentButton->SetStyle(Style);
-	if (CurbDescentButton) CurbDescentButton->SetStyle(Style);
+	if (SelfLevelButton)
+		SelfLevelButton->SetStyle(Style);
+	if (CurbAscentButton)
+		CurbAscentButton->SetStyle(Style);
+	if (CurbDescentButton)
+		CurbDescentButton->SetStyle(Style);
 }
 
 void URammsMebotController::SynchronizeProperties()
@@ -150,17 +152,20 @@ void URammsMebotController::SynchronizeProperties()
 	// Push icon/property changes from editor to child buttons
 	if (SelfLevelButton)
 	{
-		if (SelfLevelIcon) SelfLevelButton->SetButtonImage(SelfLevelIcon);
+		if (SelfLevelIcon)
+			SelfLevelButton->SetButtonImage(SelfLevelIcon);
 		SelfLevelButton->SetImageSize(ButtonImageSize);
 	}
 	if (CurbAscentButton)
 	{
-		if (CurbAscentIcon) CurbAscentButton->SetButtonImage(CurbAscentIcon);
+		if (CurbAscentIcon)
+			CurbAscentButton->SetButtonImage(CurbAscentIcon);
 		CurbAscentButton->SetImageSize(ButtonImageSize);
 	}
 	if (CurbDescentButton)
 	{
-		if (CurbDescentIcon) CurbDescentButton->SetButtonImage(CurbDescentIcon);
+		if (CurbDescentIcon)
+			CurbDescentButton->SetButtonImage(CurbDescentIcon);
 		CurbDescentButton->SetImageSize(ButtonImageSize);
 	}
 	if (HeaderText)
@@ -189,28 +194,34 @@ void URammsMebotController::SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon)
 {
 	switch (Mode)
 	{
-	case ERammsMebotMode::SelfLevel:
-		SelfLevelIcon = Icon;
-		if (SelfLevelButton) SelfLevelButton->SetButtonImage(Icon);
-		break;
-	case ERammsMebotMode::CurbAscent:
-		CurbAscentIcon = Icon;
-		if (CurbAscentButton) CurbAscentButton->SetButtonImage(Icon);
-		break;
-	case ERammsMebotMode::CurbDescent:
-		CurbDescentIcon = Icon;
-		if (CurbDescentButton) CurbDescentButton->SetButtonImage(Icon);
-		break;
-	default:
-		break;
+		case ERammsMebotMode::SelfLevel:
+			SelfLevelIcon = Icon;
+			if (SelfLevelButton)
+				SelfLevelButton->SetButtonImage(Icon);
+			break;
+		case ERammsMebotMode::CurbAscent:
+			CurbAscentIcon = Icon;
+			if (CurbAscentButton)
+				CurbAscentButton->SetButtonImage(Icon);
+			break;
+		case ERammsMebotMode::CurbDescent:
+			CurbDescentIcon = Icon;
+			if (CurbDescentButton)
+				CurbDescentButton->SetButtonImage(Icon);
+			break;
+		default:
+			break;
 	}
 }
 
 void URammsMebotController::UpdateModeButtons()
 {
-	if (SelfLevelButton) SelfLevelButton->SetActive(CurrentMode == ERammsMebotMode::SelfLevel);
-	if (CurbAscentButton) CurbAscentButton->SetActive(CurrentMode == ERammsMebotMode::CurbAscent);
-	if (CurbDescentButton) CurbDescentButton->SetActive(CurrentMode == ERammsMebotMode::CurbDescent);
+	if (SelfLevelButton)
+		SelfLevelButton->SetActive(CurrentMode == ERammsMebotMode::SelfLevel);
+	if (CurbAscentButton)
+		CurbAscentButton->SetActive(CurrentMode == ERammsMebotMode::CurbAscent);
+	if (CurbDescentButton)
+		CurbDescentButton->SetActive(CurrentMode == ERammsMebotMode::CurbDescent);
 }
 
 void URammsMebotController::OnSelfLevelClicked()

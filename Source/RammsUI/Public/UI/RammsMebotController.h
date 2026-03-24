@@ -105,7 +105,7 @@ public:
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
-	void UpdateModeButtons();
+	void		 UpdateModeButtons();
 
 	UFUNCTION()
 	void OnSelfLevelClicked();

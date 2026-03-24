@@ -59,9 +59,9 @@ void ARammsCameraProviderBase::BroadcastFrameData(const FString& StreamID, const
 
 	// Update texture data
 	FTexture2DMipMap& Mip = Tex2D->GetPlatformData()->Mips[0];
-	void* TextureData = Mip.BulkData.Lock(LOCK_READ_WRITE);
-	const int32 ExpectedSize = Width * Height * 4;
-	const int32 CopySize = FMath::Min(PixelData.Num(), ExpectedSize);
+	void*			  TextureData = Mip.BulkData.Lock(LOCK_READ_WRITE);
+	const int32		  ExpectedSize = Width * Height * 4;
+	const int32		  CopySize = FMath::Min(PixelData.Num(), ExpectedSize);
 	FMemory::Memcpy(TextureData, PixelData.GetData(), CopySize);
 	Mip.BulkData.Unlock();
 	Tex2D->UpdateResource();

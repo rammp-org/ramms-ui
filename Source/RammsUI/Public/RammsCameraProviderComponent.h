@@ -66,16 +66,16 @@ public:
 
 	// --- IRammsCameraProvider interface ---
 	virtual TArray<FRammsCameraStreamInfo> GetAvailableStreams() override;
-	virtual bool GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) override;
-	virtual bool StartStream(const FString& StreamID) override;
-	virtual void StopStream(const FString& StreamID) override;
-	virtual bool IsStreamActive(const FString& StreamID) const override;
-	virtual UTexture* GetStreamTexture(const FString& StreamID) override;
-	virtual int64 GetLastFrameTimestamp(const FString& StreamID) const override;
-	virtual float GetActualFrameRate(const FString& StreamID) const override;
-	virtual FOnCameraFrameReady& OnCameraFrameReady() override { return CameraFrameReadyDelegate; }
-	virtual FOnCameraStreamStatus& OnCameraStreamStatus() override { return CameraStreamStatusDelegate; }
-	virtual FOnCameraExtrinsicUpdated& OnCameraExtrinsicUpdated() override { return CameraExtrinsicUpdatedDelegate; }
+	virtual bool						   GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) override;
+	virtual bool						   StartStream(const FString& StreamID) override;
+	virtual void						   StopStream(const FString& StreamID) override;
+	virtual bool						   IsStreamActive(const FString& StreamID) const override;
+	virtual UTexture*					   GetStreamTexture(const FString& StreamID) override;
+	virtual int64						   GetLastFrameTimestamp(const FString& StreamID) const override;
+	virtual float						   GetActualFrameRate(const FString& StreamID) const override;
+	virtual FOnCameraFrameReady&		   OnCameraFrameReady() override { return CameraFrameReadyDelegate; }
+	virtual FOnCameraStreamStatus&		   OnCameraStreamStatus() override { return CameraStreamStatusDelegate; }
+	virtual FOnCameraExtrinsicUpdated&	   OnCameraExtrinsicUpdated() override { return CameraExtrinsicUpdatedDelegate; }
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -84,7 +84,7 @@ protected:
 	TMap<FString, FRammsCameraStreamState> Streams;
 
 private:
-	FOnCameraFrameReady CameraFrameReadyDelegate;
-	FOnCameraStreamStatus CameraStreamStatusDelegate;
+	FOnCameraFrameReady		  CameraFrameReadyDelegate;
+	FOnCameraStreamStatus	  CameraStreamStatusDelegate;
 	FOnCameraExtrinsicUpdated CameraExtrinsicUpdatedDelegate;
 };
