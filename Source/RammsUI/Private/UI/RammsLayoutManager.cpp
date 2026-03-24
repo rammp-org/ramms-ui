@@ -4,6 +4,7 @@
 #include "UI/RammsLayoutPresetAsset.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "TimerManager.h"
 
 URammsLayoutManager::URammsLayoutManager()
 {
@@ -474,7 +475,25 @@ void URammsLayoutManager::TransitionToPreset(URammsLayoutPresetAsset* PresetAsse
 			Layout.bVisible = false;
 			if (bAnimated)
 			{
+				// Disable hit-testing immediately so transparent widget can't intercept input
+				Layout.Widget->SetVisibility(ESlateVisibility::HitTestInvisible);
 				Layout.Widget->FadeOut(Duration);
+
+				// Collapse after fade completes
+				TWeakObjectPtr<URammsBaseWidget> WeakWidget = Layout.Widget;
+				float							 CollapseDelay = FMath::Max(0.0f, Duration) + 0.05f;
+				if (UWorld* World = GetWorld())
+				{
+					FTimerHandle Handle;
+					World->GetTimerManager().SetTimer(Handle,
+						FTimerDelegate::CreateWeakLambda(Layout.Widget, [WeakWidget]() {
+							if (URammsBaseWidget* W = WeakWidget.Get())
+							{
+								W->SetVisibility(ESlateVisibility::Collapsed);
+							}
+						}),
+						CollapseDelay, false);
+				}
 			}
 			else
 			{
