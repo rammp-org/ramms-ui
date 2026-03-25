@@ -24,6 +24,10 @@ class RAMMSUI_API URammsStatusPanel : public URammsBaseWidget
 	GENERATED_BODY()
 
 protected:
+	/** Header title text. Leave empty to hide the header row. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	FText HeaderTitle = FText::FromString(TEXT("Robot Status"));
+
 	/** State provider (optional - can be set at runtime) */
 	UPROPERTY(BlueprintReadWrite, Category = "State")
 	TScriptInterface<IRammsStateProvider> StateProvider;
@@ -45,6 +49,9 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> HeaderText;
+
+	UPROPERTY()
+	TObjectPtr<UHorizontalBox> HeaderRow;
 
 	UPROPERTY()
 	TObjectPtr<UVerticalBox> ContentBox;
@@ -81,6 +88,7 @@ public:
 
 	/** Apply style */
 	virtual void ApplyStyle_Implementation() override;
+	virtual void SynchronizeProperties() override;
 
 	/**
 	 * Set the state provider

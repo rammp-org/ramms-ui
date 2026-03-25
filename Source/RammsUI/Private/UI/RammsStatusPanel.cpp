@@ -11,6 +11,7 @@ void URammsStatusPanel::ResetCachedWidgets()
 	PanelBorder = nullptr;
 	ToggleButton = nullptr;
 	HeaderText = nullptr;
+	HeaderRow = nullptr;
 	ContentBox = nullptr;
 	SpeedText = nullptr;
 	BatteryText = nullptr;
@@ -35,7 +36,7 @@ void URammsStatusPanel::BuildWidgetTree()
 	PanelBorder->AddChild(MainBox);
 
 	// Header row: HorizontalBox with HeaderText + ToggleButton
-	UHorizontalBox*	  HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
+	HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
 	UVerticalBoxSlot* HeaderRowSlot = MainBox->AddChildToVerticalBox(HeaderRow);
 	if (HeaderRowSlot)
 	{
@@ -44,7 +45,7 @@ void URammsStatusPanel::BuildWidgetTree()
 	}
 
 	HeaderText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeaderText"));
-	HeaderText->SetText(FText::FromString(TEXT("Robot Status")));
+	HeaderText->SetText(HeaderTitle);
 	UHorizontalBoxSlot* HeaderTextSlot = HeaderRow->AddChildToHorizontalBox(HeaderText);
 	if (HeaderTextSlot)
 	{
@@ -97,6 +98,20 @@ void URammsStatusPanel::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildWidgetTree();
+}
+
+void URammsStatusPanel::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+
+	if (HeaderText)
+	{
+		HeaderText->SetText(HeaderTitle);
+		// Only hide the text label; keep HeaderRow (with toggle button) always visible
+		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
+	}
 }
 
 void URammsStatusPanel::NativeConstruct()

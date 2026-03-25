@@ -6,52 +6,17 @@
 #include "UI/RammsBaseWidget.h"
 #include "RammsRobotTypes.h"
 #include "Components/Border.h"
-#include "Components/Button.h"
-#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "Components/HorizontalBox.h"
-#include "Components/SizeBox.h"
 #include "RammsSeatController.generated.h"
 
-/**
- * One axis row in the seat controller (icon + label + -/+ buttons + value).
- * Internal struct — not exposed individually to Blueprint.
- */
-USTRUCT()
-struct FRammsSeatAxisRow
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	TObjectPtr<UHorizontalBox> Row;
-
-	UPROPERTY()
-	TObjectPtr<UImage> Icon;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> Label;
-
-	UPROPERTY()
-	TObjectPtr<UButton> DecreaseButton;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> DecreaseLabel;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> ValueText;
-
-	UPROPERTY()
-	TObjectPtr<UButton> IncreaseButton;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> IncreaseLabel;
-};
+class URammsAxisControl;
 
 /**
  * Controller widget for seat adjustments.
  * Provides three axes: Elevation, Lateral Tilt, and Anterior/Posterior Tilt.
- * Each axis displays an icon, label, decrease/increase buttons, and current value.
+ * Each axis is configured independently via FRammsAxisConfig and rendered
+ * using URammsAxisControl child widgets (icon + label + value + reset + slider).
  * Auto-discovers actors implementing IRammsRobotController.
  */
 UCLASS(meta = (DisplayName = "Ramms Seat Controller"))
@@ -69,40 +34,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat")
 	FText HeaderTitle = FText::FromString(TEXT("Seat Control"));
 
-	/** Increment/decrement step per button press (normalized units) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat", meta = (ClampMin = "0.01", ClampMax = "1.0"))
-	float StepSize = 0.1f;
+	/** Elevation axis configuration (range, icon, default, etc.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Elevation")
+	FRammsAxisConfig ElevationConfig;
 
-	/** Minimum value for elevation axis */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Limits")
-	float ElevationMin = 0.0f;
+	/** Lateral tilt axis configuration */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Lateral Tilt")
+	FRammsAxisConfig LateralTiltConfig;
 
-	/** Maximum value for elevation axis */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Limits")
-	float ElevationMax = 1.0f;
-
-	/** Minimum value for tilt axes */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Limits")
-	float TiltMin = -1.0f;
-
-	/** Maximum value for tilt axes */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Limits")
-	float TiltMax = 1.0f;
-
-	/** Icon size for axis icons */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat")
-	FVector2D IconSize = FVector2D(28.0f, 28.0f);
-
-	// ── Axis Icons (assign in editor or Blueprint) ───────────────
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Icons")
-	TObjectPtr<UTexture2D> ElevationIcon;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Icons")
-	TObjectPtr<UTexture2D> LateralTiltIcon;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|Icons")
-	TObjectPtr<UTexture2D> AnteriorPosteriorTiltIcon;
+	/** Anterior/Posterior tilt axis configuration */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Seat|A/P Tilt")
+	FRammsAxisConfig APTiltConfig;
 
 	// ── Current State ────────────────────────────────────────────
 
@@ -121,16 +63,16 @@ protected:
 	TObjectPtr<UVerticalBox> MainVBox;
 
 	UPROPERTY()
-	FRammsSeatAxisRow ElevationRow;
+	TObjectPtr<URammsAxisControl> ElevationControl;
 
 	UPROPERTY()
-	FRammsSeatAxisRow LateralTiltRow;
+	TObjectPtr<URammsAxisControl> LateralTiltControl;
 
 	UPROPERTY()
-	FRammsSeatAxisRow APTiltRow;
+	TObjectPtr<URammsAxisControl> APTiltControl;
 
 public:
-	/** Fired when any seat axis value changes */
+	/** Fired when any seat axis value changes (from user interaction). */
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSeatValueChanged, ERammsSeatAxis, Axis, float, NewValue);
 	UPROPERTY(BlueprintAssignable, Category = "Seat")
 	FOnSeatValueChanged OnValueChanged;
@@ -156,41 +98,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Seat")
 	void SetAxisIcon(ERammsSeatAxis Axis, UTexture2D* Icon);
 
+	/** Reset a specific axis to its home/default position */
+	UFUNCTION(BlueprintCallable, Category = "Seat")
+	void ResetAxis(ERammsSeatAxis Axis);
+
+	/** Reset all axes to home/default positions */
+	UFUNCTION(BlueprintCallable, Category = "Seat")
+	void ResetAllAxes();
+
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
 
-	/** Build one axis row and add it to the VBox */
-	FRammsSeatAxisRow BuildAxisRow(const FName& RowName, const FText& LabelText,
-		UTexture2D* AxisIcon, ERammsSeatAxis Axis);
+	/** Get the axis control for a given axis */
+	URammsAxisControl* GetAxisControl(ERammsSeatAxis Axis) const;
 
-	/** Update the displayed value text for an axis */
-	void UpdateValueDisplay(ERammsSeatAxis Axis);
+	/** Get the mutable config reference for a given axis */
+	FRammsAxisConfig& GetAxisConfig(ERammsSeatAxis Axis);
 
-	/** Update all value displays */
-	void UpdateAllValueDisplays();
+	// Per-axis delegate handlers (required by UFUNCTION binding)
+	UFUNCTION()
+	void OnElevationChanged(float Value);
+	UFUNCTION()
+	void OnLateralTiltChanged(float Value);
+	UFUNCTION()
+	void OnAPTiltChanged(float Value);
 
-	/** Get min/max for an axis */
-	void GetAxisLimits(ERammsSeatAxis Axis, float& OutMin, float& OutMax) const;
-
-	/** Get the row struct for an axis */
-	FRammsSeatAxisRow& GetAxisRow(ERammsSeatAxis Axis);
-
-	// Button handlers — one per axis per direction
-	UFUNCTION()
-	void OnElevationDecrease();
-	UFUNCTION()
-	void OnElevationIncrease();
-	UFUNCTION()
-	void OnLateralTiltDecrease();
-	UFUNCTION()
-	void OnLateralTiltIncrease();
-	UFUNCTION()
-	void OnAPTiltDecrease();
-	UFUNCTION()
-	void OnAPTiltIncrease();
-
-	void HandleAxisAdjust(ERammsSeatAxis Axis, float Delta);
+	/** Common handler for axis value changes from user interaction */
+	void HandleAxisChanged(ERammsSeatAxis Axis, float Value);
 
 	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

@@ -171,6 +171,9 @@ void URammsMebotController::SynchronizeProperties()
 	if (HeaderText)
 	{
 		HeaderText->SetText(HeaderTitle);
+		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 

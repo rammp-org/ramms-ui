@@ -260,6 +260,11 @@ protected:
 	UPROPERTY()
 	TObjectPtr<USizeBox> CameraSizeBox;
 
+	/** SizeBox wrapping the entire widget tree — used to constrain size when placed
+	 *  in a non-Canvas container (NamedSlot, Overlay, SizeBox). */
+	UPROPERTY()
+	TObjectPtr<USizeBox> InternalSizeBox;
+
 	/** SizeBox constraining the image area to maintain aspect ratio (created when bMaintainAspectRatio is true) */
 	UPROPERTY()
 	TObjectPtr<USizeBox> ImageAspectRatioBox;
