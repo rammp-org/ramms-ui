@@ -149,7 +149,7 @@ struct FRammsAxisConfig
 	float DefaultValue = 0.0f;
 
 	/** Step size for the slider (0 = continuous) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
 	float StepSize = 0.0f;
 
 	/** Units suffix for value display (e.g. "°", "%") */

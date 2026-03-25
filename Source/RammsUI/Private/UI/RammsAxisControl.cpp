@@ -264,9 +264,16 @@ void URammsAxisControl::ApplyConfig(const FRammsAxisConfig& NewConfig)
 void URammsAxisControl::SetIcon(UTexture2D* NewIcon)
 {
 	Config.Icon = NewIcon;
-	if (IconImage && NewIcon)
+	if (IconImage)
 	{
-		IconImage->SetBrushFromTexture(NewIcon);
+		if (NewIcon)
+		{
+			IconImage->SetBrushFromTexture(NewIcon);
+		}
+		else
+		{
+			IconImage->SetBrush(FSlateBrush());
+		}
 	}
 }
 
@@ -279,9 +286,16 @@ void URammsAxisControl::ApplyConfigToWidgets()
 		IconSizeBox->SetWidthOverride(Config.IconSize.X);
 		IconSizeBox->SetHeightOverride(Config.IconSize.Y);
 	}
-	if (IconImage && Config.Icon)
+	if (IconImage)
 	{
-		IconImage->SetBrushFromTexture(Config.Icon);
+		if (Config.Icon)
+		{
+			IconImage->SetBrushFromTexture(Config.Icon);
+		}
+		else
+		{
+			IconImage->SetBrush(FSlateBrush());
+		}
 	}
 	if (LabelText)
 	{

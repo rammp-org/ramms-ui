@@ -70,7 +70,12 @@ void URammsSeatController::BuildWidgetTree()
 
 	// Create axis controls as child widgets
 	auto CreateAxisControl = [this](const FRammsAxisConfig& Cfg) -> URammsAxisControl* {
-		URammsAxisControl* Ctrl = CreateWidget<URammsAxisControl>(this);
+		// Prefer PlayerController for proper focus/navigation/input handling;
+		// fall back to this (e.g. in designer where there's no player)
+		APlayerController* PC = GetOwningPlayer();
+		URammsAxisControl* Ctrl = PC
+			? CreateWidget<URammsAxisControl>(PC)
+			: CreateWidget<URammsAxisControl>(this);
 		if (Ctrl)
 		{
 			Ctrl->ApplyConfig(Cfg);

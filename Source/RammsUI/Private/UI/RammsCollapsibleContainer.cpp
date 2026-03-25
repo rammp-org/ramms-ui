@@ -225,7 +225,13 @@ void URammsCollapsibleContainer::SynchronizeProperties()
 	}
 	if (HeaderBorder)
 	{
-		HeaderBorder->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+		// Keep the header border (and toggle button) always visible.
+		// Only collapse the label text when the title is empty.
+		HeaderBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (HeaderLabel)
+	{
+		HeaderLabel->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
 				? ESlateVisibility::Collapsed
 				: ESlateVisibility::SelfHitTestInvisible);
 	}

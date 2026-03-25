@@ -25,6 +25,7 @@ void URammsCameraWidget::ResetCachedWidgets()
 	CollapseButton = nullptr;
 	CollapseIcon = nullptr;
 	CameraSizeBox = nullptr;
+	InternalSizeBox = nullptr;
 	DataImage = nullptr;
 	ViewModeButton = nullptr;
 	ViewModeLabel = nullptr;
