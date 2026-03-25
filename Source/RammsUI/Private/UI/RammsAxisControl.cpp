@@ -219,6 +219,14 @@ void URammsAxisControl::ApplyStyle_Implementation()
 void URammsAxisControl::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
+
+	// In the designer, sync displayed value to DefaultValue so property
+	// changes are immediately reflected without needing a reset click
+	if (IsDesignTime())
+	{
+		CurrentValue = FMath::Clamp(Config.DefaultValue, Config.MinValue, Config.MaxValue);
+	}
+
 	ApplyConfigToWidgets();
 	UpdateValueDisplay();
 	UpdateSliderFromValue();

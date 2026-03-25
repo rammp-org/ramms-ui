@@ -193,6 +193,9 @@ void URammsTaskWidget::SetHeaderTitle(FText Title)
 	if (HeaderText)
 	{
 		HeaderText->SetText(HeaderTitle);
+		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
@@ -202,7 +205,9 @@ void URammsTaskWidget::SetStatusText(FText Text)
 	if (StatusLabel)
 	{
 		StatusLabel->SetText(StatusText);
-		StatusLabel->SetVisibility(Text.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		StatusLabel->SetVisibility(StatusText.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 

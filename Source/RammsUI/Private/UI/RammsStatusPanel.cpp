@@ -107,10 +107,8 @@ void URammsStatusPanel::SynchronizeProperties()
 	if (HeaderText)
 	{
 		HeaderText->SetText(HeaderTitle);
-	}
-	if (HeaderRow)
-	{
-		HeaderRow->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+		// Only hide the text label; keep HeaderRow (with toggle button) always visible
+		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
 				? ESlateVisibility::Collapsed
 				: ESlateVisibility::SelfHitTestInvisible);
 	}

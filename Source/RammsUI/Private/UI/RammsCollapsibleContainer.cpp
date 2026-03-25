@@ -183,6 +183,11 @@ void URammsCollapsibleContainer::NativePreConstruct()
 	// Build widget tree for designer preview (guard in BuildWidgetTree prevents double-build)
 	BuildWidgetTree();
 
+	// Only apply designer-specific collapsed/expanded preview state.
+	// At runtime, NativeConstruct handles the correct initial state.
+	if (!IsDesignTime())
+		return;
+
 	// Apply collapsed/expanded visual state for designer preview.
 	// In the designer there are no animations. Use HeightOverride(0) + Hidden
 	// to maintain content width while hiding the content area.
@@ -664,6 +669,9 @@ void URammsCollapsibleContainer::SetHeaderTitle(FText Title)
 	if (HeaderLabel)
 	{
 		HeaderLabel->SetText(HeaderTitle);
+		HeaderLabel->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 
