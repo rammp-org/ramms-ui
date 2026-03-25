@@ -110,6 +110,57 @@ struct FRammsSeatState
 	}
 };
 
+// ── Axis Config ──────────────────────────────────────────────────
+
+class UTexture2D;
+
+/**
+ * Configuration for a single controllable axis.
+ * Groups icon, range, default value, display formatting, and step size
+ * into a single structure for cleaner details-panel grouping and reuse.
+ */
+USTRUCT(BlueprintType)
+struct FRammsAxisConfig
+{
+	GENERATED_BODY()
+
+	/** Display label for this axis */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	FText Label;
+
+	/** Icon texture displayed beside the control */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	TObjectPtr<UTexture2D> Icon = nullptr;
+
+	/** Icon display size in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	FVector2D IconSize = FVector2D(28.0f, 28.0f);
+
+	/** Minimum value */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	float MinValue = 0.0f;
+
+	/** Maximum value */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	float MaxValue = 1.0f;
+
+	/** Default / home value (used by the reset button) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	float DefaultValue = 0.0f;
+
+	/** Step size for the slider (0 = continuous) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	float StepSize = 0.0f;
+
+	/** Units suffix for value display (e.g. "°", "%") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	FText Units;
+
+	/** Number of decimal places in value display */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis", meta = (ClampMin = "0", ClampMax = "3"))
+	int32 DecimalPlaces = 1;
+};
+
 // ── Task ─────────────────────────────────────────────────────────
 
 /** Task action types */

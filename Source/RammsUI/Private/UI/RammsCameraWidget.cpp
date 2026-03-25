@@ -38,7 +38,10 @@ void URammsCameraWidget::BuildWidgetTree()
 	if (!WidgetTree || CameraBorder)
 		return;
 
-	// Root: Overlay (optionally wrapped in aspect ratio SizeBox)
+	// Root: InternalSizeBox wraps everything for non-Canvas layout sizing
+	InternalSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("InternalSizeBox"));
+	WidgetTree->RootWidget = InternalSizeBox;
+
 	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
 
 	if (bMaintainAspectRatio && !bCollapsible)
@@ -47,12 +50,12 @@ void URammsCameraWidget::BuildWidgetTree()
 		ImageAspectRatioBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ImageAspectRatioBox"));
 		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
 		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
-		WidgetTree->RootWidget = ImageAspectRatioBox;
+		InternalSizeBox->AddChild(ImageAspectRatioBox);
 		ImageAspectRatioBox->AddChild(RootOverlay);
 	}
 	else
 	{
-		WidgetTree->RootWidget = RootOverlay;
+		InternalSizeBox->AddChild(RootOverlay);
 	}
 
 	if (bCollapsible)
@@ -780,6 +783,9 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	// Detect if we're inside a Canvas Panel or added directly to viewport
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 
+	// Determine if we're in a non-Canvas layout container (NamedSlot, Overlay, etc.)
+	bool bInLayoutContainer = (!CanvasSlot && Slot != nullptr);
+
 	switch (DisplayMode)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
@@ -789,6 +795,15 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				// Stretch anchors fill entire Canvas Panel
 				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 				CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+			}
+			else if (bInLayoutContainer)
+			{
+				// In layout container: fill available space (clear size overrides)
+				if (InternalSizeBox)
+				{
+					InternalSizeBox->ClearWidthOverride();
+					InternalSizeBox->ClearHeightOverride();
+				}
 			}
 			else
 			{
@@ -838,6 +853,16 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			{
 				// Set computed size on slot; preserve designer-set anchors/position
 				CanvasSlot->SetSize(SizeInUnits);
+				CachedExpandedSlotSize = SizeInUnits;
+			}
+			else if (bInLayoutContainer)
+			{
+				// In layout container: constrain size via InternalSizeBox
+				if (InternalSizeBox)
+				{
+					InternalSizeBox->SetWidthOverride(SizeInUnits.X);
+					InternalSizeBox->SetHeightOverride(SizeInUnits.Y);
+				}
 				CachedExpandedSlotSize = SizeInUnits;
 			}
 			else
@@ -906,6 +931,16 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				CanvasSlot->SetAlignment(Alignment);
 				CanvasSlot->SetPosition(PadOffset);
 				CanvasSlot->SetSize(WidgetSize);
+				CachedExpandedSlotSize = WidgetSize;
+			}
+			else if (bInLayoutContainer)
+			{
+				// In layout container: constrain size via InternalSizeBox
+				if (InternalSizeBox)
+				{
+					InternalSizeBox->SetWidthOverride(WidgetSize.X);
+					InternalSizeBox->SetHeightOverride(WidgetSize.Y);
+				}
 				CachedExpandedSlotSize = WidgetSize;
 			}
 			else

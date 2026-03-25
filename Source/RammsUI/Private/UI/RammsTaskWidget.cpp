@@ -174,6 +174,16 @@ void URammsTaskWidget::SynchronizeProperties()
 	if (HeaderText)
 	{
 		HeaderText->SetText(HeaderTitle);
+		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (StatusLabel)
+	{
+		StatusLabel->SetText(StatusText);
+		StatusLabel->SetVisibility(StatusText.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 }
 

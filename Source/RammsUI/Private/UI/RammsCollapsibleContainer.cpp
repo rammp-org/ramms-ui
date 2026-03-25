@@ -177,6 +177,44 @@ void URammsCollapsibleContainer::NativeOnInitialized()
 	BuildWidgetTree();
 }
 
+void URammsCollapsibleContainer::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+	// Build widget tree for designer preview (guard in BuildWidgetTree prevents double-build)
+	BuildWidgetTree();
+
+	// Apply collapsed/expanded visual state for designer preview.
+	// In the designer there are no animations. Use HeightOverride(0) + Hidden
+	// to maintain content width while hiding the content area.
+	if (ContentSizeBox)
+	{
+		if (bIsExpanded)
+		{
+			ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			SetContentSlotFill(true);
+			if (MaxContentHeight > 0.0f)
+				ContentSizeBox->SetHeightOverride(MaxContentHeight);
+			else
+				ContentSizeBox->ClearHeightOverride();
+			ContentSizeBox->SetRenderOpacity(1.0f);
+		}
+		else
+		{
+			// Collapsed in designer: HeightOverride(0) hides content while
+			// preserving width. Hidden visibility stops rendering but keeps
+			// the widget in layout so the container width is maintained.
+			SetContentSlotFill(false);
+			ContentSizeBox->SetHeightOverride(0.0f);
+			ContentSizeBox->SetVisibility(ESlateVisibility::Hidden);
+			ContentSizeBox->SetRenderOpacity(0.0f);
+		}
+	}
+	if (ToggleIcon)
+	{
+		UpdateToggleIcon();
+	}
+}
+
 void URammsCollapsibleContainer::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
@@ -184,6 +222,12 @@ void URammsCollapsibleContainer::SynchronizeProperties()
 	if (HeaderLabel)
 	{
 		HeaderLabel->SetText(HeaderTitle);
+	}
+	if (HeaderBorder)
+	{
+		HeaderBorder->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::SelfHitTestInvisible);
 	}
 	if (ToggleIcon)
 	{
@@ -214,9 +258,18 @@ void URammsCollapsibleContainer::SynchronizeProperties()
 			}
 			ContentSizeBox->SetRenderOpacity(1.0f);
 		}
+		else if (IsDesignTime())
+		{
+			// Designer: HeightOverride(0) + Hidden to collapse content while
+			// keeping width in layout (so the container doesn't shrink in X)
+			SetContentSlotFill(false);
+			ContentSizeBox->SetHeightOverride(0.0f);
+			ContentSizeBox->SetVisibility(ESlateVisibility::Hidden);
+			ContentSizeBox->SetRenderOpacity(0.0f);
+		}
 		else
 		{
-			// Collapsed: content area hidden but stays in layout to preserve width
+			// Runtime collapsed: HeightOverride(0) preserves width for animations
 			SetContentSlotFill(false);
 			ContentSizeBox->SetHeightOverride(0.0f);
 			ContentSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
