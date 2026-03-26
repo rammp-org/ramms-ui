@@ -13,8 +13,8 @@
 #include "RammsTaskWidget.generated.h"
 
 /**
- * Task widget with Exit and Cancel action buttons.
- * Used during active tasks/modes to provide abort/complete controls.
+ * Task widget with Exit, Cancel, and optional Confirm action buttons.
+ * Used during active tasks/modes to provide abort/complete/confirm controls.
  */
 UCLASS(meta = (DisplayName = "Ramms Task Widget"))
 class RAMMSUI_API URammsTaskWidget : public URammsBaseWidget
@@ -34,6 +34,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
 	FVector2D ButtonImageSize = FVector2D(48.0f, 48.0f);
 
+	/** Whether to show the Confirm button */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
+	bool bShowConfirmButton = false;
+
 	/** Icon for Exit action */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
 	TObjectPtr<UTexture2D> ExitIcon;
@@ -41,6 +45,10 @@ protected:
 	/** Icon for Cancel action */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
 	TObjectPtr<UTexture2D> CancelIcon;
+
+	/** Icon for Confirm action */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
+	TObjectPtr<UTexture2D> ConfirmIcon;
 
 	// Widget references
 	UPROPERTY()
@@ -57,6 +65,9 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<URammsImageButton> CancelButton;
+
+	UPROPERTY()
+	TObjectPtr<URammsImageButton> ConfirmButton;
 
 public:
 	/** Fired when a task action is triggered */
@@ -85,6 +96,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Task")
 	void SetActionEnabled(ERammsTaskAction Action, bool bEnabled);
 
+	/** Show or hide the Confirm button at runtime */
+	UFUNCTION(BlueprintCallable, Category = "Task")
+	void SetConfirmVisible(bool bVisible);
+
 protected:
 	virtual void ResetCachedWidgets() override;
 	virtual void BuildWidgetTree() override;
@@ -94,4 +109,7 @@ protected:
 
 	UFUNCTION()
 	void OnCancelClicked();
+
+	UFUNCTION()
+	void OnConfirmClicked();
 };

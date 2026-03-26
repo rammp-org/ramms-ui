@@ -14,6 +14,7 @@ void URammsTaskWidget::ResetCachedWidgets()
 	StatusLabel = nullptr;
 	ExitButton = nullptr;
 	CancelButton = nullptr;
+	ConfirmButton = nullptr;
 }
 
 void URammsTaskWidget::BuildWidgetTree()
@@ -103,6 +104,31 @@ void URammsTaskWidget::BuildWidgetTree()
 		ExitSlot->SetPadding(FMargin(4.0f));
 		ExitSlot->SetHorizontalAlignment(HAlign_Center);
 	}
+
+	// Confirm button (optional, shown via bShowConfirmButton)
+	USpacer* ConfirmSpacer = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("ConfirmSpacer"));
+	ConfirmSpacer->SetSize(FVector2D(16.0f, 1.0f));
+	ButtonRow->AddChildToHorizontalBox(ConfirmSpacer);
+
+	ConfirmButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ConfirmBtn"));
+	ConfirmButton->SetLabelText(FText::FromString(TEXT("Confirm")));
+	ConfirmButton->SetImageSize(ButtonImageSize);
+	if (ConfirmIcon)
+		ConfirmButton->SetButtonImage(ConfirmIcon);
+	if (Style)
+		ConfirmButton->SetStyle(Style);
+
+	UHorizontalBoxSlot* ConfirmSlot = ButtonRow->AddChildToHorizontalBox(ConfirmButton);
+	if (ConfirmSlot)
+	{
+		ConfirmSlot->SetPadding(FMargin(4.0f));
+		ConfirmSlot->SetHorizontalAlignment(HAlign_Center);
+	}
+
+	// Apply initial visibility
+	ESlateVisibility ConfirmVis = bShowConfirmButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+	ConfirmSpacer->SetVisibility(ConfirmVis);
+	ConfirmButton->SetVisibility(ConfirmVis);
 }
 
 void URammsTaskWidget::NativeOnInitialized()
@@ -122,6 +148,10 @@ void URammsTaskWidget::NativeConstruct()
 	if (CancelButton)
 	{
 		CancelButton->OnClicked.AddUniqueDynamic(this, &URammsTaskWidget::OnCancelClicked);
+	}
+	if (ConfirmButton)
+	{
+		ConfirmButton->OnClicked.AddUniqueDynamic(this, &URammsTaskWidget::OnConfirmClicked);
 	}
 }
 
@@ -153,6 +183,8 @@ void URammsTaskWidget::ApplyStyle_Implementation()
 		ExitButton->SetStyle(Style);
 	if (CancelButton)
 		CancelButton->SetStyle(Style);
+	if (ConfirmButton)
+		ConfirmButton->SetStyle(Style);
 }
 
 void URammsTaskWidget::SynchronizeProperties()
@@ -170,6 +202,15 @@ void URammsTaskWidget::SynchronizeProperties()
 		if (CancelIcon)
 			CancelButton->SetButtonImage(CancelIcon);
 		CancelButton->SetImageSize(ButtonImageSize);
+	}
+	if (ConfirmButton)
+	{
+		if (ConfirmIcon)
+			ConfirmButton->SetButtonImage(ConfirmIcon);
+		ConfirmButton->SetImageSize(ButtonImageSize);
+		ConfirmButton->SetVisibility(bShowConfirmButton
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
 	}
 	if (HeaderText)
 	{
@@ -225,6 +266,11 @@ void URammsTaskWidget::SetActionIcon(ERammsTaskAction Action, UTexture2D* Icon)
 			if (CancelButton)
 				CancelButton->SetButtonImage(Icon);
 			break;
+		case ERammsTaskAction::Confirm:
+			ConfirmIcon = Icon;
+			if (ConfirmButton)
+				ConfirmButton->SetButtonImage(Icon);
+			break;
 	}
 }
 
@@ -240,6 +286,21 @@ void URammsTaskWidget::SetActionEnabled(ERammsTaskAction Action, bool bEnabled)
 			if (CancelButton)
 				CancelButton->SetButtonEnabled(bEnabled);
 			break;
+		case ERammsTaskAction::Confirm:
+			if (ConfirmButton)
+				ConfirmButton->SetButtonEnabled(bEnabled);
+			break;
+	}
+}
+
+void URammsTaskWidget::SetConfirmVisible(bool bVisible)
+{
+	bShowConfirmButton = bVisible;
+	if (ConfirmButton)
+	{
+		ConfirmButton->SetVisibility(bVisible
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
 	}
 }
 
@@ -265,6 +326,19 @@ void URammsTaskWidget::OnCancelClicked()
 		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
 		{
 			Subsystem->BroadcastTaskAction(ERammsTaskAction::Cancel);
+		}
+	}
+}
+
+void URammsTaskWidget::OnConfirmClicked()
+{
+	OnTaskAction.Broadcast(ERammsTaskAction::Confirm);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Subsystem->BroadcastTaskAction(ERammsTaskAction::Confirm);
 		}
 	}
 }

@@ -21,6 +21,7 @@ void URammsArmTaskWidget::ResetCachedWidgets()
 	OpenDoorButton = nullptr;
 	OrderDrinkButton = nullptr;
 	DrinkButton = nullptr;
+	StabilizationButton = nullptr;
 }
 
 void URammsArmTaskWidget::BuildWidgetTree()
@@ -79,10 +80,11 @@ void URammsArmTaskWidget::BuildWidgetTree()
 	OpenDoorButton = CreateTaskButton(TEXT("OpenDoorBtn"), FText::FromString(TEXT("Open Door")), OpenDoorIcon);
 	OrderDrinkButton = CreateTaskButton(TEXT("OrderDrinkBtn"), FText::FromString(TEXT("Order Drink")), OrderDrinkIcon);
 	DrinkButton = CreateTaskButton(TEXT("DrinkBtn"), FText::FromString(TEXT("Drink")), DrinkIcon);
+	StabilizationButton = CreateTaskButton(TEXT("StabilizationBtn"), FText::FromString(TEXT("Stabilize")), StabilizationIcon);
 
 	// Add to grid using GridColumns for layout
 	const int32				   Cols = FMath::Max(GridColumns, 1);
-	TArray<URammsImageButton*> Buttons = { OpenDoorButton, OrderDrinkButton, DrinkButton };
+	TArray<URammsImageButton*> Buttons = { OpenDoorButton, OrderDrinkButton, DrinkButton, StabilizationButton };
 	for (int32 i = 0; i < Buttons.Num(); ++i)
 	{
 		UUniformGridSlot* CellSlot = TaskGrid->AddChildToUniformGrid(Buttons[i], i / Cols, i % Cols);
@@ -114,6 +116,10 @@ void URammsArmTaskWidget::NativeConstruct()
 	{
 		DrinkButton->OnClicked.AddUniqueDynamic(this, &URammsArmTaskWidget::OnDrinkClicked);
 	}
+	if (StabilizationButton)
+	{
+		StabilizationButton->OnClicked.AddUniqueDynamic(this, &URammsArmTaskWidget::OnStabilizationClicked);
+	}
 
 	UpdateTaskButtons();
 }
@@ -141,6 +147,8 @@ void URammsArmTaskWidget::ApplyStyle_Implementation()
 		OrderDrinkButton->SetStyle(Style);
 	if (DrinkButton)
 		DrinkButton->SetStyle(Style);
+	if (StabilizationButton)
+		StabilizationButton->SetStyle(Style);
 }
 
 void URammsArmTaskWidget::SynchronizeProperties()
@@ -164,6 +172,12 @@ void URammsArmTaskWidget::SynchronizeProperties()
 		if (DrinkIcon)
 			DrinkButton->SetButtonImage(DrinkIcon);
 		DrinkButton->SetImageSize(ButtonImageSize);
+	}
+	if (StabilizationButton)
+	{
+		if (StabilizationIcon)
+			StabilizationButton->SetButtonImage(StabilizationIcon);
+		StabilizationButton->SetImageSize(ButtonImageSize);
 	}
 	if (HeaderText)
 	{
@@ -218,6 +232,11 @@ void URammsArmTaskWidget::SetTaskIcon(ERammsArmTask Task, UTexture2D* Icon)
 			if (DrinkButton)
 				DrinkButton->SetButtonImage(Icon);
 			break;
+		case ERammsArmTask::Stabilization:
+			StabilizationIcon = Icon;
+			if (StabilizationButton)
+				StabilizationButton->SetButtonImage(Icon);
+			break;
 		default:
 			break;
 	}
@@ -231,6 +250,8 @@ void URammsArmTaskWidget::UpdateTaskButtons()
 		OrderDrinkButton->SetActive(CurrentTask == ERammsArmTask::OrderDrink);
 	if (DrinkButton)
 		DrinkButton->SetActive(CurrentTask == ERammsArmTask::Drink);
+	if (StabilizationButton)
+		StabilizationButton->SetActive(CurrentTask == ERammsArmTask::Stabilization);
 }
 
 void URammsArmTaskWidget::OnOpenDoorClicked()
@@ -246,6 +267,11 @@ void URammsArmTaskWidget::OnOrderDrinkClicked()
 void URammsArmTaskWidget::OnDrinkClicked()
 {
 	HandleTaskButtonClicked(ERammsArmTask::Drink);
+}
+
+void URammsArmTaskWidget::OnStabilizationClicked()
+{
+	HandleTaskButtonClicked(ERammsArmTask::Stabilization);
 }
 
 void URammsArmTaskWidget::HandleTaskButtonClicked(ERammsArmTask Task)

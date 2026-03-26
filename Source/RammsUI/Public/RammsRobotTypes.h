@@ -41,10 +41,11 @@ enum class ERammsMebotMode : uint8
 UENUM(BlueprintType)
 enum class ERammsArmTask : uint8
 {
-	None	   UMETA(DisplayName = "None"),
-	OpenDoor   UMETA(DisplayName = "Open Door"),
-	OrderDrink UMETA(DisplayName = "Order Drink"),
-	Drink	   UMETA(DisplayName = "Drink")
+	None		  UMETA(DisplayName = "None"),
+	OpenDoor	  UMETA(DisplayName = "Open Door"),
+	OrderDrink	  UMETA(DisplayName = "Order Drink"),
+	Drink		  UMETA(DisplayName = "Drink"),
+	Stabilization UMETA(DisplayName = "Stabilization")
 };
 
 // ── Seat Control ─────────────────────────────────────────────────
@@ -175,6 +176,7 @@ struct FRammsAxisConfig
 UENUM(BlueprintType)
 enum class ERammsTaskAction : uint8
 {
-	Exit   UMETA(DisplayName = "Exit"),
-	Cancel UMETA(DisplayName = "Cancel")
+	Exit	UMETA(DisplayName = "Exit"),
+	Cancel	UMETA(DisplayName = "Cancel"),
+	Confirm UMETA(DisplayName = "Confirm")
 };
