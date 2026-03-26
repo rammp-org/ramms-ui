@@ -148,8 +148,8 @@ struct FRammsAxisConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
 	float DefaultValue = 0.0f;
 
-	/** Step size for the slider (0 = continuous) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	/** Step size in actual value units (0 = continuous). Used by the slider and +/- buttons. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis", meta = (ClampMin = "0.0"))
 	float StepSize = 0.0f;
 
 	/** Units suffix for value display (e.g. "°", "%") */
@@ -159,6 +159,14 @@ struct FRammsAxisConfig
 	/** Number of decimal places in value display */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis", meta = (ClampMin = "0", ClampMax = "3"))
 	int32 DecimalPlaces = 1;
+
+	/** Whether to show the slider control */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	bool bShowSlider = true;
+
+	/** Whether to show +/- increment/decrement buttons */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis")
+	bool bShowButtons = true;
 };
 
 // ── Task ─────────────────────────────────────────────────────────

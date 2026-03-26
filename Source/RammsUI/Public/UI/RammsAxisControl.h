@@ -17,10 +17,12 @@
 /**
  * Reusable axis control widget.
  *
- * Displays an icon, label, current value, reset-to-default button, and slider.
+ * Displays an icon, label, current value, reset-to-default button,
+ * optional slider, and optional large +/- increment buttons.
  * Configurable via FRammsAxisConfig for range, icon, default value, units, etc.
  *
- * Layout:  HBox( Icon,  VBox( HBox(Label, Value, ResetBtn),  Slider ) )
+ * Layout:  HBox( Icon,  VBox( HBox(Label, Value, ResetBtn),
+ *                             HBox([MinusBtn], [Slider], [PlusBtn]) ) )
  *
  * Can be used standalone in Blueprints / named slots, or embedded
  * programmatically as a child of another widget (e.g., URammsSeatController).
@@ -108,15 +110,45 @@ protected:
 	UPROPERTY()
 	TObjectPtr<USlider> InnerSlider;
 
+	UPROPERTY()
+	TObjectPtr<UHorizontalBox> ControlRow;
+
+	UPROPERTY()
+	TObjectPtr<UButton> DecrementButton;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> DecrementLabel;
+
+	UPROPERTY()
+	TObjectPtr<UButton> IncrementButton;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> IncrementLabel;
+
 	// ── Internal Helpers ───────────────────────────────────────────
 
 	void UpdateValueDisplay();
 	void UpdateSliderFromValue();
 	void ApplyConfigToWidgets();
 
+	/** Convert Config.StepSize (actual value units) to normalized [0,1] for USlider. */
+	float GetNormalizedStepSize() const;
+
+	/** Get effective step for +/- buttons (StepSize or 5% of range when continuous). */
+	float GetEffectiveButtonStep() const;
+
+	/** Snap a value to the configured step grid (no-op when StepSize == 0). */
+	float SnapToStep(float Value) const;
+
 	UFUNCTION()
 	void OnSliderChanged(float Value);
 
 	UFUNCTION()
 	void OnResetClicked();
+
+	UFUNCTION()
+	void OnDecrementClicked();
+
+	UFUNCTION()
+	void OnIncrementClicked();
 };
