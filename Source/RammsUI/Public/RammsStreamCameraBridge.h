@@ -56,6 +56,10 @@ private:
 	UPROPERTY()
 	URammsCameraProviderComponent* CameraProvider = nullptr;
 
+	/** First sink found on this actor (used to read raw frame data). */
+	UPROPERTY()
+	URammsStreamSinkComponent* PrimarySink = nullptr;
+
 	/** Track which channels have been registered as streams. */
 	TSet<int32> RegisteredChannels;
 

@@ -10,6 +10,7 @@
 class UDecalComponent;
 class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
+class UTextureRenderTarget2D;
 
 /**
  * Projects a single camera feed onto scene surfaces using a deferred decal
@@ -138,6 +139,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetColorTexture(UTexture* Texture, int64 Timestamp);
 
+	/** Set color texture with CPU-side raw data for PGM. */
+	void SetColorTextureWithData(UTexture* Texture, int64 Timestamp,
+		TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height);
+
+	/** Set depth texture with CPU-side raw data for PGM. */
+	void SetDepthTextureWithData(UTexture* Texture, int64 Timestamp,
+		TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height);
+
 	/** Populate intrinsics from a camera stream info struct */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetIntrinsicsFromStreamInfo(const FRammsCameraStreamInfo& StreamInfo);
@@ -178,10 +187,28 @@ private:
 	void UpdateCameraTransformParameters();
 
 	void UpdatePGM();
+	void MaybeUpdatePGM();
+
+	/** GPU readback fallback: extract pixel data from a texture when no raw data was provided. */
+	bool TryReadTextureToRawData(UTexture* Texture,
+		TArray<uint8>& OutRawData, EPixelFormat& OutFormat,
+		int32& OutWidth, int32& OutHeight);
 
 	// State trackers
 	TObjectPtr<UTexture> CurrentColorTexture;
 	TObjectPtr<UTexture> CurrentDepthTexture;
-	int64 LastColorTimestamp = 0;
-	int64 LastDepthTimestamp = 0;
+	int64				 LastColorTimestamp = 0;
+	int64				 LastDepthTimestamp = 0;
+	int64				 LastPGMTimestamp = 0;
+
+	// CPU-side raw frame data for PGM (avoids GPU readback)
+	TArray<uint8> ColorRawData;
+	EPixelFormat  ColorPixelFormat = PF_Unknown;
+	int32		  ColorFrameWidth = 0;
+	int32		  ColorFrameHeight = 0;
+
+	TArray<uint8> DepthRawData;
+	EPixelFormat  DepthPixelFormat = PF_Unknown;
+	int32		  DepthFrameWidth = 0;
+	int32		  DepthFrameHeight = 0;
 };

@@ -4,7 +4,6 @@
 #include "Components/DecalComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
-#include "TextureResource.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 
@@ -30,10 +29,8 @@ void URammsCameraProjectorComponent::PostEditChangeProperty(FPropertyChangedEven
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 	UpdateDecalSize();
 	UpdateMaterialParameters();
-	
-	if (PropertyChangedEvent.Property && 
-		(PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, bEnablePGM) ||
-		 PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, PGMMaterial)))
+
+	if (PropertyChangedEvent.Property && (PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, bEnablePGM) || PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, PGMMaterial)))
 	{
 		UpdatePGM();
 	}
@@ -68,9 +65,9 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float Fy = FMath::Max(FocalLengthY, 1.0f);
 
 	// Conservative half-extents of the frustum at max distance
-	const float HalfWidth  = MaxProjectionDistance * (float)ImageWidth  / (2.0f * Fx);
+	const float HalfWidth = MaxProjectionDistance * (float)ImageWidth / (2.0f * Fx);
 	const float HalfHeight = MaxProjectionDistance * (float)ImageHeight / (2.0f * Fy);
-	const float HalfDepth  = MaxProjectionDistance * 0.5f;
+	const float HalfDepth = MaxProjectionDistance * 0.5f;
 
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
 	DecalComponent->DecalSize = FVector(HalfDepth, HalfWidth, HalfHeight);
@@ -104,10 +101,10 @@ void URammsCameraProjectorComponent::UpdateCameraTransformParameters()
 		return;
 
 	const FTransform& WorldXform = GetComponentTransform();
-	const FVector Pos = WorldXform.GetLocation();
-	const FVector Fwd = WorldXform.GetUnitAxis(EAxis::X);
-	const FVector Right = WorldXform.GetUnitAxis(EAxis::Y);
-	const FVector Up = WorldXform.GetUnitAxis(EAxis::Z);
+	const FVector	  Pos = WorldXform.GetLocation();
+	const FVector	  Fwd = WorldXform.GetUnitAxis(EAxis::X);
+	const FVector	  Right = WorldXform.GetUnitAxis(EAxis::Y);
+	const FVector	  Up = WorldXform.GetUnitAxis(EAxis::Z);
 
 	MaterialInstance->SetVectorParameterValue(FName("CameraWorldPos"),
 		FLinearColor(Pos.X, Pos.Y, Pos.Z, 0.0f));
@@ -119,86 +116,81 @@ void URammsCameraProjectorComponent::UpdateCameraTransformParameters()
 		FLinearColor(Up.X, Up.Y, Up.Z, 0.0f));
 }
 
-static bool ReadTextureData(UTexture* Texture, TArray<FLinearColor>& OutData, int32& OutWidth, int32& OutHeight)
+// ── Raw data → FLinearColor helpers ────────────────────────────────
+
+namespace
 {
-	if (!Texture) return false;
-
-	// Path 1: Render Target — most reliable for live streams
-	if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
+	/** Convert raw pixel bytes to an array of FLinearColor, handling different pixel formats. */
+	bool ConvertRawToLinearColor(const TArray<uint8>& RawData, EPixelFormat Format,
+		int32 Width, int32 Height, TArray<FLinearColor>& OutPixels)
 	{
-		FTextureRenderTargetResource* Resource = RT->GameThread_GetRenderTargetResource();
-		if (!Resource)
-		{
-			UE_LOG(LogRammsPGM, Warning, TEXT("ReadTextureData: RenderTarget has no resource for '%s'"), *Texture->GetName());
+		const int32 PixelCount = Width * Height;
+		if (PixelCount <= 0)
 			return false;
-		}
-		OutWidth = RT->SizeX;
-		OutHeight = RT->SizeY;
-		bool bOk = Resource->ReadLinearColorPixels(OutData);
-		if (!bOk)
+
+		OutPixels.SetNumUninitialized(PixelCount);
+
+		switch (Format)
 		{
-			UE_LOG(LogRammsPGM, Warning, TEXT("ReadTextureData: ReadLinearColorPixels failed for RT '%s'"), *Texture->GetName());
+			case PF_B8G8R8A8:
+			{
+				const int32 Expected = PixelCount * 4;
+				if (RawData.Num() < Expected)
+					return false;
+				const uint8* Bytes = RawData.GetData();
+				for (int32 i = 0; i < PixelCount; ++i)
+				{
+					OutPixels[i] = FLinearColor(
+						Bytes[i * 4 + 2] / 255.0f,	// R (stored as BGRA)
+						Bytes[i * 4 + 1] / 255.0f,	// G
+						Bytes[i * 4 + 0] / 255.0f,	// B
+						Bytes[i * 4 + 3] / 255.0f); // A
+				}
+				return true;
+			}
+			case PF_R32_FLOAT:
+			{
+				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float));
+				if (RawData.Num() < Expected)
+					return false;
+				const float* Floats = reinterpret_cast<const float*>(RawData.GetData());
+				for (int32 i = 0; i < PixelCount; ++i)
+				{
+					OutPixels[i] = FLinearColor(Floats[i], 0.0f, 0.0f, 1.0f);
+				}
+				return true;
+			}
+			case PF_G32R32F:
+			{
+				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float)) * 2;
+				if (RawData.Num() < Expected)
+					return false;
+				const float* Floats = reinterpret_cast<const float*>(RawData.GetData());
+				for (int32 i = 0; i < PixelCount; ++i)
+				{
+					OutPixels[i] = FLinearColor(Floats[i * 2], Floats[i * 2 + 1], 0.0f, 1.0f);
+				}
+				return true;
+			}
+			case PF_A32B32G32R32F:
+			{
+				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float)) * 4;
+				if (RawData.Num() < Expected)
+					return false;
+				const FLinearColor* Colors = reinterpret_cast<const FLinearColor*>(RawData.GetData());
+				FMemory::Memcpy(OutPixels.GetData(), Colors, PixelCount * sizeof(FLinearColor));
+				return true;
+			}
+			default:
+				return false;
 		}
-		return bOk;
 	}
-
-	// Path 2: UTexture2D — BulkData may be unavailable after UpdateResource() uploads
-	// to GPU, so we use the texture's platform data only if it's still CPU-accessible.
-	if (UTexture2D* Tex2D = Cast<UTexture2D>(Texture))
-	{
-		OutWidth = Tex2D->GetSizeX();
-		OutHeight = Tex2D->GetSizeY();
-
-		if (!Tex2D->GetPlatformData() || Tex2D->GetPlatformData()->Mips.Num() == 0)
-		{
-			UE_LOG(LogRammsPGM, Warning, TEXT("ReadTextureData: Texture2D '%s' has no platform mip data"), *Texture->GetName());
-			return false;
-		}
-
-		FTexture2DMipMap& Mip = Tex2D->GetPlatformData()->Mips[0];
-
-		// Only attempt if BulkData is loaded (it may have been discarded after GPU upload)
-		if (!Mip.BulkData.IsBulkDataLoaded())
-		{
-			UE_LOG(LogRammsPGM, Warning,
-				TEXT("ReadTextureData: Texture2D '%s' BulkData is not loaded (already GPU-uploaded). "
-					 "Consider using a UTextureRenderTarget2D for depth streams."),
-				*Texture->GetName());
-			return false;
-		}
-
-		void* DataPtr = Mip.BulkData.Lock(LOCK_READ_ONLY);
-		if (!DataPtr)
-		{
-			UE_LOG(LogRammsPGM, Warning, TEXT("ReadTextureData: BulkData lock returned null for '%s'"), *Texture->GetName());
-			Mip.BulkData.Unlock();
-			return false;
-		}
-
-		int32 PixelCount = OutWidth * OutHeight;
-		OutData.SetNumUninitialized(PixelCount);
-		// Provider uses PF_B8G8R8A8 — bytes are laid out B, G, R, A
-		uint8* Bytes = static_cast<uint8*>(DataPtr);
-		for (int32 i = 0; i < PixelCount; ++i)
-		{
-			OutData[i] = FLinearColor(
-				Bytes[i * 4 + 2] / 255.0f, // R
-				Bytes[i * 4 + 1] / 255.0f, // G
-				Bytes[i * 4 + 0] / 255.0f, // B
-				Bytes[i * 4 + 3] / 255.0f  // A
-			);
-		}
-		Mip.BulkData.Unlock();
-		return true;
-	}
-
-	UE_LOG(LogRammsPGM, Warning, TEXT("ReadTextureData: Unsupported texture type for '%s'"), *Texture->GetName());
-	return false;
-}
+} // namespace
 
 void URammsCameraProjectorComponent::EnsurePGMCreated()
 {
-	if (ProcMeshComponent) return; // already created
+	if (ProcMeshComponent)
+		return; // already created
 
 	AActor* Owner = GetOwner();
 	if (!Owner)
@@ -207,7 +199,8 @@ void URammsCameraProjectorComponent::EnsurePGMCreated()
 		return;
 	}
 
-	ProcMeshComponent = NewObject<UProceduralMeshComponent>(Owner, TEXT("PGMProceduralMesh"));
+	FName MeshName = MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("PGMProceduralMesh"));
+	ProcMeshComponent = NewObject<UProceduralMeshComponent>(Owner, MeshName);
 	ProcMeshComponent->bUseAsyncCooking = false; // sync so mesh is visible immediately
 	ProcMeshComponent->SetupAttachment(this);
 	ProcMeshComponent->RegisterComponent();
@@ -221,30 +214,43 @@ void URammsCameraProjectorComponent::EnsurePGMCreated()
 	UE_LOG(LogRammsPGM, Log, TEXT("EnsurePGMCreated: ProcMeshComponent created on '%s'"), *Owner->GetName());
 }
 
+void URammsCameraProjectorComponent::MaybeUpdatePGM()
+{
+	if (!bEnablePGM)
+		return;
+
+	// Only rebuild when BOTH color and depth have been updated since last PGM run
+	if (LastColorTimestamp > LastPGMTimestamp && LastDepthTimestamp > LastPGMTimestamp)
+	{
+		UpdatePGM();
+	}
+}
+
 void URammsCameraProjectorComponent::UpdatePGM()
 {
 	if (!bEnablePGM)
 	{
-		if (ProcMeshComponent) ProcMeshComponent->SetVisibility(false);
+		if (ProcMeshComponent)
+			ProcMeshComponent->SetVisibility(false);
 		return;
 	}
 
-	if (!CurrentColorTexture || !CurrentDepthTexture)
+	// Require both raw data buffers
+	if (DepthRawData.Num() == 0 || ColorRawData.Num() == 0)
 	{
-		UE_LOG(LogRammsPGM, Verbose,
-			TEXT("UpdatePGM: waiting for both textures (color=%s, depth=%s)"),
-			CurrentColorTexture ? *CurrentColorTexture->GetName() : TEXT("null"),
-			CurrentDepthTexture ? *CurrentDepthTexture->GetName() : TEXT("null"));
+		UE_LOG(LogRammsPGM, Log,
+			TEXT("UpdatePGM: waiting for raw data (color=%d bytes, depth=%d bytes)"),
+			ColorRawData.Num(), DepthRawData.Num());
 		return;
 	}
 
-	// 1. Check for sync — only enforce if we have real timestamps from both streams
+	// Check for sync — only enforce if we have real timestamps from both streams
 	if (LastColorTimestamp != 0 && LastDepthTimestamp != 0)
 	{
 		int64 DeltaTicks = FMath::Abs(LastColorTimestamp - LastDepthTimestamp);
 		// FDateTime ticks are 100-nanosecond intervals → divide by 10000 for milliseconds
 		float DeltaMS = static_cast<float>(DeltaTicks) / 10000.0f;
-		
+
 		if (DeltaMS > SyncThresholdMS)
 		{
 			UE_LOG(LogRammsPGM, Verbose,
@@ -262,26 +268,62 @@ void URammsCameraProjectorComponent::UpdatePGM()
 		return;
 	}
 
+	// Convert raw data to FLinearColor arrays using format-aware conversion
 	TArray<FLinearColor> ColorPixels;
 	TArray<FLinearColor> DepthPixels;
-	int32 ColorW = 0, ColorH = 0, DepthW = 0, DepthH = 0;
 
-	if (!ReadTextureData(CurrentColorTexture, ColorPixels, ColorW, ColorH))
+	if (!ConvertRawToLinearColor(ColorRawData, ColorPixelFormat, ColorFrameWidth, ColorFrameHeight, ColorPixels))
 	{
-		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM: failed to read color texture '%s'"), *CurrentColorTexture->GetName());
+		UE_LOG(LogRammsPGM, Warning,
+			TEXT("UpdatePGM: failed to convert color data (fmt=%d, %dx%d, %d bytes)"),
+			static_cast<int32>(ColorPixelFormat), ColorFrameWidth, ColorFrameHeight, ColorRawData.Num());
 		return;
 	}
-	if (!ReadTextureData(CurrentDepthTexture, DepthPixels, DepthW, DepthH))
+	if (!ConvertRawToLinearColor(DepthRawData, DepthPixelFormat, DepthFrameWidth, DepthFrameHeight, DepthPixels))
 	{
-		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM: failed to read depth texture '%s'"), *CurrentDepthTexture->GetName());
+		UE_LOG(LogRammsPGM, Warning,
+			TEXT("UpdatePGM: failed to convert depth data (fmt=%d, %dx%d, %d bytes)"),
+			static_cast<int32>(DepthPixelFormat), DepthFrameWidth, DepthFrameHeight, DepthRawData.Num());
 		return;
 	}
+
+	const int32 DepthW = DepthFrameWidth;
+	const int32 DepthH = DepthFrameHeight;
+	const int32 ColorW = ColorFrameWidth;
+	const int32 ColorH = ColorFrameHeight;
 
 	UE_LOG(LogRammsPGM, Verbose,
 		TEXT("UpdatePGM: color=%dx%d (%d px), depth=%dx%d (%d px)"),
 		ColorW, ColorH, ColorPixels.Num(), DepthW, DepthH, DepthPixels.Num());
 
-	// Depth drives the mesh — color dimensions may differ
+	// Sample depth range for diagnostics (first update only)
+	if (LastPGMTimestamp == 0)
+	{
+		float MinD = FLT_MAX, MaxD = -FLT_MAX, SumD = 0;
+		int32 ValidCount = 0;
+		for (int32 i = 0; i < DepthPixels.Num(); ++i)
+		{
+			float D = DepthPixels[i].R;
+			if (D > 0.0f)
+			{
+				MinD = FMath::Min(MinD, D);
+				MaxD = FMath::Max(MaxD, D);
+				SumD += D;
+				++ValidCount;
+			}
+		}
+		UE_LOG(LogRammsPGM, Log,
+			TEXT("UpdatePGM depth diagnostics: raw range [%.4f, %.4f], mean=%.4f, validPx=%d/%d, DepthScaleToCM=%.4f → cm range [%.1f, %.1f]"),
+			MinD, MaxD, ValidCount > 0 ? SumD / ValidCount : 0.0f,
+			ValidCount, DepthPixels.Num(), DepthScaleToCM,
+			MinD * DepthScaleToCM, MaxD * DepthScaleToCM);
+		UE_LOG(LogRammsPGM, Log,
+			TEXT("UpdatePGM intrinsics: fx=%.1f fy=%.1f cx=%.1f cy=%.1f, image=%dx%d, depthFmt=%d, colorFmt=%d"),
+			FocalLengthX, FocalLengthY, PrincipalPointX, PrincipalPointY,
+			ImageWidth, ImageHeight,
+			static_cast<int32>(DepthPixelFormat), static_cast<int32>(ColorPixelFormat));
+	}
+
 	if (DepthW <= 0 || DepthH <= 0 || DepthPixels.Num() < (DepthW * DepthH))
 	{
 		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM: depth data invalid (%dx%d, %d pixels)"), DepthW, DepthH, DepthPixels.Num());
@@ -289,11 +331,11 @@ void URammsCameraProjectorComponent::UpdatePGM()
 	}
 
 	// Porting deprojection logic from PGM_Display.cpp
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UV0;
-	TArray<FLinearColor> VertexColors;
+	TArray<FVector>			 Vertices;
+	TArray<int32>			 Triangles;
+	TArray<FVector>			 Normals;
+	TArray<FVector2D>		 UV0;
+	TArray<FLinearColor>	 VertexColors;
 	TArray<FProcMeshTangent> Tangents;
 
 	TMap<FIntPoint, int32> GridToVertexMap;
@@ -328,18 +370,18 @@ void URammsCameraProjectorComponent::UpdatePGM()
 
 			// PGM_Display logic: Red channel contains depth
 			float Z = DepthPixels[Index].R * DepthScaleToCM;
-			
+
 			if (Z < MinDepthCM || Z > MaxDepthCM)
 				continue;
 
 			// Deprojection math (Unreal space)
 			float X_cam = Z;
 			float Y_cam = ((SrcX - Cx) * Z) / Fx;
-			float Z_cam = ((Cy - SrcY) * Z) / Fy; 
+			float Z_cam = ((Cy - SrcY) * Z) / Fy;
 
 			// Parallax Color Sampling
 			float Y_rgb_world = Y_cam - SensorBaselineY;
-			
+
 			// Map Y_rgb_world back to pixel space in Color Texture
 			// We need to use the COLOR intrinsics (the original ones)
 			int32 u_color = FMath::RoundToInt(((Y_rgb_world * FocalLengthX) / X_cam) + PrincipalPointX);
@@ -374,9 +416,7 @@ void URammsCameraProjectorComponent::UpdatePGM()
 				FVector p2 = Vertices[*v2];
 				FVector p3 = Vertices[*v3];
 
-				if (FVector::Dist(p0, p1) < MaxEdgeStretchCM &&
-					FVector::Dist(p0, p2) < MaxEdgeStretchCM &&
-					FVector::Dist(p1, p3) < MaxEdgeStretchCM && FVector::Dist(p2, p3) < MaxEdgeStretchCM)
+				if (FVector::Dist(p0, p1) < MaxEdgeStretchCM && FVector::Dist(p0, p2) < MaxEdgeStretchCM && FVector::Dist(p1, p3) < MaxEdgeStretchCM && FVector::Dist(p2, p3) < MaxEdgeStretchCM)
 				{
 					Triangles.Add(*v0);
 					Triangles.Add(*v2);
@@ -413,6 +453,84 @@ void URammsCameraProjectorComponent::UpdatePGM()
 			TEXT("UpdatePGM: no geometry produced — check MinDepthCM (%.0f), MaxDepthCM (%.0f), DepthScaleToCM (%.4f)"),
 			MinDepthCM, MaxDepthCM, DepthScaleToCM);
 	}
+
+	LastPGMTimestamp = FMath::Max(LastColorTimestamp, LastDepthTimestamp);
+}
+
+// ── GPU Readback Fallback ─────────────────────────────────────────
+
+bool URammsCameraProjectorComponent::TryReadTextureToRawData(
+	UTexture*	   Texture,
+	TArray<uint8>& OutRawData, EPixelFormat& OutFormat,
+	int32& OutWidth, int32& OutHeight)
+{
+	if (!Texture)
+		return false;
+
+	// --- UTextureRenderTarget2D (scene capture render targets) ---
+	if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
+	{
+		FTextureRenderTargetResource* RTResource = RT->GameThread_GetRenderTargetResource();
+		if (!RTResource)
+			return false;
+
+		OutWidth = RT->SizeX;
+		OutHeight = RT->SizeY;
+		const EPixelFormat RTFormat = RT->GetFormat();
+
+		// Float formats: use ReadLinearColorPixels for full precision (depth data)
+		if (RTFormat == PF_FloatRGBA || RTFormat == PF_R32_FLOAT || RTFormat == PF_R16F || RTFormat == PF_A32B32G32R32F || RTFormat == PF_G32R32F)
+		{
+			TArray<FLinearColor> Pixels;
+			if (RTResource->ReadLinearColorPixels(Pixels))
+			{
+				OutFormat = PF_A32B32G32R32F;
+				OutRawData.SetNumUninitialized(Pixels.Num() * sizeof(FLinearColor));
+				FMemory::Memcpy(OutRawData.GetData(), Pixels.GetData(), OutRawData.Num());
+				return true;
+			}
+		}
+
+		// Standard 8-bit formats
+		TArray<FColor> Pixels;
+		if (RTResource->ReadPixels(Pixels))
+		{
+			OutFormat = PF_B8G8R8A8;
+			OutRawData.SetNumUninitialized(Pixels.Num() * 4);
+			FMemory::Memcpy(OutRawData.GetData(), Pixels.GetData(), OutRawData.Num());
+			return true;
+		}
+		return false;
+	}
+
+	// --- UTexture2D (streaming sink textures) ---
+	if (UTexture2D* Tex2D = Cast<UTexture2D>(Texture))
+	{
+		OutFormat = Tex2D->GetPixelFormat();
+		OutWidth = Tex2D->GetSizeX();
+		OutHeight = Tex2D->GetSizeY();
+
+		if (Tex2D->GetPlatformData() && Tex2D->GetPlatformData()->Mips.Num() > 0)
+		{
+			FTexture2DMipMap& Mip = Tex2D->GetPlatformData()->Mips[0];
+			const int64		  BulkSize = Mip.BulkData.GetBulkDataSize();
+			if (BulkSize > 0)
+			{
+				const void* Ptr = Mip.BulkData.Lock(LOCK_READ_ONLY);
+				if (Ptr)
+				{
+					OutRawData.SetNumUninitialized(static_cast<int32>(BulkSize));
+					FMemory::Memcpy(OutRawData.GetData(), Ptr, BulkSize);
+					Mip.BulkData.Unlock();
+					return true;
+				}
+				Mip.BulkData.Unlock();
+			}
+		}
+		return false;
+	}
+
+	return false;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -424,56 +542,116 @@ void URammsCameraProjectorComponent::SetCameraTexture(UTexture* Texture)
 	{
 		MaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
 	}
-	
+
 	// Legacy: Just treat this as a color frame with current timestamp
 	SetColorTexture(Texture, FDateTime::UtcNow().GetTicks());
 }
 
 void URammsCameraProjectorComponent::SetColorTexture(UTexture* Texture, int64 Timestamp)
 {
-	if (!Texture) return;
+	if (!Texture)
+		return;
 
 	CurrentColorTexture = Texture;
 	LastColorTimestamp = Timestamp;
 
-	// Also update decal
 	if (MaterialInstance)
 	{
 		MaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
 	}
 
-	UpdatePGM();
+	// PGM fallback: GPU readback when no raw data was provided via SetColorTextureWithData
+	if (bEnablePGM)
+	{
+		ColorRawData.Reset();
+		if (!TryReadTextureToRawData(Texture, ColorRawData, ColorPixelFormat, ColorFrameWidth, ColorFrameHeight))
+		{
+			UE_LOG(LogRammsPGM, Warning, TEXT("SetColorTexture: GPU readback failed for PGM"));
+		}
+	}
+
+	MaybeUpdatePGM();
+}
+
+void URammsCameraProjectorComponent::SetColorTextureWithData(
+	UTexture* Texture, int64 Timestamp,
+	TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height)
+{
+	if (!Texture)
+		return;
+
+	CurrentColorTexture = Texture;
+	LastColorTimestamp = Timestamp;
+	ColorRawData = MoveTemp(RawData);
+	ColorPixelFormat = Format;
+	ColorFrameWidth = Width;
+	ColorFrameHeight = Height;
+
+	if (MaterialInstance)
+	{
+		MaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
+	}
+
+	MaybeUpdatePGM();
 }
 
 void URammsCameraProjectorComponent::SetDepthTexture(UTexture* Texture, int64 Timestamp)
 {
-	if (!Texture) return;
+	if (!Texture)
+		return;
 
 	CurrentDepthTexture = Texture;
 	LastDepthTimestamp = Timestamp;
 
-	UpdatePGM();
+	// PGM fallback: GPU readback when no raw data was provided
+	if (bEnablePGM)
+	{
+		DepthRawData.Reset();
+		if (!TryReadTextureToRawData(Texture, DepthRawData, DepthPixelFormat, DepthFrameWidth, DepthFrameHeight))
+		{
+			UE_LOG(LogRammsPGM, Warning, TEXT("SetDepthTexture: GPU readback failed for PGM"));
+		}
+	}
+
+	MaybeUpdatePGM();
+}
+
+void URammsCameraProjectorComponent::SetDepthTextureWithData(
+	UTexture* Texture, int64 Timestamp,
+	TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height)
+{
+	if (!Texture)
+		return;
+
+	CurrentDepthTexture = Texture;
+	LastDepthTimestamp = Timestamp;
+	DepthRawData = MoveTemp(RawData);
+	DepthPixelFormat = Format;
+	DepthFrameWidth = Width;
+	DepthFrameHeight = Height;
+
+	MaybeUpdatePGM();
 }
 
 void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCameraStreamInfo& StreamInfo)
 {
-	ImageWidth  = StreamInfo.Width;
+	ImageWidth = StreamInfo.Width;
 	ImageHeight = StreamInfo.Height;
 
 	if (StreamInfo.Intrinsics.Num() >= 4)
 	{
-		FocalLengthX    = StreamInfo.Intrinsics[0];
-		FocalLengthY    = StreamInfo.Intrinsics[1];
+		FocalLengthX = StreamInfo.Intrinsics[0];
+		FocalLengthY = StreamInfo.Intrinsics[1];
 		PrincipalPointX = StreamInfo.Intrinsics[2];
 		PrincipalPointY = StreamInfo.Intrinsics[3];
 	}
 	else
 	{
 		// Fallback: assume ~90° FOV centered
-		PrincipalPointX = (float)ImageWidth  * 0.5f;
+		PrincipalPointX = (float)ImageWidth * 0.5f;
 		PrincipalPointY = (float)ImageHeight * 0.5f;
-		FocalLengthX    = PrincipalPointX;
-		FocalLengthY    = PrincipalPointY;
+		FocalLengthX = PrincipalPointX;
+		FocalLengthY = PrincipalPointY;
 	}
 
 	// Apply extrinsic if provided
@@ -488,7 +666,11 @@ void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCam
 
 void URammsCameraProjectorComponent::SetCameraTransform(const FTransform& WorldTransform)
 {
-	SetWorldTransform(WorldTransform);
+	// Use only location and rotation from the extrinsic — ignore scale so that
+	// a scaled camera actor (e.g. 0.1 for a small preview mesh) doesn't shrink
+	// the projected geometry.
+	FTransform Unscaled(WorldTransform.GetRotation(), WorldTransform.GetLocation(), FVector::OneVector);
+	SetWorldTransform(Unscaled);
 	UpdateCameraTransformParameters();
 }
 
