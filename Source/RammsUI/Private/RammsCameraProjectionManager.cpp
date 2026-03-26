@@ -34,6 +34,7 @@ void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent
 		P->Decimation = Decimation;
 		P->SensorBaselineY = SensorBaselineY;
 		P->SyncThresholdMS = SyncThresholdMS;
+		P->SetPGMCustomDepthStencil(bPGMRenderCustomDepth, PGMCustomStencilValue);
 
 		P->RefreshMaterialParameters();
 	}
@@ -353,6 +354,8 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 	Projector->Decimation = Decimation;
 	Projector->SensorBaselineY = SensorBaselineY;
 	Projector->SyncThresholdMS = SyncThresholdMS;
+	Projector->bPGMRenderCustomDepth = bPGMRenderCustomDepth;
+	Projector->PGMCustomStencilValue = PGMCustomStencilValue;
 
 	Projector->SetupAttachment(Owner->GetRootComponent());
 	Projector->RegisterComponent();

@@ -101,6 +101,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
 	float SyncThresholdMS = 100.0f;
 
+	/** Enable custom depth/stencil rendering on PGM meshes (for post-process effects) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	bool bPGMRenderCustomDepth = false;
+
+	/** Custom stencil value written by PGM meshes (0-255, used by post-process materials) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM && bPGMRenderCustomDepth", ClampMin = "0", ClampMax = "255", UIMin = "0", UIMax = "255"))
+	int32 PGMCustomStencilValue = 1;
+
 	// ── Blueprint API ──────────────────────────────────
 
 	/** Connect to a camera provider — starts listening for streams */
@@ -155,9 +163,9 @@ private:
 	struct FProviderBinding
 	{
 		TWeakObjectPtr<UObject> Object;
-		FDelegateHandle FrameReadyHandle;
-		FDelegateHandle StreamStatusHandle;
-		FDelegateHandle ExtrinsicUpdatedHandle;
+		FDelegateHandle			FrameReadyHandle;
+		FDelegateHandle			StreamStatusHandle;
+		FDelegateHandle			ExtrinsicUpdatedHandle;
 	};
 
 	TArray<FProviderBinding> ProviderBindings;

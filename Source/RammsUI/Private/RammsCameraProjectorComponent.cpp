@@ -34,6 +34,16 @@ void URammsCameraProjectorComponent::PostEditChangeProperty(FPropertyChangedEven
 	{
 		UpdatePGM();
 	}
+
+	if (ProcMeshComponent && PropertyChangedEvent.Property)
+	{
+		FName PropName = PropertyChangedEvent.Property->GetFName();
+		if (PropName == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, bPGMRenderCustomDepth) || PropName == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, PGMCustomStencilValue))
+		{
+			ProcMeshComponent->SetRenderCustomDepth(bPGMRenderCustomDepth);
+			ProcMeshComponent->SetCustomDepthStencilValue(FMath::Clamp(PGMCustomStencilValue, 0, 255));
+		}
+	}
 }
 #endif
 
@@ -214,6 +224,13 @@ void URammsCameraProjectorComponent::EnsurePGMCreated()
 	ProcMeshComponent->RegisterComponent();
 	ProcMeshComponent->SetVisibility(false);
 	Owner->AddInstanceComponent(ProcMeshComponent);
+
+	// Custom depth / stencil for post-process highlighting
+	if (bPGMRenderCustomDepth)
+	{
+		ProcMeshComponent->SetRenderCustomDepth(true);
+		ProcMeshComponent->SetCustomDepthStencilValue(FMath::Clamp(PGMCustomStencilValue, 0, 255));
+	}
 
 	if (PGMMaterial)
 	{
@@ -692,6 +709,18 @@ void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 	if (ProcMeshComponent)
 	{
 		ProcMeshComponent->SetVisibility(bEnabled && bEnablePGM);
+	}
+}
+
+void URammsCameraProjectorComponent::SetPGMCustomDepthStencil(bool bEnable, int32 StencilValue)
+{
+	bPGMRenderCustomDepth = bEnable;
+	PGMCustomStencilValue = FMath::Clamp(StencilValue, 0, 255);
+
+	if (ProcMeshComponent)
+	{
+		ProcMeshComponent->SetRenderCustomDepth(bEnable);
+		ProcMeshComponent->SetCustomDepthStencilValue(PGMCustomStencilValue);
 	}
 }
 

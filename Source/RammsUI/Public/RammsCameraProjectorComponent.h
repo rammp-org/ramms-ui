@@ -121,6 +121,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
 	float SyncThresholdMS = 100.0f;
 
+	/** Enable custom depth/stencil rendering on the PGM mesh (for post-process effects) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	bool bPGMRenderCustomDepth = false;
+
+	/** Custom stencil value written by the PGM mesh (0-255, used by post-process materials) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM && bPGMRenderCustomDepth", ClampMin = "0", ClampMax = "255", UIMin = "0", UIMax = "255"))
+	int32 PGMCustomStencilValue = 1;
+
 	/** The ID of the corresponding depth stream */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM")
 	FString DepthStreamID;
@@ -160,6 +168,10 @@ public:
 	/** Show or hide the projection */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetProjectionEnabled(bool bEnabled);
+
+	/** Set whether the PGM mesh renders to custom depth/stencil, and the stencil value (at runtime) */
+	UFUNCTION(BlueprintCallable, Category = "PGM")
+	void SetPGMCustomDepthStencil(bool bEnable, int32 StencilValue = 1);
 
 	/** Force-refresh all material parameters (call after changing properties at runtime) */
 	UFUNCTION(BlueprintCallable, Category = "Projection")
