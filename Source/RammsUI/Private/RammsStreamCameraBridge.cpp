@@ -39,10 +39,7 @@ void URammsStreamCameraBridge::BeginPlay()
 	for (URammsStreamSinkComponent* Sink : Sinks)
 	{
 		Sink->OnFrameReceived.AddUniqueDynamic(this, &URammsStreamCameraBridge::OnStreamFrameReceived);
-		if (!PrimarySink)
-		{
-			PrimarySink = Sink;
-		}
+		BoundSinks.Add(Sink);
 	}
 
 	UE_LOG(LogRammsStreamBridge, Log, TEXT("StreamCameraBridge bound to %d sink(s) on %s"),
@@ -169,22 +166,25 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 	}
 
 	// Forward the texture with CPU-side raw data for PGM consumers.
-	// Read raw data from the sink (stored alongside GPU texture, always available).
-	TArray<uint8> RawData;
-	EPixelFormat  PixelFormat = PF_Unknown;
-	if (PrimarySink)
+	// Query the sink that owns this channel's raw data.
+	const TArray<uint8>* SinkRaw = nullptr;
+	EPixelFormat		 PixelFormat = PF_Unknown;
+	for (URammsStreamSinkComponent* Sink : BoundSinks)
 	{
-		const TArray<uint8>* SinkRaw = PrimarySink->GetLatestRawData(ChannelID);
-		if (SinkRaw && SinkRaw->Num() > 0)
+		if (!Sink)
+			continue;
+		const TArray<uint8>* CandidateRaw = Sink->GetLatestRawData(ChannelID);
+		if (CandidateRaw && CandidateRaw->Num() > 0)
 		{
-			RawData = *SinkRaw;
-			PixelFormat = PrimarySink->GetLatestPixelFormat(ChannelID);
+			SinkRaw = CandidateRaw;
+			PixelFormat = Sink->GetLatestPixelFormat(ChannelID);
+			break;
 		}
 	}
 
-	if (RawData.Num() > 0)
+	if (SinkRaw)
 	{
-		CameraProvider->BroadcastFrameWithRawData(StreamID, Texture, MoveTemp(RawData), PixelFormat);
+		CameraProvider->BroadcastFrameWithRawData(StreamID, Texture, TArray<uint8>(*SinkRaw), PixelFormat);
 	}
 	else
 	{

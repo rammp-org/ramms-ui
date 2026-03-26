@@ -3,6 +3,7 @@
 #include "RammsCameraProjectionManager.h"
 #include "RammsCameraProjectorComponent.h"
 #include "RammsCameraProviderComponent.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -502,6 +503,21 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 		TexWidth = Tex2D->GetSizeX();
 		TexHeight = Tex2D->GetSizeY();
 	}
+	else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
+	{
+		TexWidth = RT->SizeX;
+		TexHeight = RT->SizeY;
+	}
+	else if (Provider)
+	{
+		// Fallback: use stream info dimensions
+		FRammsCameraStreamInfo Info;
+		if (Provider->GetStreamInfo(StreamID, Info))
+		{
+			TexWidth = Info.Width;
+			TexHeight = Info.Height;
+		}
+	}
 
 	UE_LOG(LogRammsProjection, Verbose,
 		TEXT("OnCameraFrameReady('%s'): raw=%d bytes, fmt=%d, %dx%d"),
@@ -512,9 +528,8 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 	{
 		if (RawData && RawData->Num() > 0)
 		{
-			TArray<uint8> DataCopy = *RawData;
 			(*Found)->SetColorTextureWithData(Texture, Timestamp,
-				MoveTemp(DataCopy), RawFormat, TexWidth, TexHeight);
+				TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
 		}
 		else
 		{
@@ -530,9 +545,8 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 		{
 			if (RawData && RawData->Num() > 0)
 			{
-				TArray<uint8> DataCopy = *RawData;
 				Pair.Value->SetDepthTextureWithData(Texture, Timestamp,
-					MoveTemp(DataCopy), RawFormat, TexWidth, TexHeight);
+					TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
 			}
 			else
 			{
@@ -567,8 +581,7 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 							(*ColorProjector)->DepthStreamID = StreamID;
 							if (RawData && RawData->Num() > 0)
 							{
-								TArray<uint8> DataCopy = *RawData;
-								(*ColorProjector)->SetDepthTextureWithData(Texture, Timestamp, MoveTemp(DataCopy), RawFormat, TexWidth, TexHeight);
+								(*ColorProjector)->SetDepthTextureWithData(Texture, Timestamp, TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
 							}
 							else
 							{
@@ -593,52 +606,68 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 
 	if (bActive && bAutoCreateProjectors && !Projectors.Contains(StreamID))
 	{
-		IRammsCameraProvider* Iface = FindProviderForStream(StreamID);
-		if (Iface)
+		// Apply the same filtering as CreateProjectorsForProvider
+		if (ExcludeStreamIDs.Contains(StreamID))
 		{
-			FRammsCameraStreamInfo Info;
-			if (Iface->GetStreamInfo(StreamID, Info))
+			UE_LOG(LogRammsProjection, Verbose,
+				TEXT("OnCameraStreamStatus: skipping excluded stream '%s'"), *StreamID);
+		}
+		else
+		{
+			IRammsCameraProvider* Iface = FindProviderForStream(StreamID);
+			if (Iface)
 			{
-				if (Info.bIsDepth)
+				FRammsCameraStreamInfo Info;
+				if (Iface->GetStreamInfo(StreamID, Info))
 				{
-					// Depth stream activated — try to auto-link to its color projector
-					int32 SlashIdx = INDEX_NONE;
-					if (StreamID.FindLastChar(TEXT('/'), SlashIdx))
+					// Skip non-visual streams
+					if (Info.FrameCategory != ERammsFrameCategory::Visual)
 					{
-						FString Prefix = StreamID.Left(SlashIdx);
-						FString ChannelStr = StreamID.Mid(SlashIdx + 1);
-						if (ChannelStr.IsNumeric())
+						UE_LOG(LogRammsProjection, Verbose,
+							TEXT("OnCameraStreamStatus: skipping non-visual stream '%s' (category=%d)"),
+							*StreamID, static_cast<int32>(Info.FrameCategory));
+					}
+					else if (Info.bIsDepth)
+					{
+						// Depth stream activated — try to auto-link to its color projector
+						int32 SlashIdx = INDEX_NONE;
+						if (StreamID.FindLastChar(TEXT('/'), SlashIdx))
 						{
-							int32 DepthChannel = FCString::Atoi(*ChannelStr);
-							int32 ColorChannel = DepthChannel - 100;
-							if (ColorChannel >= 0)
+							FString Prefix = StreamID.Left(SlashIdx);
+							FString ChannelStr = StreamID.Mid(SlashIdx + 1);
+							if (ChannelStr.IsNumeric())
 							{
-								FString ColorStreamID = FString::Printf(TEXT("%s/%d"), *Prefix, ColorChannel);
-								if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
+								int32 DepthChannel = FCString::Atoi(*ChannelStr);
+								int32 ColorChannel = DepthChannel - 100;
+								if (ColorChannel >= 0)
 								{
-									(*ColorProjector)->DepthStreamID = StreamID;
-									UE_LOG(LogRammsProjection, Log,
-										TEXT("Auto-linked depth '%s' to projector '%s' on stream activation"),
-										*StreamID, *ColorStreamID);
+									FString ColorStreamID = FString::Printf(TEXT("%s/%d"), *Prefix, ColorChannel);
+									if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
+									{
+										(*ColorProjector)->DepthStreamID = StreamID;
+										UE_LOG(LogRammsProjection, Log,
+											TEXT("Auto-linked depth '%s' to projector '%s' on stream activation"),
+											*StreamID, *ColorStreamID);
+									}
 								}
 							}
 						}
 					}
-				}
-				else
-				{
-					// Non-depth stream — create a projector for it
-					URammsCameraProjectorComponent* Projector = AddProjector(StreamID);
-					if (Projector)
+					else
 					{
-						Projector->SetIntrinsicsFromStreamInfo(Info);
-						UE_LOG(LogRammsProjection, Log,
-							TEXT("Auto-created projector for stream '%s' (%dx%d)"),
-							*StreamID, Info.Width, Info.Height);
+						// Non-depth stream — create a projector for it
+						URammsCameraProjectorComponent* Projector = AddProjector(StreamID);
+						if (Projector)
+						{
+							Projector->SetIntrinsicsFromStreamInfo(Info);
+							UE_LOG(LogRammsProjection, Log,
+								TEXT("Auto-created projector for stream '%s' (%dx%d)"),
+								*StreamID, Info.Width, Info.Height);
+						}
 					}
 				}
 			}
-		}
+		} // !ExcludeStreamIDs
 	}
 
 	if (TObjectPtr<URammsCameraProjectorComponent>* Found = Projectors.Find(StreamID))

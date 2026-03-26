@@ -139,13 +139,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetColorTexture(UTexture* Texture, int64 Timestamp);
 
-	/** Set color texture with CPU-side raw data for PGM. */
+	/** Set color texture with CPU-side raw data for PGM.
+	 *  Accepts a non-owning view; the projector copies internally. */
 	void SetColorTextureWithData(UTexture* Texture, int64 Timestamp,
-		TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height);
+		TConstArrayView<uint8> RawData, EPixelFormat Format, int32 Width, int32 Height);
 
-	/** Set depth texture with CPU-side raw data for PGM. */
+	/** Set depth texture with CPU-side raw data for PGM.
+	 *  Accepts a non-owning view; the projector copies internally. */
 	void SetDepthTextureWithData(UTexture* Texture, int64 Timestamp,
-		TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height);
+		TConstArrayView<uint8> RawData, EPixelFormat Format, int32 Width, int32 Height);
 
 	/** Populate intrinsics from a camera stream info struct */
 	UFUNCTION(BlueprintCallable, Category = "Projection")

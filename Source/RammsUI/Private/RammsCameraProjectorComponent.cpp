@@ -153,10 +153,12 @@ namespace
 				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float));
 				if (RawData.Num() < Expected)
 					return false;
-				const float* Floats = reinterpret_cast<const float*>(RawData.GetData());
+				const uint8* Src = RawData.GetData();
 				for (int32 i = 0; i < PixelCount; ++i)
 				{
-					OutPixels[i] = FLinearColor(Floats[i], 0.0f, 0.0f, 1.0f);
+					float Val;
+					FMemory::Memcpy(&Val, Src + i * sizeof(float), sizeof(float));
+					OutPixels[i] = FLinearColor(Val, 0.0f, 0.0f, 1.0f);
 				}
 				return true;
 			}
@@ -165,10 +167,13 @@ namespace
 				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float)) * 2;
 				if (RawData.Num() < Expected)
 					return false;
-				const float* Floats = reinterpret_cast<const float*>(RawData.GetData());
+				const uint8* Src = RawData.GetData();
 				for (int32 i = 0; i < PixelCount; ++i)
 				{
-					OutPixels[i] = FLinearColor(Floats[i * 2], Floats[i * 2 + 1], 0.0f, 1.0f);
+					float R, G;
+					FMemory::Memcpy(&R, Src + i * 2 * sizeof(float), sizeof(float));
+					FMemory::Memcpy(&G, Src + (i * 2 + 1) * sizeof(float), sizeof(float));
+					OutPixels[i] = FLinearColor(R, G, 0.0f, 1.0f);
 				}
 				return true;
 			}
@@ -177,8 +182,11 @@ namespace
 				const int32 Expected = PixelCount * static_cast<int32>(sizeof(float)) * 4;
 				if (RawData.Num() < Expected)
 					return false;
-				const FLinearColor* Colors = reinterpret_cast<const FLinearColor*>(RawData.GetData());
-				FMemory::Memcpy(OutPixels.GetData(), Colors, PixelCount * sizeof(FLinearColor));
+				const uint8* Src = RawData.GetData();
+				for (int32 i = 0; i < PixelCount; ++i)
+				{
+					FMemory::Memcpy(&OutPixels[i], Src + i * sizeof(FLinearColor), sizeof(FLinearColor));
+				}
 				return true;
 			}
 			default:
@@ -205,6 +213,7 @@ void URammsCameraProjectorComponent::EnsurePGMCreated()
 	ProcMeshComponent->SetupAttachment(this);
 	ProcMeshComponent->RegisterComponent();
 	ProcMeshComponent->SetVisibility(false);
+	Owner->AddInstanceComponent(ProcMeshComponent);
 
 	if (PGMMaterial)
 	{
@@ -338,20 +347,21 @@ void URammsCameraProjectorComponent::UpdatePGM()
 	TArray<FLinearColor>	 VertexColors;
 	TArray<FProcMeshTangent> Tangents;
 
-	TMap<FIntPoint, int32> GridToVertexMap;
-
 	int32 Stride = FMath::Max(1, Decimation);
 	int32 GridWidth = DepthW / Stride;
 	int32 GridHeight = DepthH / Stride;
+
+	// Flat grid-to-vertex index (INDEX_NONE = no vertex at this grid cell)
+	TArray<int32> GridToVertex;
+	GridToVertex.SetNumUninitialized(GridWidth * GridHeight);
+	FMemory::Memset(GridToVertex.GetData(), 0xFF, GridToVertex.Num() * sizeof(int32)); // INDEX_NONE = -1
 
 	float Fx = FocalLengthX;
 	float Fy = FocalLengthY;
 	float Cx = PrincipalPointX;
 	float Cy = PrincipalPointY;
 
-	// Adjust intrinsics based on depth scale vs projector calibrated scale if needed?
-	// Projector's FocalLengthX/Y are assumed for the Color texture.
-	// If Depth texture is different resolution, we scale them.
+	// Adjust intrinsics if depth texture resolution differs from calibrated resolution
 	float DepthScaleX = (float)DepthW / (float)ImageWidth;
 	float DepthScaleY = (float)DepthH / (float)ImageHeight;
 	Fx *= DepthScaleX;
@@ -368,7 +378,6 @@ void URammsCameraProjectorComponent::UpdatePGM()
 			int32 SrcY = y * Stride;
 			int32 Index = (SrcY * DepthW) + SrcX;
 
-			// PGM_Display logic: Red channel contains depth
 			float Z = DepthPixels[Index].R * DepthScaleToCM;
 
 			if (Z < MinDepthCM || Z > MaxDepthCM)
@@ -382,8 +391,6 @@ void URammsCameraProjectorComponent::UpdatePGM()
 			// Parallax Color Sampling
 			float Y_rgb_world = Y_cam - SensorBaselineY;
 
-			// Map Y_rgb_world back to pixel space in Color Texture
-			// We need to use the COLOR intrinsics (the original ones)
 			int32 u_color = FMath::RoundToInt(((Y_rgb_world * FocalLengthX) / X_cam) + PrincipalPointX);
 			int32 v_color = FMath::RoundToInt(PrincipalPointY - ((Z_cam * FocalLengthY) / X_cam));
 
@@ -391,11 +398,10 @@ void URammsCameraProjectorComponent::UpdatePGM()
 			v_color = FMath::Clamp(v_color, 0, ColorH - 1);
 			FLinearColor SampledColor = ColorPixels[(v_color * ColorW) + u_color];
 
+			GridToVertex[y * GridWidth + x] = Vertices.Num();
 			Vertices.Add(FVector(X_cam, Y_cam, Z_cam));
 			VertexColors.Add(SampledColor);
 			UV0.Add(FVector2D((float)SrcX / DepthW, (float)SrcY / DepthH));
-
-			GridToVertexMap.Add(FIntPoint(x, y), Vertices.Num() - 1);
 		}
 	}
 
@@ -404,28 +410,28 @@ void URammsCameraProjectorComponent::UpdatePGM()
 	{
 		for (int32 x = 0; x < GridWidth - 1; ++x)
 		{
-			int32* v0 = GridToVertexMap.Find(FIntPoint(x, y));
-			int32* v1 = GridToVertexMap.Find(FIntPoint(x + 1, y));
-			int32* v2 = GridToVertexMap.Find(FIntPoint(x, y + 1));
-			int32* v3 = GridToVertexMap.Find(FIntPoint(x + 1, y + 1));
+			const int32 i0 = GridToVertex[y * GridWidth + x];
+			const int32 i1 = GridToVertex[y * GridWidth + (x + 1)];
+			const int32 i2 = GridToVertex[(y + 1) * GridWidth + x];
+			const int32 i3 = GridToVertex[(y + 1) * GridWidth + (x + 1)];
 
-			if (v0 && v1 && v2 && v3)
+			if (i0 == INDEX_NONE || i1 == INDEX_NONE || i2 == INDEX_NONE || i3 == INDEX_NONE)
+				continue;
+
+			const FVector& p0 = Vertices[i0];
+			const FVector& p1 = Vertices[i1];
+			const FVector& p2 = Vertices[i2];
+			const FVector& p3 = Vertices[i3];
+
+			if (FVector::Dist(p0, p1) < MaxEdgeStretchCM && FVector::Dist(p0, p2) < MaxEdgeStretchCM && FVector::Dist(p1, p3) < MaxEdgeStretchCM && FVector::Dist(p2, p3) < MaxEdgeStretchCM)
 			{
-				FVector p0 = Vertices[*v0];
-				FVector p1 = Vertices[*v1];
-				FVector p2 = Vertices[*v2];
-				FVector p3 = Vertices[*v3];
+				Triangles.Add(i0);
+				Triangles.Add(i2);
+				Triangles.Add(i1);
 
-				if (FVector::Dist(p0, p1) < MaxEdgeStretchCM && FVector::Dist(p0, p2) < MaxEdgeStretchCM && FVector::Dist(p1, p3) < MaxEdgeStretchCM && FVector::Dist(p2, p3) < MaxEdgeStretchCM)
-				{
-					Triangles.Add(*v0);
-					Triangles.Add(*v2);
-					Triangles.Add(*v1);
-
-					Triangles.Add(*v1);
-					Triangles.Add(*v2);
-					Triangles.Add(*v3);
-				}
+				Triangles.Add(i1);
+				Triangles.Add(i2);
+				Triangles.Add(i3);
 			}
 		}
 	}
@@ -575,14 +581,15 @@ void URammsCameraProjectorComponent::SetColorTexture(UTexture* Texture, int64 Ti
 
 void URammsCameraProjectorComponent::SetColorTextureWithData(
 	UTexture* Texture, int64 Timestamp,
-	TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height)
+	TConstArrayView<uint8> RawData, EPixelFormat Format, int32 Width, int32 Height)
 {
 	if (!Texture)
 		return;
 
 	CurrentColorTexture = Texture;
 	LastColorTimestamp = Timestamp;
-	ColorRawData = MoveTemp(RawData);
+	ColorRawData.SetNumUninitialized(RawData.Num());
+	FMemory::Memcpy(ColorRawData.GetData(), RawData.GetData(), RawData.Num());
 	ColorPixelFormat = Format;
 	ColorFrameWidth = Width;
 	ColorFrameHeight = Height;
@@ -618,14 +625,15 @@ void URammsCameraProjectorComponent::SetDepthTexture(UTexture* Texture, int64 Ti
 
 void URammsCameraProjectorComponent::SetDepthTextureWithData(
 	UTexture* Texture, int64 Timestamp,
-	TArray<uint8>&& RawData, EPixelFormat Format, int32 Width, int32 Height)
+	TConstArrayView<uint8> RawData, EPixelFormat Format, int32 Width, int32 Height)
 {
 	if (!Texture)
 		return;
 
 	CurrentDepthTexture = Texture;
 	LastDepthTimestamp = Timestamp;
-	DepthRawData = MoveTemp(RawData);
+	DepthRawData.SetNumUninitialized(RawData.Num());
+	FMemory::Memcpy(DepthRawData.GetData(), RawData.GetData(), RawData.Num());
 	DepthPixelFormat = Format;
 	DepthFrameWidth = Width;
 	DepthFrameHeight = Height;
