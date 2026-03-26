@@ -53,6 +53,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm Task|Icons")
 	TObjectPtr<UTexture2D> DrinkIcon;
 
+	/** Icon for Stabilization task */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm Task|Icons")
+	TObjectPtr<UTexture2D> StabilizationIcon;
+
 	/** Currently active task */
 	UPROPERTY(BlueprintReadOnly, Category = "Arm Task")
 	ERammsArmTask CurrentTask = ERammsArmTask::None;
@@ -75,6 +79,9 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<URammsImageButton> DrinkButton;
+
+	UPROPERTY()
+	TObjectPtr<URammsImageButton> StabilizationButton;
 
 public:
 	/** Fired when arm task changes */
@@ -116,6 +123,9 @@ protected:
 
 	UFUNCTION()
 	void OnDrinkClicked();
+
+	UFUNCTION()
+	void OnStabilizationClicked();
 
 	void HandleTaskButtonClicked(ERammsArmTask Task);
 

@@ -23,6 +23,11 @@ void URammsAxisControl::ResetCachedWidgets()
 	ResetButton = nullptr;
 	ResetLabel = nullptr;
 	InnerSlider = nullptr;
+	ControlRow = nullptr;
+	DecrementButton = nullptr;
+	DecrementLabel = nullptr;
+	IncrementButton = nullptr;
+	IncrementLabel = nullptr;
 }
 
 void URammsAxisControl::BuildWidgetTree()
@@ -30,7 +35,7 @@ void URammsAxisControl::BuildWidgetTree()
 	if (!WidgetTree || OuterHBox)
 		return;
 
-	// Layout: HBox(Icon, VBox(HBox(Label, Value, Reset), Slider))
+	// Layout: HBox(Icon, VBox(HBox(Label, Value, Reset), HBox([−Btn], [Slider], [+Btn])))
 
 	OuterHBox = WidgetTree->ConstructWidget<UHorizontalBox>(
 		UHorizontalBox::StaticClass(), TEXT("OuterHBox"));
@@ -60,7 +65,7 @@ void URammsAxisControl::BuildWidgetTree()
 		IconSlot->SetHorizontalAlignment(HAlign_Left);
 	}
 
-	// ── Right VBox: info row + slider ──
+	// ── Right VBox: info row + control row ──
 
 	UVerticalBox* RightVBox = WidgetTree->ConstructWidget<UVerticalBox>(
 		UVerticalBox::StaticClass(), TEXT("RightVBox"));
@@ -135,22 +140,81 @@ void URammsAxisControl::BuildWidgetTree()
 		ResetSlot->SetHorizontalAlignment(HAlign_Center);
 	}
 
-	// ── Slider (below info row) ──
+	// ── Control row: [−Btn] [Slider] [+Btn] (below info row) ──
 
+	ControlRow = WidgetTree->ConstructWidget<UHorizontalBox>(
+		UHorizontalBox::StaticClass(), TEXT("ControlRow"));
+
+	UVerticalBoxSlot* CtrlSlot = RightVBox->AddChildToVerticalBox(ControlRow);
+	if (CtrlSlot)
+	{
+		CtrlSlot->SetHorizontalAlignment(HAlign_Fill);
+		CtrlSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 0.0f));
+	}
+
+	// Decrement button  −
+	USizeBox* DecSizeBox = WidgetTree->ConstructWidget<USizeBox>(
+		USizeBox::StaticClass(), TEXT("DecBox"));
+	DecSizeBox->SetMinDesiredWidth(40.0f);
+	DecSizeBox->SetMinDesiredHeight(32.0f);
+
+	DecrementButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(), TEXT("DecBtn"));
+	DecrementLabel = WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("DecLbl"));
+	DecrementLabel->SetText(FText::FromString(TEXT("\u2212"))); // −
+	DecrementLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	DecrementLabel->SetJustification(ETextJustify::Center);
+	DecrementButton->AddChild(DecrementLabel);
+	DecSizeBox->AddChild(DecrementButton);
+
+	UHorizontalBoxSlot* DecSlot = ControlRow->AddChildToHorizontalBox(DecSizeBox);
+	if (DecSlot)
+	{
+		DecSlot->SetVerticalAlignment(VAlign_Center);
+		DecSlot->SetHorizontalAlignment(HAlign_Center);
+		DecSlot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+	}
+
+	// Slider (fills space between buttons)
 	InnerSlider = WidgetTree->ConstructWidget<USlider>(
 		USlider::StaticClass(), TEXT("Slider"));
 	InnerSlider->SetMinValue(Config.MinValue);
 	InnerSlider->SetMaxValue(Config.MaxValue);
 	InnerSlider->SetValue(Config.DefaultValue);
-	InnerSlider->SetStepSize(Config.StepSize);
+	InnerSlider->SetStepSize(GetNormalizedStepSize());
 	InnerSlider->SetSliderBarColor(FLinearColor(0.2f, 0.2f, 0.25f, 1.0f));
 	InnerSlider->SetSliderHandleColor(FLinearColor(0.6f, 0.6f, 0.7f, 1.0f));
 
-	UVerticalBoxSlot* SliderSlot = RightVBox->AddChildToVerticalBox(InnerSlider);
+	UHorizontalBoxSlot* SliderSlot = ControlRow->AddChildToHorizontalBox(InnerSlider);
 	if (SliderSlot)
 	{
-		SliderSlot->SetHorizontalAlignment(HAlign_Fill);
-		SliderSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
+		SliderSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		SliderSlot->SetVerticalAlignment(VAlign_Center);
+	}
+
+	// Increment button  +
+	USizeBox* IncSizeBox = WidgetTree->ConstructWidget<USizeBox>(
+		USizeBox::StaticClass(), TEXT("IncBox"));
+	IncSizeBox->SetMinDesiredWidth(40.0f);
+	IncSizeBox->SetMinDesiredHeight(32.0f);
+
+	IncrementButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(), TEXT("IncBtn"));
+	IncrementLabel = WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("IncLbl"));
+	IncrementLabel->SetText(FText::FromString(TEXT("+"))); // +
+	IncrementLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	IncrementLabel->SetJustification(ETextJustify::Center);
+	IncrementButton->AddChild(IncrementLabel);
+	IncSizeBox->AddChild(IncrementButton);
+
+	UHorizontalBoxSlot* IncSlot = ControlRow->AddChildToHorizontalBox(IncSizeBox);
+	if (IncSlot)
+	{
+		IncSlot->SetVerticalAlignment(VAlign_Center);
+		IncSlot->SetHorizontalAlignment(HAlign_Center);
+		IncSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 	}
 
 	CurrentValue = Config.DefaultValue;
@@ -175,6 +239,14 @@ void URammsAxisControl::NativeConstruct()
 	if (ResetButton)
 	{
 		ResetButton->OnClicked.AddUniqueDynamic(this, &URammsAxisControl::OnResetClicked);
+	}
+	if (DecrementButton)
+	{
+		DecrementButton->OnClicked.AddUniqueDynamic(this, &URammsAxisControl::OnDecrementClicked);
+	}
+	if (IncrementButton)
+	{
+		IncrementButton->OnClicked.AddUniqueDynamic(this, &URammsAxisControl::OnIncrementClicked);
 	}
 
 	ApplyConfigToWidgets();
@@ -206,13 +278,36 @@ void URammsAxisControl::ApplyStyle_Implementation()
 	{
 		URammsUIStyle::ApplySliderStyle(InnerSlider, Style->Slider);
 	}
-	if (ResetButton)
+
+	// Shared button style for reset/decrement/increment
+	FButtonStyle BtnStyle;
+	if (Style)
 	{
-		FButtonStyle BtnStyle;
 		BtnStyle.SetNormal(FSlateRoundedBoxBrush(Style->Colors.Surface, Style->Border.CornerRadiusMedium));
 		BtnStyle.SetHovered(FSlateRoundedBoxBrush(Style->Colors.Primary * 0.7f, Style->Border.CornerRadiusMedium));
 		BtnStyle.SetPressed(FSlateRoundedBoxBrush(Style->Colors.Primary, Style->Border.CornerRadiusMedium));
+	}
+	if (ResetButton)
+	{
 		ResetButton->SetStyle(BtnStyle);
+	}
+	if (DecrementButton)
+	{
+		DecrementButton->SetStyle(BtnStyle);
+	}
+	if (IncrementButton)
+	{
+		IncrementButton->SetStyle(BtnStyle);
+	}
+	if (DecrementLabel)
+	{
+		DecrementLabel->SetFont(Style->Typography.HeadingSmall);
+		DecrementLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
+	if (IncrementLabel)
+	{
+		IncrementLabel->SetFont(Style->Typography.HeadingSmall);
+		IncrementLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 }
 
@@ -313,7 +408,33 @@ void URammsAxisControl::ApplyConfigToWidgets()
 	{
 		InnerSlider->SetMinValue(Config.MinValue);
 		InnerSlider->SetMaxValue(Config.MaxValue);
-		InnerSlider->SetStepSize(Config.StepSize);
+		InnerSlider->SetStepSize(GetNormalizedStepSize());
+		InnerSlider->SetVisibility(Config.bShowSlider
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
+	}
+	if (DecrementButton)
+	{
+		UWidget* DecParent = DecrementButton->GetParent();
+		UWidget* Target = DecParent ? DecParent : Cast<UWidget>(DecrementButton);
+		Target->SetVisibility(Config.bShowButtons
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
+	}
+	if (IncrementButton)
+	{
+		UWidget* IncParent = IncrementButton->GetParent();
+		UWidget* Target = IncParent ? IncParent : Cast<UWidget>(IncrementButton);
+		Target->SetVisibility(Config.bShowButtons
+				? ESlateVisibility::Visible
+				: ESlateVisibility::Collapsed);
+	}
+	// Hide entire control row when both slider and buttons are disabled
+	if (ControlRow)
+	{
+		ControlRow->SetVisibility((Config.bShowSlider || Config.bShowButtons)
+				? ESlateVisibility::SelfHitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 }
 
@@ -346,13 +467,45 @@ void URammsAxisControl::UpdateSliderFromValue()
 	}
 }
 
+float URammsAxisControl::GetNormalizedStepSize() const
+{
+	const float Range = Config.MaxValue - Config.MinValue;
+	if (Range > KINDA_SMALL_NUMBER && Config.StepSize > 0.0f)
+	{
+		return FMath::Clamp(Config.StepSize / Range, 0.0f, 1.0f);
+	}
+	return 0.0f; // continuous
+}
+
+float URammsAxisControl::GetEffectiveButtonStep() const
+{
+	if (Config.StepSize > 0.0f)
+	{
+		return Config.StepSize;
+	}
+	// When continuous, default to 5% of range
+	return (Config.MaxValue - Config.MinValue) * 0.05f;
+}
+
+float URammsAxisControl::SnapToStep(float Value) const
+{
+	if (Config.StepSize <= 0.0f)
+	{
+		return Value;
+	}
+	// Snap relative to MinValue so steps align with the range boundary
+	const float Offset = Value - Config.MinValue;
+	const float Snapped = FMath::RoundToFloat(Offset / Config.StepSize) * Config.StepSize;
+	return FMath::Clamp(Config.MinValue + Snapped, Config.MinValue, Config.MaxValue);
+}
+
 void URammsAxisControl::OnSliderChanged(float Value)
 {
-	float Clamped = FMath::Clamp(Value, Config.MinValue, Config.MaxValue);
-	if (FMath::IsNearlyEqual(CurrentValue, Clamped, KINDA_SMALL_NUMBER))
+	float Snapped = SnapToStep(FMath::Clamp(Value, Config.MinValue, Config.MaxValue));
+	if (FMath::IsNearlyEqual(CurrentValue, Snapped, KINDA_SMALL_NUMBER))
 		return;
 
-	CurrentValue = Clamped;
+	CurrentValue = Snapped;
 	UpdateValueDisplay();
 	OnValueChanged.Broadcast(CurrentValue);
 }
@@ -360,4 +513,30 @@ void URammsAxisControl::OnSliderChanged(float Value)
 void URammsAxisControl::OnResetClicked()
 {
 	ResetToDefault();
+}
+
+void URammsAxisControl::OnDecrementClicked()
+{
+	const float Step = GetEffectiveButtonStep();
+	float		NewValue = SnapToStep(FMath::Clamp(CurrentValue - Step, Config.MinValue, Config.MaxValue));
+	if (FMath::IsNearlyEqual(CurrentValue, NewValue, KINDA_SMALL_NUMBER))
+		return;
+
+	CurrentValue = NewValue;
+	UpdateValueDisplay();
+	UpdateSliderFromValue();
+	OnValueChanged.Broadcast(CurrentValue);
+}
+
+void URammsAxisControl::OnIncrementClicked()
+{
+	const float Step = GetEffectiveButtonStep();
+	float		NewValue = SnapToStep(FMath::Clamp(CurrentValue + Step, Config.MinValue, Config.MaxValue));
+	if (FMath::IsNearlyEqual(CurrentValue, NewValue, KINDA_SMALL_NUMBER))
+		return;
+
+	CurrentValue = NewValue;
+	UpdateValueDisplay();
+	UpdateSliderFromValue();
+	OnValueChanged.Broadcast(CurrentValue);
 }
