@@ -17,9 +17,9 @@ class UTextureRenderTarget2D;
  * and/or a 3D Projective Grid Mesh (PGM).
  *
  * Place this component at the camera's world pose (extrinsic).
- The component
- * creates a UDecalComponent internally and drives a projection material with
- * the camera's intrinsic parameters.
+ *
+ * The component creates a UDecalComponent internally and drives a projection
+ * material with the camera's intrinsic parameters.
  *
  * The projection material should include RammsProjection.ush and expose these
  * material parameters:
