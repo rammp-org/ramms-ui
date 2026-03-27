@@ -199,6 +199,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	float BorderThickness = 2.0f;
 
+	/**
+	 * Base passthrough material for displaying camera textures.
+	 * Must be a User Interface / Translucent material with parameters:
+	 *   - Texture2D "Texture"     (the camera feed)
+	 *   - Scalar    "CornerRadius" (per-corner radius in pixels, uniform)
+	 *   - Vector    "ImageSize"   (widget pixel dimensions, float2)
+	 * The material should use RammsRoundedCorners.ush for corner masking.
+	 * If not set, textures are displayed directly (no corner masking, may break with post-processing).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	TObjectPtr<UMaterialInterface> PassthroughMaterial;
+
 	/** Enable drag-to-move */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	bool bEnableDrag = true;
@@ -305,6 +317,14 @@ protected:
 	/** Dynamic material instance for overlay blend */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> OverlayMID;
+
+	/** Dynamic material instance for RGB passthrough on CameraImage (with rounded corner masking) */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PassthroughMID_RGB;
+
+	/** Dynamic material instance for RGB passthrough on DataImage in SideBySide mode */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PassthroughMID_Data;
 
 	/** Render target for data material output (enables RoundedBox corners) */
 	UPROPERTY(Transient)
@@ -535,12 +555,15 @@ protected:
 	/** Update collapse icon text */
 	void UpdateCollapseIcon();
 
-	/** Set image brush from texture, preserving RoundedBox corner settings */
+	/** Set image brush from texture (via passthrough material if available, direct otherwise) */
 	void SetImageBrushFromTexture(UImage* Image, UTexture* Texture);
 
-	/** Render a material to a render target and display it with RoundedBox support */
+	/** Set image brush from a material, passing corner/size params for rounded masking */
 	void SetImageBrushFromMaterial(UImage* Image, UMaterialInstanceDynamic* MID,
 		UTexture* SizeSource, TObjectPtr<UTextureRenderTarget2D>& RenderTarget);
+
+	/** Update CornerRadius and ImageSize parameters on a MID for rounded masking */
+	void UpdateMaterialCornerParams(UMaterialInstanceDynamic* MID, UImage* Image);
 
 	/** Set CameraSizeBox slot to Fill or Auto */
 	void SetCameraSizeBoxSlotFill(bool bFill);
@@ -550,6 +573,10 @@ protected:
 
 	/** Cached content area height for collapse animation */
 	float CachedContentHeight = 0.0f;
+
+	/** Cached per-corner radii for material-based corner masking */
+	FVector4 CachedRGBCornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
+	FVector4 CachedDataCornerRadii = FVector4(4.0f, 4.0f, 4.0f, 4.0f);
 
 	/** Collapse animation state */
 	float CollapseProgress = 1.0f; // 1 = expanded, 0 = collapsed
