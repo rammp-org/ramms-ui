@@ -64,11 +64,11 @@ public:
 	float PrincipalPointY = 240.0f;
 
 	/** Image width in pixels */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Intrinsics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Intrinsics", meta = (ClampMin = "1", UIMin = "1"))
 	int32 ImageWidth = 640;
 
 	/** Image height in pixels */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Intrinsics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Intrinsics", meta = (ClampMin = "1", UIMin = "1"))
 	int32 ImageHeight = 480;
 
 	/** Edge fade width in normalized UV space (0 = hard, 0.1 = 10% fade) */
