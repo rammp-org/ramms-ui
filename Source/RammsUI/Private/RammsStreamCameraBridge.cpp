@@ -167,24 +167,22 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 
 	// Forward the texture with CPU-side raw data for PGM consumers.
 	// Query the sink that owns this channel's raw data.
-	const TArray<uint8>* SinkRaw = nullptr;
-	EPixelFormat		 PixelFormat = PF_Unknown;
+	TArray<uint8> SinkRaw;
+	EPixelFormat  PixelFormat = PF_Unknown;
 	for (URammsStreamSinkComponent* Sink : BoundSinks)
 	{
 		if (!Sink)
 			continue;
-		const TArray<uint8>* CandidateRaw = Sink->GetLatestRawData(ChannelID);
-		if (CandidateRaw && CandidateRaw->Num() > 0)
+		if (Sink->GetLatestRawData(ChannelID, SinkRaw) && SinkRaw.Num() > 0)
 		{
-			SinkRaw = CandidateRaw;
 			PixelFormat = Sink->GetLatestPixelFormat(ChannelID);
 			break;
 		}
 	}
 
-	if (SinkRaw)
+	if (SinkRaw.Num() > 0)
 	{
-		CameraProvider->BroadcastFrameWithRawData(StreamID, Texture, TArray<uint8>(*SinkRaw), PixelFormat);
+		CameraProvider->BroadcastFrameWithRawData(StreamID, Texture, MoveTemp(SinkRaw), PixelFormat);
 	}
 	else
 	{
