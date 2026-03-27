@@ -1,0 +1,85 @@
+// RammsUI Rounded Corners Shader Utilities
+// Include via: #include "/RammsUI/Private/RammsRoundedCorners.ush"
+//
+// Provides SDF-based rounded rectangle masking for UMG materials.
+// Use Ramms_RoundedCornerAlpha() in a Custom node to get a smooth
+// alpha mask that can be multiplied into your material's opacity.
+//
+// Parameters:
+//   UV         - Widget UV coordinates (0,0)=top-left, (1,1)=bottom-right
+//   ImageSize  - Widget size in pixels (Width, Height)
+//   CornerRadii - Per-corner radii in pixels:
+//                 X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
+//
+// Example Custom Node (OutputType = float):
+//   return Ramms_RoundedCornerAlpha(UV, ImageSize, CornerRadii);
+
+#pragma once
+
+// ── SDF for a rounded rectangle with per-corner radii ──────────────
+// Returns signed distance: negative = inside, positive = outside.
+// Adapted from Inigo Quilez's rounded box SDF.
+float Ramms_RoundedRectSDF(float2 PixelPos, float2 HalfSize, float4 Radii)
+{
+    // Select the correct corner radius based on quadrant
+    // Radii: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
+    float2 r = (PixelPos.x > 0.0)
+        ? ((PixelPos.y > 0.0) ? Radii.zw : Radii.yz)  // right side: BR or TR (but we need .z or .y)
+        : ((PixelPos.y > 0.0) ? Radii.wx : Radii.xy);  // left side: BL or TL (but we need .w or .x)
+
+    // For a vec4(TL, TR, BR, BL) layout:
+    //   Top-Left quadrant     (x<0, y<0): use Radii.x
+    //   Top-Right quadrant    (x>0, y<0): use Radii.y
+    //   Bottom-Right quadrant (x>0, y>0): use Radii.z
+    //   Bottom-Left quadrant  (x<0, y>0): use Radii.w
+    float Radius;
+    if (PixelPos.x <= 0.0 && PixelPos.y <= 0.0)
+        Radius = Radii.x; // Top-Left
+    else if (PixelPos.x > 0.0 && PixelPos.y <= 0.0)
+        Radius = Radii.y; // Top-Right
+    else if (PixelPos.x > 0.0 && PixelPos.y > 0.0)
+        Radius = Radii.z; // Bottom-Right
+    else
+        Radius = Radii.w; // Bottom-Left
+
+    // SDF for rounded box
+    float2 q = abs(PixelPos) - HalfSize + Radius;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - Radius;
+}
+
+// ── Main API: returns alpha (0 outside, 1 inside, smooth AA edge) ──
+// UV:          widget UVs, (0,0) top-left to (1,1) bottom-right
+// ImageSize:   widget pixel size (float2)
+// CornerRadii: per-corner radius in pixels (float4: TL, TR, BR, BL)
+float Ramms_RoundedCornerAlpha(float2 UV, float2 ImageSize, float4 CornerRadii)
+{
+    // Convert UV to pixel-space centered at widget center
+    float2 PixelPos = (UV - 0.5) * ImageSize;
+    float2 HalfSize = ImageSize * 0.5;
+
+    float Dist = Ramms_RoundedRectSDF(PixelPos, HalfSize, CornerRadii);
+
+    // Anti-aliased edge: 1px smooth transition
+    return 1.0 - smoothstep(-1.0, 0.5, Dist);
+}
+
+// ── float3 overload (UE Vector params are float3 in Custom nodes) ──
+// Treats the 4th corner (BL) as equal to the 1st (TL).
+// For full per-corner control, set the Custom node input type to Float4.
+float Ramms_RoundedCornerAlpha(float2 UV, float2 ImageSize, float3 CornerRadii3)
+{
+    return Ramms_RoundedCornerAlpha(UV, ImageSize, float4(CornerRadii3, CornerRadii3.x));
+}
+
+// ── 4 separate scalars (most flexible, works with any param setup) ──
+float Ramms_RoundedCornerAlpha(float2 UV, float2 ImageSize,
+    float RadiusTL, float RadiusTR, float RadiusBR, float RadiusBL)
+{
+    return Ramms_RoundedCornerAlpha(UV, ImageSize, float4(RadiusTL, RadiusTR, RadiusBR, RadiusBL));
+}
+
+// ── Convenience: uniform radius on all corners ─────────────────────
+float Ramms_RoundedCornerAlphaUniform(float2 UV, float2 ImageSize, float Radius)
+{
+    return Ramms_RoundedCornerAlpha(UV, ImageSize, float4(Radius, Radius, Radius, Radius));
+}

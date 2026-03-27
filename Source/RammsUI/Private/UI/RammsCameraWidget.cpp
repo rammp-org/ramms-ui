@@ -32,6 +32,7 @@ void URammsCameraWidget::ResetCachedWidgets()
 	OptionButton = nullptr;
 	OptionLabel = nullptr;
 	ImageAspectRatioBox = nullptr;
+	PassthroughMID = nullptr;
 }
 
 void URammsCameraWidget::BuildWidgetTree()
@@ -154,9 +155,9 @@ void URammsCameraWidget::BuildWidgetTree()
 		}
 
 		CameraBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CameraBorder"));
-		// Bottom corners only — header has top corners
+		// Transparent background — corner masking is handled by the material shader
 		CameraBorder->Background = URammsUIStyle::MakeRoundedBoxBrushEx(
-			FLinearColor(0.1f, 0.1f, 0.1f, 1.0f), FVector4(0.0f, 0.0f, 4.0f, 4.0f));
+			FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), FVector4(0.0f, 0.0f, 4.0f, 4.0f));
 		CameraBorder->SetPadding(FMargin(BorderThickness));
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
 
@@ -168,16 +169,6 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		CameraImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CameraImage"));
 		CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
-		// Render texture with rounded corners — bottom only since header is above
-		{
-			FSlateBrush ImgBrush = CameraImage->GetBrush();
-			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
-			ImgBrush.OutlineSettings.CornerRadii = FVector4(0.0f, 0.0f, InnerR, InnerR);
-			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-			ImgBrush.OutlineSettings.Width = 0.0f;
-			CameraImage->SetBrush(ImgBrush);
-		}
 		UHorizontalBoxSlot* RGBSlot = ImageHBox->AddChildToHorizontalBox(CameraImage);
 		if (RGBSlot)
 		{
@@ -188,15 +179,6 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
 		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
-		{
-			FSlateBrush ImgBrush = DataImage->GetBrush();
-			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
-			ImgBrush.OutlineSettings.CornerRadii = FVector4(0.0f, 0.0f, InnerR, InnerR);
-			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-			ImgBrush.OutlineSettings.Width = 0.0f;
-			DataImage->SetBrush(ImgBrush);
-		}
 		DataImage->SetVisibility(ESlateVisibility::Collapsed); // hidden unless SideBySide
 		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
 		if (DataSlot)
@@ -228,8 +210,9 @@ void URammsCameraWidget::BuildWidgetTree()
 	{
 		// Original Overlay layout: CameraBorder fills, TitleBar overlaps at top
 		CameraBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CameraBorder"));
+		// Transparent background — corner masking is handled by the material shader
 		CameraBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(
-			FLinearColor(0.1f, 0.1f, 0.1f, 1.0f), 4.0f);
+			FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 4.0f);
 		CameraBorder->SetPadding(FMargin(BorderThickness));
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
 		UOverlaySlot* BorderSlot = RootOverlay->AddChildToOverlay(CameraBorder);
@@ -241,16 +224,6 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		CameraImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CameraImage"));
 		CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
-		// Render texture with rounded corners — all corners since title overlays on image
-		{
-			FSlateBrush ImgBrush = CameraImage->GetBrush();
-			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
-			ImgBrush.OutlineSettings.CornerRadii = FVector4(InnerR, InnerR, InnerR, InnerR);
-			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-			ImgBrush.OutlineSettings.Width = 0.0f;
-			CameraImage->SetBrush(ImgBrush);
-		}
 
 		// HBox for side-by-side support
 		UHorizontalBox* ImageHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageHBox"));
@@ -266,15 +239,6 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		DataImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DataImage"));
 		DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
-		{
-			FSlateBrush ImgBrush = DataImage->GetBrush();
-			ImgBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-			float InnerR = FMath::Max(4.0f - BorderThickness, 0.0f);
-			ImgBrush.OutlineSettings.CornerRadii = FVector4(InnerR, InnerR, InnerR, InnerR);
-			ImgBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-			ImgBrush.OutlineSettings.Width = 0.0f;
-			DataImage->SetBrush(ImgBrush);
-		}
 		DataImage->SetVisibility(ESlateVisibility::Collapsed);
 		UHorizontalBoxSlot* DataSlot = ImageHBox->AddChildToHorizontalBox(DataImage);
 		if (DataSlot)
@@ -1474,7 +1438,9 @@ void URammsCameraWidget::ApplyViewModeLayout()
 
 void URammsCameraWidget::UpdateImageCornerRadii()
 {
-	// Compute inner radius from style or default
+	// Corner masking is handled by materials via CornerRadii vector parameter.
+	// This function computes per-corner radii based on layout mode and sets them
+	// on the appropriate MIDs. The shader uses these to mask corners.
 	float OuterRadius = Style ? Style->Border.CornerRadiusMedium : 4.0f;
 	float R = FMath::Max(OuterRadius - BorderThickness, 0.0f);
 	bool  bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
@@ -1484,43 +1450,34 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 
 	if (bCollapsible)
 	{
-		// Header is above image — only bottom corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);  // bottom-left only
-			DataRadii = FVector4(0.0f, 0.0f, R, 0.0f); // bottom-right only
+			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);
+			DataRadii = FVector4(0.0f, 0.0f, R, 0.0f);
 		}
 		else
 		{
-			RGBRadii = FVector4(0.0f, 0.0f, R, R); // bottom corners
+			RGBRadii = FVector4(0.0f, 0.0f, R, R);
 			DataRadii = FVector4(0.0f, 0.0f, R, R);
 		}
 	}
 	else
 	{
-		// Header overlays on image — all outer corners need rounding
 		if (bSideBySide)
 		{
-			RGBRadii = FVector4(R, 0.0f, 0.0f, R);	// left corners
-			DataRadii = FVector4(0.0f, R, R, 0.0f); // right corners
+			RGBRadii = FVector4(R, 0.0f, 0.0f, R);
+			DataRadii = FVector4(0.0f, R, R, 0.0f);
 		}
 		else
 		{
-			RGBRadii = FVector4(R, R, R, R); // all corners
+			RGBRadii = FVector4(R, R, R, R);
 			DataRadii = FVector4(R, R, R, R);
 		}
 	}
 
-	auto ApplyRadii = [](UImage* Img, const FVector4& Radii) {
-		if (!Img)
-			return;
-		FSlateBrush B = Img->GetBrush();
-		B.OutlineSettings.CornerRadii = Radii;
-		Img->SetBrush(B);
-	};
-
-	ApplyRadii(CameraImage, RGBRadii);
-	ApplyRadii(DataImage, DataRadii);
+	// Store for use in UpdateMaterialCornerParams
+	CachedRGBCornerRadii = RGBRadii;
+	CachedDataCornerRadii = DataRadii;
 }
 
 void URammsCameraWidget::UpdateHeaderCornerRadii()
@@ -1557,6 +1514,12 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 
 void URammsCameraWidget::EnsureDataMaterials()
 {
+	// Create passthrough MID for RGB display (with material-based corner masking)
+	if (PassthroughMaterial && !PassthroughMID)
+	{
+		PassthroughMID = UMaterialInstanceDynamic::Create(PassthroughMaterial, this);
+	}
+
 	// Create data visualization MID if material is assigned and MID doesn't exist
 	if (DataStreamConfig.VisualizationMaterial && !DataMID)
 	{
@@ -1613,9 +1576,21 @@ void URammsCameraWidget::SetImageBrushFromTexture(UImage* Image, UTexture* Textu
 	if (!Image || !Texture)
 		return;
 
-	// Preserve OutlineSettings (corner radii) and restore RoundedBox draw type for textures
+	EnsureDataMaterials();
+
+	// If passthrough material is available, route through it for post-processing
+	// compatibility and shader-based corner masking
+	if (PassthroughMID)
+	{
+		PassthroughMID->SetTextureParameterValue(TEXT("Texture"), Texture);
+		UpdateMaterialCornerParams(PassthroughMID, Image);
+		SetImageBrushFromMaterial(Image, PassthroughMID, Texture, DataRT);
+		return;
+	}
+
+	// Fallback: direct texture binding (no corner masking, may break with post-processing)
 	FSlateBrush Brush = Image->GetBrush();
-	Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+	Brush.DrawAs = ESlateBrushDrawType::Image;
 	Brush.SetResourceObject(Texture);
 
 	float TexW = static_cast<float>(Texture->GetSurfaceWidth());
@@ -1633,11 +1608,11 @@ void URammsCameraWidget::SetImageBrushFromMaterial(UImage* Image, UMaterialInsta
 	if (!Image || !MID)
 		return;
 
-	// Use RoundedBox draw type with the MID directly as the brush resource.
-	// Slate's RoundedBox natively supports materials via TSlateMaterialShaderPS<RoundedBox>,
-	// so we get both material rendering AND rounded corner clipping without an intermediate RT.
+	// Set corner/size params for shader-based rounded masking
+	UpdateMaterialCornerParams(MID, Image);
+
 	FSlateBrush Brush = Image->GetBrush();
-	Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+	Brush.DrawAs = ESlateBrushDrawType::Image;
 	Brush.SetResourceObject(MID);
 
 	if (SizeSource)
@@ -1651,6 +1626,36 @@ void URammsCameraWidget::SetImageBrushFromMaterial(UImage* Image, UMaterialInsta
 	}
 
 	Image->SetBrush(Brush);
+}
+
+void URammsCameraWidget::UpdateMaterialCornerParams(UMaterialInstanceDynamic* MID, UImage* Image)
+{
+	if (!MID)
+		return;
+
+	// Select per-corner radii based on which image widget this is
+	FVector4 Radii = (Image == DataImage) ? CachedDataCornerRadii : CachedRGBCornerRadii;
+	MID->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(Radii.X, Radii.Y, Radii.Z, Radii.W));
+
+	// Individual scalar params (works with any Custom node input setup)
+	MID->SetScalarParameterValue(TEXT("CornerTL"), Radii.X);
+	MID->SetScalarParameterValue(TEXT("CornerTR"), Radii.Y);
+	MID->SetScalarParameterValue(TEXT("CornerBR"), Radii.Z);
+	MID->SetScalarParameterValue(TEXT("CornerBL"), Radii.W);
+
+	// Also set uniform CornerRadius as max of the four (convenience for simple materials)
+	float MaxR = FMath::Max(FMath::Max(Radii.X, Radii.Y), FMath::Max(Radii.Z, Radii.W));
+	MID->SetScalarParameterValue(TEXT("CornerRadius"), MaxR);
+
+	// Pass widget pixel size so the shader can compute UV-to-pixel mapping
+	if (Image)
+	{
+		FVector2D Size = Image->GetCachedGeometry().GetLocalSize();
+		if (Size.X > 0.0f && Size.Y > 0.0f)
+		{
+			MID->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(Size.X, Size.Y, 0.0f, 0.0f));
+		}
+	}
 }
 
 void URammsCameraWidget::SetCameraSizeBoxSlotFill(bool bFill)
