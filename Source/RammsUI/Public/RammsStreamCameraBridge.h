@@ -56,6 +56,10 @@ private:
 	UPROPERTY()
 	URammsCameraProviderComponent* CameraProvider = nullptr;
 
+	/** All sinks on this actor, queried per-channel for raw data. */
+	UPROPERTY()
+	TArray<TObjectPtr<URammsStreamSinkComponent>> BoundSinks;
+
 	/** Track which channels have been registered as streams. */
 	TSet<int32> RegisteredChannels;
 

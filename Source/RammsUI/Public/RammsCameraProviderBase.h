@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "PixelFormat.h"
 #include "Interfaces/IRammsCameraProvider.h"
 #include "RammsCameraProviderBase.generated.h"
 
@@ -33,6 +34,14 @@ struct FRammsCameraStreamState
 	// Frame rate tracking
 	int32  FrameCount = 0;
 	double FrameRateTimer = 0.0;
+
+	/** CPU-side copy of the latest frame's raw pixel data.
+	 *  Kept alongside the GPU texture so PGM and other CPU consumers
+	 *  can read pixel values without GPU readback. */
+	TArray<uint8> RawFrameData;
+
+	/** Pixel format of RawFrameData (PF_B8G8R8A8, PF_R32_FLOAT, etc.). */
+	EPixelFormat FramePixelFormat = PF_Unknown;
 };
 
 /**
@@ -73,6 +82,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void BroadcastFrameData(const FString& StreamID, const TArray<uint8>& PixelData, int32 Width, int32 Height);
 
+	/** Broadcast a frame with both a GPU texture and a CPU-side raw data copy.
+	 *  The raw data is stored so PGM / CPU consumers can read pixel values
+	 *  without GPU readback.  Prefer this over BroadcastFrame when raw bytes
+	 *  are available. */
+	void BroadcastFrameWithRawData(const FString& StreamID, UTexture* Texture,
+		TArray<uint8>&& RawData, EPixelFormat PixelFormat);
+
 	/** Mark a stream as active/inactive and fire status delegate. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void SetStreamActive(const FString& StreamID, bool bActive);
@@ -103,6 +119,7 @@ public:
 	virtual FOnCameraFrameReady&		   OnCameraFrameReady() override { return CameraFrameReadyDelegate; }
 	virtual FOnCameraStreamStatus&		   OnCameraStreamStatus() override { return CameraStreamStatusDelegate; }
 	virtual FOnCameraExtrinsicUpdated&	   OnCameraExtrinsicUpdated() override { return CameraExtrinsicUpdatedDelegate; }
+	virtual bool						   GetStreamRawData(const FString& StreamID, const TArray<uint8>*& OutData, EPixelFormat& OutFormat) const override;
 
 protected:
 	virtual void Tick(float DeltaTime) override;

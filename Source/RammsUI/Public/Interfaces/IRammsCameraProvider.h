@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
 #include "Engine/Texture2D.h"
+#include "PixelFormat.h"
 #include "RammsStreamProtocol.h"
 #include "IRammsCameraProvider.generated.h"
 
@@ -159,4 +160,18 @@ public:
 	virtual FOnCameraFrameReady&	   OnCameraFrameReady() = 0;
 	virtual FOnCameraStreamStatus&	   OnCameraStreamStatus() = 0;
 	virtual FOnCameraExtrinsicUpdated& OnCameraExtrinsicUpdated() = 0;
+
+	/**
+	 * Get a pointer to the latest raw pixel data for a stream.
+	 * @param StreamID - Stream identifier
+	 * @param OutData - Pointer to internal raw data buffer (valid until next BroadcastFrame)
+	 * @param OutFormat - Pixel format of the raw data
+	 * @return True if raw data is available
+	 */
+	virtual bool GetStreamRawData(const FString& StreamID, const TArray<uint8>*& OutData, EPixelFormat& OutFormat) const
+	{
+		OutData = nullptr;
+		OutFormat = PF_Unknown;
+		return false;
+	}
 };

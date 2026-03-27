@@ -66,10 +66,47 @@ void ARammsCameraProviderBase::BroadcastFrameData(const FString& StreamID, const
 	Mip.BulkData.Unlock();
 	Tex2D->UpdateResource();
 
+	// Store CPU-side copy
+	State->RawFrameData = PixelData;
+	State->FramePixelFormat = PF_B8G8R8A8;
+
 	State->LastTimestamp = FDateTime::UtcNow().GetTicks();
 	State->FrameCount++;
 
 	CameraFrameReadyDelegate.Broadcast(StreamID, State->Texture, State->LastTimestamp);
+}
+
+void ARammsCameraProviderBase::BroadcastFrameWithRawData(
+	const FString& StreamID, UTexture* Texture, TArray<uint8>&& RawData, EPixelFormat PixelFormat)
+{
+	FRammsCameraStreamState* State = Streams.Find(StreamID);
+	if (!State)
+		return;
+
+	State->Texture = Texture;
+	State->RawFrameData = MoveTemp(RawData);
+	State->FramePixelFormat = PixelFormat;
+	State->LastTimestamp = FDateTime::UtcNow().GetTicks();
+	State->FrameCount++;
+
+	CameraFrameReadyDelegate.Broadcast(StreamID, Texture, State->LastTimestamp);
+}
+
+bool ARammsCameraProviderBase::GetStreamRawData(
+	const FString& StreamID, const TArray<uint8>*& OutData, EPixelFormat& OutFormat) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		if (State->RawFrameData.Num() > 0)
+		{
+			OutData = &State->RawFrameData;
+			OutFormat = State->FramePixelFormat;
+			return true;
+		}
+	}
+	OutData = nullptr;
+	OutFormat = PF_Unknown;
+	return false;
 }
 
 void ARammsCameraProviderBase::SetStreamActive(const FString& StreamID, bool bActive)
