@@ -32,7 +32,8 @@ void URammsCameraWidget::ResetCachedWidgets()
 	OptionButton = nullptr;
 	OptionLabel = nullptr;
 	ImageAspectRatioBox = nullptr;
-	PassthroughMID = nullptr;
+	PassthroughMID_RGB = nullptr;
+	PassthroughMID_Data = nullptr;
 }
 
 void URammsCameraWidget::BuildWidgetTree()
@@ -1514,10 +1515,14 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 
 void URammsCameraWidget::EnsureDataMaterials()
 {
-	// Create passthrough MID for RGB display (with material-based corner masking)
-	if (PassthroughMaterial && !PassthroughMID)
+	// Create passthrough MIDs for RGB display (with material-based corner masking)
+	if (PassthroughMaterial && !PassthroughMID_RGB)
 	{
-		PassthroughMID = UMaterialInstanceDynamic::Create(PassthroughMaterial, this);
+		PassthroughMID_RGB = UMaterialInstanceDynamic::Create(PassthroughMaterial, this);
+	}
+	if (PassthroughMaterial && !PassthroughMID_Data)
+	{
+		PassthroughMID_Data = UMaterialInstanceDynamic::Create(PassthroughMaterial, this);
 	}
 
 	// Create data visualization MID if material is assigned and MID doesn't exist
@@ -1580,11 +1585,12 @@ void URammsCameraWidget::SetImageBrushFromTexture(UImage* Image, UTexture* Textu
 
 	// If passthrough material is available, route through it for post-processing
 	// compatibility and shader-based corner masking
-	if (PassthroughMID)
+	UMaterialInstanceDynamic* MID = (Image == DataImage) ? PassthroughMID_Data : PassthroughMID_RGB;
+	if (MID)
 	{
-		PassthroughMID->SetTextureParameterValue(TEXT("Texture"), Texture);
-		UpdateMaterialCornerParams(PassthroughMID, Image);
-		SetImageBrushFromMaterial(Image, PassthroughMID, Texture, DataRT);
+		MID->SetTextureParameterValue(TEXT("Texture"), Texture);
+		UpdateMaterialCornerParams(MID, Image);
+		SetImageBrushFromMaterial(Image, MID, Texture, DataRT);
 		return;
 	}
 

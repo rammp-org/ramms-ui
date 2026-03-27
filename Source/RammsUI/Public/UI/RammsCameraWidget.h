@@ -318,9 +318,13 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> OverlayMID;
 
-	/** Dynamic material instance for RGB passthrough (with rounded corner masking) */
+	/** Dynamic material instance for RGB passthrough on CameraImage (with rounded corner masking) */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> PassthroughMID;
+	TObjectPtr<UMaterialInstanceDynamic> PassthroughMID_RGB;
+
+	/** Dynamic material instance for RGB passthrough on DataImage in SideBySide mode */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PassthroughMID_Data;
 
 	/** Render target for data material output (enables RoundedBox corners) */
 	UPROPERTY(Transient)
