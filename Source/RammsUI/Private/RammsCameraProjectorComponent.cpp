@@ -220,10 +220,10 @@ void URammsCameraProjectorComponent::EnsurePGMCreated()
 	FName MeshName = MakeUniqueObjectName(Owner, UProceduralMeshComponent::StaticClass(), TEXT("PGMProceduralMesh"));
 	ProcMeshComponent = NewObject<UProceduralMeshComponent>(Owner, MeshName);
 	ProcMeshComponent->bUseAsyncCooking = false; // sync so mesh is visible immediately
+	Owner->AddInstanceComponent(ProcMeshComponent);
 	ProcMeshComponent->SetupAttachment(this);
 	ProcMeshComponent->RegisterComponent();
 	ProcMeshComponent->SetVisibility(false);
-	Owner->AddInstanceComponent(ProcMeshComponent);
 
 	// Custom depth / stencil for post-process highlighting
 	if (bPGMRenderCustomDepth)
