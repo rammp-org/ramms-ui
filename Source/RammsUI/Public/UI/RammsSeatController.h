@@ -77,6 +77,21 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Seat")
 	FOnSeatValueChanged OnValueChanged;
 
+	/** Fired when any seat axis reset button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSeatResetPressed, ERammsSeatAxis, Axis, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Seat")
+	FOnSeatResetPressed OnResetPressed;
+
+	/** Fired when any seat axis increment (+) button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSeatIncrementPressed, ERammsSeatAxis, Axis, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Seat")
+	FOnSeatIncrementPressed OnIncrementPressed;
+
+	/** Fired when any seat axis decrement (−) button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSeatDecrementPressed, ERammsSeatAxis, Axis, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Seat")
+	FOnSeatDecrementPressed OnDecrementPressed;
+
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void ApplyStyle_Implementation() override;
@@ -123,6 +138,30 @@ protected:
 	void OnLateralTiltChanged(float Value);
 	UFUNCTION()
 	void OnAPTiltChanged(float Value);
+
+	// Per-axis reset handlers
+	UFUNCTION()
+	void OnElevationReset(float Value);
+	UFUNCTION()
+	void OnLateralTiltReset(float Value);
+	UFUNCTION()
+	void OnAPTiltReset(float Value);
+
+	// Per-axis increment handlers
+	UFUNCTION()
+	void OnElevationIncrement(float Value);
+	UFUNCTION()
+	void OnLateralTiltIncrement(float Value);
+	UFUNCTION()
+	void OnAPTiltIncrement(float Value);
+
+	// Per-axis decrement handlers
+	UFUNCTION()
+	void OnElevationDecrement(float Value);
+	UFUNCTION()
+	void OnLateralTiltDecrement(float Value);
+	UFUNCTION()
+	void OnAPTiltDecrement(float Value);
 
 	/** Common handler for axis value changes from user interaction */
 	void HandleAxisChanged(ERammsSeatAxis Axis, float Value);

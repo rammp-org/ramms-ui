@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "StructUtils/InstancedStruct.h"
 #include "RammsUIEventTypes.generated.h"
 
 // ── Camera / Viewport Overlay Types ──────────────────────────────
@@ -87,4 +88,55 @@ struct RAMMSUI_API FRammsUIEvent
 	/** Vector payload (position, direction, etc.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Event")
 	FVector VectorValue = FVector::ZeroVector;
+
+	// ── Structured Payloads ──────────────────────────────────────
+
+	/** Carry any USTRUCT as payload. Use GetPayloadAs<T>() in C++ or "Get Struct" node in Blueprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Event|Payload")
+	FInstancedStruct StructPayload;
+
+	/** Key-value string map for ad-hoc data without defining a new USTRUCT */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Event|Payload")
+	TMap<FName, FString> Properties;
+
+	// ── C++ typed getters for Properties map ─────────────────────
+
+	FString GetPayloadString(FName Key, const FString& Default = FString()) const
+	{
+		const FString* Found = Properties.Find(Key);
+		return Found ? *Found : Default;
+	}
+
+	float GetPayloadFloat(FName Key, float Default = 0.0f) const
+	{
+		const FString* Found = Properties.Find(Key);
+		return (Found && !Found->IsEmpty()) ? FCString::Atof(**Found) : Default;
+	}
+
+	int32 GetPayloadInt(FName Key, int32 Default = 0) const
+	{
+		const FString* Found = Properties.Find(Key);
+		return (Found && Found->IsNumeric()) ? FCString::Atoi(**Found) : Default;
+	}
+
+	bool GetPayloadBool(FName Key, bool Default = false) const
+	{
+		const FString* Found = Properties.Find(Key);
+		if (!Found || Found->IsEmpty())
+			return Default;
+		return Found->Equals(TEXT("true"), ESearchCase::IgnoreCase) || Found->Equals(TEXT("1"));
+	}
+
+	uint8 GetPayloadByte(FName Key, uint8 Default = 0) const
+	{
+		const FString* Found = Properties.Find(Key);
+		return (Found && Found->IsNumeric()) ? static_cast<uint8>(FCString::Atoi(**Found)) : Default;
+	}
+
+	/** Get the struct payload as a specific type (C++ only). Returns nullptr if type doesn't match. */
+	template <typename T>
+	const T* GetPayloadAs() const
+	{
+		return StructPayload.GetPtr<T>();
+	}
 };

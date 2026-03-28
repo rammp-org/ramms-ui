@@ -1,10 +1,50 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/RammsStatusPanel.h"
+#include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+
+// ── Constructor ────────────────────────────────────────────────────────
+
+URammsStatusPanel::URammsStatusPanel()
+{
+	// Default fields — backward-compatible with original fixed layout
+	{
+		FRammsStatusField F;
+		F.Key = TEXT("Speed");
+		F.Label = FText::FromString(TEXT("Speed"));
+		F.Source = ERammsStatusFieldSource::RobotState;
+		F.Format = ERammsStatusValueFormat::Float;
+		F.Units = FText::FromString(TEXT("m/s"));
+		F.DecimalPlaces = 1;
+		Fields.Add(MoveTemp(F));
+	}
+	{
+		FRammsStatusField F;
+		F.Key = TEXT("Battery");
+		F.Label = FText::FromString(TEXT("Battery"));
+		F.Source = ERammsStatusFieldSource::RobotState;
+		F.Format = ERammsStatusValueFormat::Percent;
+		F.bUseThresholdColors = true;
+		F.WarningThreshold = 0.5f;
+		F.CriticalThreshold = 0.2f;
+		Fields.Add(MoveTemp(F));
+	}
+	{
+		FRammsStatusField F;
+		F.Key = TEXT("Mode");
+		F.Label = FText::FromString(TEXT("Mode"));
+		F.Source = ERammsStatusFieldSource::RobotState;
+		F.Format = ERammsStatusValueFormat::EnumName;
+		F.EnumType = StaticEnum<ERammsRobotMode>();
+		Fields.Add(MoveTemp(F));
+	}
+}
+
+// ── Widget Tree ────────────────────────────────────────────────────────
 
 void URammsStatusPanel::ResetCachedWidgets()
 {
@@ -13,32 +53,25 @@ void URammsStatusPanel::ResetCachedWidgets()
 	HeaderText = nullptr;
 	HeaderRow = nullptr;
 	ContentBox = nullptr;
-	SpeedText = nullptr;
-	BatteryText = nullptr;
-	ModeText = nullptr;
-	ConnectionText = nullptr;
-	ArmText = nullptr;
+	FieldWidgets.Empty();
 }
 
 void URammsStatusPanel::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)
-		return; // Already built or no tree
+		return;
 
-	// Root: PanelBorder — transparent background; parent container provides the visual frame
 	PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PanelBorder"));
 	PanelBorder->SetBrushColor(FLinearColor::Transparent);
 	PanelBorder->SetPadding(FMargin(12.0f));
 	WidgetTree->RootWidget = PanelBorder;
 
-	// Main vertical layout inside border
 	UVerticalBox* MainBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MainBox"));
 	PanelBorder->AddChild(MainBox);
 
-	// Header row: HorizontalBox with HeaderText + ToggleButton
+	// Header
 	HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
-	UVerticalBoxSlot* HeaderRowSlot = MainBox->AddChildToVerticalBox(HeaderRow);
-	if (HeaderRowSlot)
+	if (UVerticalBoxSlot* HeaderRowSlot = MainBox->AddChildToVerticalBox(HeaderRow))
 	{
 		HeaderRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		HeaderRowSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
@@ -46,53 +79,57 @@ void URammsStatusPanel::BuildWidgetTree()
 
 	HeaderText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeaderText"));
 	HeaderText->SetText(HeaderTitle);
-	UHorizontalBoxSlot* HeaderTextSlot = HeaderRow->AddChildToHorizontalBox(HeaderText);
-	if (HeaderTextSlot)
+	if (UHorizontalBoxSlot* HeaderTextSlot = HeaderRow->AddChildToHorizontalBox(HeaderText))
 	{
 		HeaderTextSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		HeaderTextSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
 	ToggleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ToggleButton"));
-	UHorizontalBoxSlot* ToggleSlot = HeaderRow->AddChildToHorizontalBox(ToggleButton);
-	if (ToggleSlot)
+	if (UHorizontalBoxSlot* ToggleSlot = HeaderRow->AddChildToHorizontalBox(ToggleButton))
 	{
 		ToggleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		ToggleSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
-	// Toggle button label
 	UTextBlock* ToggleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ToggleLabel"));
 	ToggleLabel->SetText(FText::FromString(TEXT("\u25BC")));
 	ToggleButton->AddChild(ToggleLabel);
 
-	// Content box with status texts
+	// Content
 	ContentBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentBox"));
-	UVerticalBoxSlot* ContentSlot = MainBox->AddChildToVerticalBox(ContentBox);
-	if (ContentSlot)
+	if (UVerticalBoxSlot* ContentSlot = MainBox->AddChildToVerticalBox(ContentBox))
 	{
 		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
 	}
 
-	// Status text entries
-	auto AddStatusText = [this](const FString& Name, const FString& DefaultText) -> UTextBlock* {
-		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *Name);
-		Text->SetText(FText::FromString(DefaultText));
-		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-		UVerticalBoxSlot* TextSlot = ContentBox->AddChildToVerticalBox(Text);
-		if (TextSlot)
-		{
-			TextSlot->SetPadding(FMargin(0.0f, 2.0f));
-		}
-		return Text;
-	};
-
-	SpeedText = AddStatusText(TEXT("SpeedText"), TEXT("Speed: --"));
-	BatteryText = AddStatusText(TEXT("BatteryText"), TEXT("Battery: --"));
-	ModeText = AddStatusText(TEXT("ModeText"), TEXT("Mode: --"));
-	ConnectionText = AddStatusText(TEXT("ConnectionText"), TEXT("Connection: --"));
-	ArmText = AddStatusText(TEXT("ArmText"), TEXT("Arm: --"));
+	BuildFieldRows();
 }
+
+void URammsStatusPanel::BuildFieldRows()
+{
+	if (!ContentBox || !WidgetTree)
+		return;
+
+	FieldWidgets.Empty();
+
+	for (int32 i = 0; i < Fields.Num(); ++i)
+	{
+		FString		Name = FString::Printf(TEXT("FieldText_%d"), i);
+		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *Name);
+		Text->SetText(FText::Format(
+			FText::FromString(TEXT("{0}: --")),
+			Fields[i].Label));
+		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		if (UVerticalBoxSlot* FieldSlot = ContentBox->AddChildToVerticalBox(Text))
+		{
+			FieldSlot->SetPadding(FMargin(0.0f, 2.0f));
+		}
+		FieldWidgets.Add(Text);
+	}
+}
+
+// ── Lifecycle ──────────────────────────────────────────────────────────
 
 void URammsStatusPanel::NativeOnInitialized()
 {
@@ -107,37 +144,64 @@ void URammsStatusPanel::SynchronizeProperties()
 	if (HeaderText)
 	{
 		HeaderText->SetText(HeaderTitle);
-		// Only hide the text label; keep HeaderRow (with toggle button) always visible
 		HeaderText->SetVisibility(HeaderTitle.IsEmptyOrWhitespace()
 				? ESlateVisibility::Collapsed
 				: ESlateVisibility::SelfHitTestInvisible);
 	}
+
+	// Rebuild rows if field count changed (designer editing)
+	if (ContentBox && WidgetTree && FieldWidgets.Num() != Fields.Num())
+	{
+		for (UTextBlock* W : FieldWidgets)
+		{
+			if (W)
+			{
+				ContentBox->RemoveChild(W);
+			}
+		}
+		BuildFieldRows();
+		ApplyStyle_Implementation();
+	}
+
+	RefreshAllFields();
 }
 
 void URammsStatusPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Bind toggle button
 	if (ToggleButton)
 	{
 		ToggleButton->OnClicked.AddUniqueDynamic(this, &URammsStatusPanel::OnToggleClicked);
 	}
 
-	// Subscribe to state updates if provider is set
+	// State provider subscription
 	if (StateProvider.GetInterface())
 	{
-		IRammsStateProvider* Provider = StateProvider.GetInterface();
-		StateUpdateHandle = Provider->OnRobotStateUpdate().AddUObject(this, &URammsStatusPanel::OnRobotStateUpdate);
+		StateUpdateHandle = StateProvider.GetInterface()->OnRobotStateUpdate().AddUObject(
+			this, &URammsStatusPanel::OnRobotStateUpdate);
 	}
 
-	// Set initial expand state
+	// Subsystem subscriptions
+	if (UWorld* World = GetWorld())
+	{
+		if (URammsUISubsystem* Sub = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Sub->OnRobotStateChanged.AddUniqueDynamic(this, &URammsStatusPanel::OnSubsystemStateChanged);
+			Sub->OnPropertyChanged.AddUniqueDynamic(this, &URammsStatusPanel::OnSubsystemPropertyChanged);
+
+			if (Sub->HasRobotState())
+			{
+				ApplyRemoteState(Sub->GetCachedRobotState());
+			}
+		}
+	}
+
 	SetExpanded(bIsExpanded, false);
 }
 
 void URammsStatusPanel::NativeDestruct()
 {
-	// Unsubscribe from state updates
 	if (StateProvider.GetInterface() && StateUpdateHandle.IsValid())
 	{
 		StateProvider.GetInterface()->OnRobotStateUpdate().Remove(StateUpdateHandle);
@@ -151,7 +215,6 @@ void URammsStatusPanel::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	// Periodic update (even without callbacks, poll state provider)
 	TimeSinceUpdate += InDeltaTime;
 	if (TimeSinceUpdate >= UpdateFrequency)
 	{
@@ -160,63 +223,56 @@ void URammsStatusPanel::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 	}
 }
 
+// ── Styling ────────────────────────────────────────────────────────────
+
 void URammsStatusPanel::ApplyStyle_Implementation()
 {
 	if (!Style)
 		return;
 
-	// Apply border styling — transparent; parent container provides background
 	if (PanelBorder)
 	{
 		PanelBorder->SetBrushColor(FLinearColor::Transparent);
 		PanelBorder->SetPadding(FMargin(Style->Spacing.Medium));
 	}
 
-	// Apply header text styling
 	if (HeaderText)
 	{
 		HeaderText->SetFont(Style->Typography.HeadingSmall);
 		HeaderText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
-	// Apply status text styling
-	auto ApplyStatusStyle = [this](UTextBlock* Text) {
-		if (Text)
+	for (UTextBlock* W : FieldWidgets)
+	{
+		if (W)
 		{
-			Text->SetFont(Style->Typography.Body);
-			Text->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+			W->SetFont(Style->Typography.Body);
 		}
-	};
-
-	ApplyStatusStyle(SpeedText);
-	ApplyStatusStyle(BatteryText);
-	ApplyStatusStyle(ModeText);
-	ApplyStatusStyle(ConnectionText);
-	ApplyStatusStyle(ArmText);
+	}
 }
+
+// ── State Provider ───────────────────────────────────────────────────────
 
 void URammsStatusPanel::SetStateProvider(TScriptInterface<IRammsStateProvider> Provider)
 {
-	// Unsubscribe from old provider
 	if (StateProvider.GetInterface() && StateUpdateHandle.IsValid())
 	{
 		StateProvider.GetInterface()->OnRobotStateUpdate().Remove(StateUpdateHandle);
 		StateUpdateHandle.Reset();
 	}
 
-	// Set new provider
 	StateProvider = Provider;
 
-	// Subscribe to new provider
 	if (StateProvider.GetInterface())
 	{
-		IRammsStateProvider* ProviderInterface = StateProvider.GetInterface();
-		StateUpdateHandle = ProviderInterface->OnRobotStateUpdate().AddUObject(this, &URammsStatusPanel::OnRobotStateUpdate);
+		StateUpdateHandle = StateProvider.GetInterface()->OnRobotStateUpdate().AddUObject(
+			this, &URammsStatusPanel::OnRobotStateUpdate);
 	}
 
-	// Force immediate update
 	UpdateDisplay();
 }
+
+// ── Expand / Collapse ────────────────────────────────────────────────────
 
 void URammsStatusPanel::ToggleExpand()
 {
@@ -232,152 +288,67 @@ void URammsStatusPanel::SetExpanded(bool bExpanded, bool bAnimated)
 
 	if (ContentBox)
 	{
-		if (bIsExpanded)
-		{
-			ContentBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-			ContentBox->SetRenderOpacity(1.0f);
-		}
-		else
-		{
-			ContentBox->SetVisibility(ESlateVisibility::Collapsed);
-		}
+		ContentBox->SetVisibility(bIsExpanded
+				? ESlateVisibility::SelfHitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 }
+
+// ── Display Update ───────────────────────────────────────────────────────
 
 void URammsStatusPanel::UpdateDisplay()
 {
 	IRammsStateProvider* Provider = StateProvider.GetInterface();
-	if (!Provider)
+	if (Provider)
 	{
-		// No provider — if remote state was applied, re-apply it; otherwise show placeholder
-		if (bHasRemoteState)
+		FRammsRobotState State;
+		if (Provider->GetRobotState(State))
 		{
-			ApplyStateToDisplay(CachedState);
+			CachedState = State;
+			bHasRemoteState = true;
 		}
-		else
-		{
-			if (SpeedText)
-				SpeedText->SetText(FText::FromString(TEXT("Speed: --")));
-			if (BatteryText)
-				BatteryText->SetText(FText::FromString(TEXT("Battery: --")));
-			if (ModeText)
-				ModeText->SetText(FText::FromString(TEXT("Mode: --")));
-			if (ConnectionText)
-				ConnectionText->SetText(FText::FromString(TEXT("Connection: --")));
-			if (ArmText)
-				ArmText->SetText(FText::FromString(TEXT("Arm: --")));
-		}
-		return;
 	}
 
-	// Get current state
-	FRammsRobotState State;
-	if (Provider->GetRobotState(State))
-	{
-		ApplyStateToDisplay(State);
-	}
-	else
-	{
-		// State not available
-		FSlateColor DisabledColor = FSlateColor(Style ? Style->Colors.TextDisabled : FLinearColor::Gray);
-		if (SpeedText)
-		{
-			SpeedText->SetText(FText::FromString(TEXT("Speed: No Data")));
-			SpeedText->SetColorAndOpacity(DisabledColor);
-		}
-		if (BatteryText)
-		{
-			BatteryText->SetText(FText::FromString(TEXT("Battery: No Data")));
-			BatteryText->SetColorAndOpacity(DisabledColor);
-		}
-		if (ModeText)
-		{
-			ModeText->SetText(FText::FromString(TEXT("Mode: No Data")));
-			ModeText->SetColorAndOpacity(DisabledColor);
-		}
-		if (ConnectionText)
-		{
-			ConnectionText->SetText(FText::FromString(TEXT("Connection: No Data")));
-			ConnectionText->SetColorAndOpacity(DisabledColor);
-		}
-		if (ArmText)
-		{
-			ArmText->SetText(FText::FromString(TEXT("Arm: No Data")));
-			ArmText->SetColorAndOpacity(DisabledColor);
-		}
-	}
-}
-
-void URammsStatusPanel::OnRobotStateUpdate(const FRammsRobotState& State)
-{
-	// State was updated via callback - apply directly
-	ApplyStateToDisplay(State);
+	RefreshAllFields();
 }
 
 void URammsStatusPanel::ApplyRemoteState(const FRammsRobotState& State)
 {
 	bHasRemoteState = true;
-	ApplyStateToDisplay(State);
+	CachedState = State;
+	RefreshAllFields();
 }
 
-void URammsStatusPanel::ApplyStateToDisplay(const FRammsRobotState& State)
+void URammsStatusPanel::SetCustomFieldValue(FName Key, const FString& Value)
+{
+	CustomFieldValues.Add(Key, Value);
+	RefreshAllFields();
+}
+
+void URammsStatusPanel::OnRobotStateUpdate(const FRammsRobotState& State)
 {
 	CachedState = State;
+	bHasRemoteState = true;
+	RefreshAllFields();
+}
 
-	// Update speed
-	if (SpeedText)
-	{
-		float SpeedMagnitude = State.LinearVelocity.Size();
-		FText SpeedLabel = FText::Format(
-			FText::FromString(TEXT("Speed: {0} m/s")),
-			FText::AsNumber(SpeedMagnitude, &FNumberFormattingOptions::DefaultNoGrouping()));
-		SpeedText->SetText(SpeedLabel);
-		SpeedText->SetColorAndOpacity(FSlateColor(Style ? Style->Colors.TextPrimary : FLinearColor::White));
-	}
+void URammsStatusPanel::OnSubsystemStateChanged(const FRammsRobotState& State)
+{
+	bHasRemoteState = true;
+	CachedState = State;
+	RefreshAllFields();
+}
 
-	// Update battery
-	if (BatteryText)
+void URammsStatusPanel::OnSubsystemPropertyChanged(FName Key, const FString& Value)
+{
+	// Only refresh if a displayed field cares about this key
+	for (const FRammsStatusField& Field : Fields)
 	{
-		int32 BatteryPercent = FMath::RoundToInt(State.BatteryLevel * 100.0f);
-		FText BatteryLabel = FText::Format(
-			FText::FromString(TEXT("Battery: {0}%")),
-			FText::AsNumber(BatteryPercent));
-		BatteryText->SetText(BatteryLabel);
-		BatteryText->SetColorAndOpacity(FSlateColor(GetBatteryColor(State.BatteryLevel)));
-	}
-
-	// Update mode
-	if (ModeText)
-	{
-		FString ModeString;
-		switch (State.Mode)
+		if (Field.Source == ERammsStatusFieldSource::PropertyStore && Field.Key == Key)
 		{
-			case ERammsRobotMode::Standby:
-				ModeString = TEXT("Standby");
-				break;
-			case ERammsRobotMode::Manual:
-				ModeString = TEXT("Manual");
-				break;
-			case ERammsRobotMode::Autonomous:
-				ModeString = TEXT("Autonomous");
-				break;
-			case ERammsRobotMode::Emergency:
-				ModeString = TEXT("EMERGENCY");
-				break;
-			default:
-				ModeString = TEXT("Unknown");
+			RefreshAllFields();
+			return;
 		}
-
-		if (State.bEmergencyStop)
-		{
-			ModeString += TEXT(" [E-STOP]");
-		}
-
-		FText ModeLabel = FText::Format(
-			FText::FromString(TEXT("Mode: {0}")),
-			FText::FromString(ModeString));
-		ModeText->SetText(ModeLabel);
-		ModeText->SetColorAndOpacity(FSlateColor(GetModeColor(State.Mode)));
 	}
 }
 
@@ -385,6 +356,227 @@ void URammsStatusPanel::OnToggleClicked()
 {
 	ToggleExpand();
 }
+
+// ── Field Resolution & Formatting ────────────────────────────────────────────
+
+void URammsStatusPanel::RefreshAllFields()
+{
+	if (FieldWidgets.Num() != Fields.Num())
+		return;
+
+	URammsUISubsystem* Sub = nullptr;
+	if (UWorld* World = GetWorld())
+	{
+		Sub = World->GetSubsystem<URammsUISubsystem>();
+	}
+
+	static const FName SpeedKey(TEXT("Speed"));
+	static const FName BatteryKey(TEXT("Battery"));
+	static const FName ModeKey(TEXT("Mode"));
+	static const FName EmergencyStopKey(TEXT("EmergencyStop"));
+	static const FName LinearVelocityKey(TEXT("LinearVelocity"));
+	static const FName AngularVelocityKey(TEXT("AngularVelocity"));
+
+	const FLinearColor DefaultColor = Style ? Style->Colors.TextPrimary : FLinearColor::White;
+	const FLinearColor DisabledColor = Style ? Style->Colors.TextDisabled : FLinearColor::Gray;
+
+	for (int32 i = 0; i < Fields.Num(); ++i)
+	{
+		const FRammsStatusField& Field = Fields[i];
+		UTextBlock*				 Widget = FieldWidgets[i];
+		if (!Widget)
+			continue;
+
+		// ── Resolve raw value ────────────────────────────────────────────
+		float	NumericValue = 0.0f;
+		FString StringValue;
+		bool	bIsNumeric = false;
+		bool	bIsValid = false;
+
+		switch (Field.Source)
+		{
+			case ERammsStatusFieldSource::RobotState:
+			{
+				if (!bHasRemoteState)
+					break;
+
+				bIsValid = true;
+				if (Field.Key == SpeedKey)
+				{
+					NumericValue = CachedState.LinearVelocity.Size();
+					bIsNumeric = true;
+				}
+				else if (Field.Key == BatteryKey)
+				{
+					NumericValue = CachedState.BatteryLevel;
+					bIsNumeric = true;
+				}
+				else if (Field.Key == ModeKey)
+				{
+					NumericValue = static_cast<float>(static_cast<uint8>(CachedState.Mode));
+					bIsNumeric = true;
+				}
+				else if (Field.Key == EmergencyStopKey)
+				{
+					NumericValue = CachedState.bEmergencyStop ? 1.0f : 0.0f;
+					StringValue = CachedState.bEmergencyStop ? TEXT("ACTIVE") : TEXT("Inactive");
+					bIsNumeric = true;
+				}
+				else if (Field.Key == LinearVelocityKey)
+				{
+					StringValue = CachedState.LinearVelocity.ToString();
+				}
+				else if (Field.Key == AngularVelocityKey)
+				{
+					StringValue = CachedState.AngularVelocity.ToString();
+				}
+				else
+				{
+					bIsValid = false;
+				}
+				break;
+			}
+			case ERammsStatusFieldSource::PropertyStore:
+			{
+				if (Sub && Sub->HasProperty(Field.Key))
+				{
+					StringValue = Sub->GetProperty(Field.Key);
+					if (StringValue.IsNumeric())
+					{
+						NumericValue = FCString::Atof(*StringValue);
+						bIsNumeric = true;
+					}
+					bIsValid = true;
+				}
+				break;
+			}
+			case ERammsStatusFieldSource::Custom:
+			{
+				if (const FString* Val = CustomFieldValues.Find(Field.Key))
+				{
+					StringValue = *Val;
+					if (StringValue.IsNumeric())
+					{
+						NumericValue = FCString::Atof(*StringValue);
+						bIsNumeric = true;
+					}
+					bIsValid = true;
+				}
+				break;
+			}
+		}
+
+		// ── Format value ───────────────────────────────────────────────
+		FText FormattedValue;
+		if (!bIsValid)
+		{
+			FormattedValue = FText::FromString(TEXT("--"));
+		}
+		else
+		{
+			switch (Field.Format)
+			{
+				case ERammsStatusValueFormat::Float:
+				{
+					FNumberFormattingOptions Opts = FNumberFormattingOptions::DefaultNoGrouping();
+					Opts.MinimumFractionalDigits = Field.DecimalPlaces;
+					Opts.MaximumFractionalDigits = Field.DecimalPlaces;
+					FText Num = FText::AsNumber(bIsNumeric ? NumericValue : 0.0f, &Opts);
+					FormattedValue = Field.Units.IsEmpty()
+						? Num
+						: FText::Format(FText::FromString(TEXT("{0} {1}")), Num, Field.Units);
+					break;
+				}
+				case ERammsStatusValueFormat::Integer:
+				{
+					FText Num = FText::AsNumber(FMath::RoundToInt(bIsNumeric ? NumericValue : 0.0f));
+					FormattedValue = Field.Units.IsEmpty()
+						? Num
+						: FText::Format(FText::FromString(TEXT("{0} {1}")), Num, Field.Units);
+					break;
+				}
+				case ERammsStatusValueFormat::Percent:
+				{
+					int32 Pct = FMath::RoundToInt((bIsNumeric ? NumericValue : 0.0f) * 100.0f);
+					FormattedValue = FText::Format(
+						FText::FromString(TEXT("{0}%")),
+						FText::AsNumber(Pct));
+					break;
+				}
+				case ERammsStatusValueFormat::Boolean:
+					FormattedValue = FText::FromString(
+						(bIsNumeric ? (NumericValue > 0.5f) : false) ? TEXT("Yes") : TEXT("No"));
+					break;
+				case ERammsStatusValueFormat::EnumName:
+				{
+					if (Field.EnumType && bIsNumeric)
+					{
+						int64 IntVal = static_cast<int64>(FMath::RoundToInt(NumericValue));
+						FormattedValue = Field.EnumType->GetDisplayNameTextByValue(IntVal);
+					}
+					else
+					{
+						FormattedValue = FText::FromString(StringValue.IsEmpty() ? TEXT("--") : StringValue);
+					}
+					break;
+				}
+				case ERammsStatusValueFormat::RawText:
+					FormattedValue = FText::FromString(StringValue);
+					break;
+				case ERammsStatusValueFormat::Auto:
+				default:
+				{
+					if (bIsNumeric)
+					{
+						FNumberFormattingOptions Opts = FNumberFormattingOptions::DefaultNoGrouping();
+						Opts.MinimumFractionalDigits = Field.DecimalPlaces;
+						Opts.MaximumFractionalDigits = Field.DecimalPlaces;
+						FText Num = FText::AsNumber(NumericValue, &Opts);
+						FormattedValue = Field.Units.IsEmpty()
+							? Num
+							: FText::Format(FText::FromString(TEXT("{0} {1}")), Num, Field.Units);
+					}
+					else
+					{
+						FormattedValue = FText::FromString(StringValue.IsEmpty() ? TEXT("--") : StringValue);
+					}
+					break;
+				}
+			}
+		}
+
+		// Combine label + value
+		Widget->SetText(FText::Format(
+			FText::FromString(TEXT("{0}: {1}")),
+			Field.Label,
+			FormattedValue));
+
+		// ── Determine color ──────────────────────────────────────────────
+		FLinearColor Color = DefaultColor;
+
+		if (!bIsValid)
+		{
+			Color = DisabledColor;
+		}
+		else if (Field.Key == ModeKey && Field.Source == ERammsStatusFieldSource::RobotState)
+		{
+			Color = GetModeColor(CachedState.Mode);
+		}
+		else if (Field.bUseThresholdColors && bIsNumeric)
+		{
+			if (NumericValue <= Field.CriticalThreshold)
+				Color = Style ? Style->Colors.Error : FLinearColor::Red;
+			else if (NumericValue <= Field.WarningThreshold)
+				Color = Style ? Style->Colors.Warning : FLinearColor::Yellow;
+			else
+				Color = Style ? Style->Colors.Success : FLinearColor::Green;
+		}
+
+		Widget->SetColorAndOpacity(FSlateColor(Color));
+	}
+}
+
+// ── Color Helpers ──────────────────────────────────────────────────────────
 
 FLinearColor URammsStatusPanel::GetBatteryColor(float BatteryLevel) const
 {

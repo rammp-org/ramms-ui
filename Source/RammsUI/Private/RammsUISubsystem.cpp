@@ -177,7 +177,191 @@ void URammsUISubsystem::BroadcastCustomUIEvent(const FRammsUIEvent& Event)
 	OnCustomUIEvent.Broadcast(Event);
 }
 
+void URammsUISubsystem::BroadcastCustomUIEventWithPayload(FName EventName, const FInstancedStruct& Payload)
+{
+	FRammsUIEvent Event;
+	Event.EventName = EventName;
+	Event.StructPayload = Payload;
+	OnCustomUIEvent.Broadcast(Event);
+}
+
+void URammsUISubsystem::BroadcastCustomUIEventWithProperties(FName EventName, const TMap<FName, FString>& EventProperties)
+{
+	FRammsUIEvent Event;
+	Event.EventName = EventName;
+	Event.Properties = EventProperties;
+	OnCustomUIEvent.Broadcast(Event);
+}
+
 void URammsUISubsystem::BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated)
 {
 	OnLayoutTransitionRequested.Broadcast(LayoutName, bAnimated);
+}
+
+// ── Robot State ───────────────────────────────────────────────────
+
+void URammsUISubsystem::BroadcastRobotStateChanged(const FRammsRobotState& State)
+{
+	CachedRobotState = State;
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(State);
+}
+
+void URammsUISubsystem::UpdateRobotMode(ERammsRobotMode Mode)
+{
+	CachedRobotState.Mode = Mode;
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateBatteryLevel(float Level)
+{
+	CachedRobotState.BatteryLevel = FMath::Clamp(Level, 0.0f, 1.0f);
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateSpeed(float SpeedMPS)
+{
+	CachedRobotState.LinearVelocity = FVector(SpeedMPS, 0.0f, 0.0f);
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateLinearVelocity(FVector Velocity)
+{
+	CachedRobotState.LinearVelocity = Velocity;
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateAngularVelocity(FRotator Velocity)
+{
+	CachedRobotState.AngularVelocity = Velocity;
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateEmergencyStop(bool bActive)
+{
+	CachedRobotState.bEmergencyStop = bActive;
+	if (bActive)
+	{
+		CachedRobotState.Mode = ERammsRobotMode::Emergency;
+	}
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+void URammsUISubsystem::UpdateBasePose(FTransform Pose)
+{
+	CachedRobotState.BasePose = Pose;
+	bHasRobotState = true;
+	OnRobotStateChanged.Broadcast(CachedRobotState);
+}
+
+// ── Key-Value Property Store ──────────────────────────────────────
+
+void URammsUISubsystem::SetProperty(FName Key, const FString& Value)
+{
+	PropertyStore.Add(Key, Value);
+	OnPropertyChanged.Broadcast(Key, Value);
+}
+
+FString URammsUISubsystem::GetProperty(FName Key) const
+{
+	const FString* Found = PropertyStore.Find(Key);
+	return Found ? *Found : FString();
+}
+
+float URammsUISubsystem::GetPropertyAsFloat(FName Key, float DefaultValue) const
+{
+	const FString* Found = PropertyStore.Find(Key);
+	if (Found && !Found->IsEmpty())
+	{
+		return FCString::Atof(**Found);
+	}
+	return DefaultValue;
+}
+
+int32 URammsUISubsystem::GetPropertyAsInt(FName Key, int32 DefaultValue) const
+{
+	const FString* Found = PropertyStore.Find(Key);
+	if (Found && !Found->IsEmpty())
+	{
+		if (Found->IsNumeric())
+		{
+			return FCString::Atoi(**Found);
+		}
+	}
+	return DefaultValue;
+}
+
+bool URammsUISubsystem::GetPropertyAsBool(FName Key, bool DefaultValue) const
+{
+	const FString* Found = PropertyStore.Find(Key);
+	if (!Found || Found->IsEmpty())
+	{
+		return DefaultValue;
+	}
+	return Found->Equals(TEXT("true"), ESearchCase::IgnoreCase)
+		|| Found->Equals(TEXT("1"))
+		|| Found->Equals(TEXT("yes"), ESearchCase::IgnoreCase);
+}
+
+bool URammsUISubsystem::HasProperty(FName Key) const
+{
+	return PropertyStore.Contains(Key);
+}
+
+void URammsUISubsystem::RemoveProperty(FName Key)
+{
+	if (PropertyStore.Remove(Key) > 0)
+	{
+		OnPropertyChanged.Broadcast(Key, FString());
+	}
+}
+
+TArray<FName> URammsUISubsystem::GetAllPropertyKeys() const
+{
+	TArray<FName> Keys;
+	PropertyStore.GetKeys(Keys);
+	return Keys;
+}
+
+void URammsUISubsystem::SetProperties(const TMap<FName, FString>& Properties)
+{
+	for (const auto& Pair : Properties)
+	{
+		PropertyStore.Add(Pair.Key, Pair.Value);
+		OnPropertyChanged.Broadcast(Pair.Key, Pair.Value);
+	}
+}
+
+// ── Typed Property Setters ────────────────────────────────────────
+
+void URammsUISubsystem::SetPropertyAsByte(FName Key, uint8 Value)
+{
+	SetProperty(Key, FString::FromInt(static_cast<int32>(Value)));
+}
+
+void URammsUISubsystem::SetPropertyAsFloat(FName Key, float Value)
+{
+	SetProperty(Key, FString::SanitizeFloat(Value));
+}
+
+void URammsUISubsystem::SetPropertyAsInt(FName Key, int32 Value)
+{
+	SetProperty(Key, FString::FromInt(Value));
+}
+
+void URammsUISubsystem::SetPropertyAsBool(FName Key, bool Value)
+{
+	SetProperty(Key, Value ? TEXT("true") : TEXT("false"));
+}
+
+uint8 URammsUISubsystem::GetPropertyAsByte(FName Key, uint8 DefaultValue) const
+{
+	const FString* Found = PropertyStore.Find(Key);
+	return (Found && Found->IsNumeric()) ? static_cast<uint8>(FCString::Atoi(**Found)) : DefaultValue;
 }

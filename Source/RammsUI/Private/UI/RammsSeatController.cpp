@@ -6,6 +6,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/BorderSlot.h"
 #include "Interfaces/IRammsRobotController.h"
+#include "RammsUISubsystem.h"
 
 URammsSeatController::URammsSeatController(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -108,11 +109,26 @@ void URammsSeatController::NativeConstruct()
 
 	// Bind axis control delegates (AddUniqueDynamic prevents accumulation on reparent)
 	if (ElevationControl)
+	{
 		ElevationControl->OnValueChanged.AddUniqueDynamic(this, &URammsSeatController::OnElevationChanged);
+		ElevationControl->OnResetPressed.AddUniqueDynamic(this, &URammsSeatController::OnElevationReset);
+		ElevationControl->OnIncrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnElevationIncrement);
+		ElevationControl->OnDecrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnElevationDecrement);
+	}
 	if (LateralTiltControl)
+	{
 		LateralTiltControl->OnValueChanged.AddUniqueDynamic(this, &URammsSeatController::OnLateralTiltChanged);
+		LateralTiltControl->OnResetPressed.AddUniqueDynamic(this, &URammsSeatController::OnLateralTiltReset);
+		LateralTiltControl->OnIncrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnLateralTiltIncrement);
+		LateralTiltControl->OnDecrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnLateralTiltDecrement);
+	}
 	if (APTiltControl)
+	{
 		APTiltControl->OnValueChanged.AddUniqueDynamic(this, &URammsSeatController::OnAPTiltChanged);
+		APTiltControl->OnResetPressed.AddUniqueDynamic(this, &URammsSeatController::OnAPTiltReset);
+		APTiltControl->OnIncrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnAPTiltIncrement);
+		APTiltControl->OnDecrementPressed.AddUniqueDynamic(this, &URammsSeatController::OnAPTiltDecrement);
+	}
 }
 
 void URammsSeatController::ApplyStyle_Implementation()
@@ -285,6 +301,57 @@ void URammsSeatController::HandleAxisChanged(ERammsSeatAxis Axis, float Value)
 			Subsystem->BroadcastSeatStateChanged(Axis, Value);
 		}
 	}
+}
+
+// ── Reset Handlers ───────────────────────────────────────────────
+
+void URammsSeatController::OnElevationReset(float Value)
+{
+	OnResetPressed.Broadcast(ERammsSeatAxis::Elevation, Value);
+}
+
+void URammsSeatController::OnLateralTiltReset(float Value)
+{
+	OnResetPressed.Broadcast(ERammsSeatAxis::LateralTilt, Value);
+}
+
+void URammsSeatController::OnAPTiltReset(float Value)
+{
+	OnResetPressed.Broadcast(ERammsSeatAxis::AnteriorPosteriorTilt, Value);
+}
+
+// ── Increment Handlers ───────────────────────────────────────────
+
+void URammsSeatController::OnElevationIncrement(float Value)
+{
+	OnIncrementPressed.Broadcast(ERammsSeatAxis::Elevation, Value);
+}
+
+void URammsSeatController::OnLateralTiltIncrement(float Value)
+{
+	OnIncrementPressed.Broadcast(ERammsSeatAxis::LateralTilt, Value);
+}
+
+void URammsSeatController::OnAPTiltIncrement(float Value)
+{
+	OnIncrementPressed.Broadcast(ERammsSeatAxis::AnteriorPosteriorTilt, Value);
+}
+
+// ── Decrement Handlers ───────────────────────────────────────────
+
+void URammsSeatController::OnElevationDecrement(float Value)
+{
+	OnDecrementPressed.Broadcast(ERammsSeatAxis::Elevation, Value);
+}
+
+void URammsSeatController::OnLateralTiltDecrement(float Value)
+{
+	OnDecrementPressed.Broadcast(ERammsSeatAxis::LateralTilt, Value);
+}
+
+void URammsSeatController::OnAPTiltDecrement(float Value)
+{
+	OnDecrementPressed.Broadcast(ERammsSeatAxis::AnteriorPosteriorTilt, Value);
 }
 
 // ── Robot Controller ─────────────────────────────────────────────

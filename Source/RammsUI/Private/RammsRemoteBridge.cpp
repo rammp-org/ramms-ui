@@ -5,6 +5,7 @@
 #include "UI/RammsStatusPanel.h"
 #include "UI/RammsNotificationWidget.h"
 #include "UI/RammsNotificationContainer.h"
+#include "RammsUISubsystem.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
@@ -13,6 +14,10 @@
 
 // Static member
 TWeakObjectPtr<URammsNotificationContainer> URammsRemoteBridge::NotificationContainer;
+
+// Forward declarations — defined below in Notifications/Properties sections
+static UWorld*			  GetPlayWorld();
+static URammsUISubsystem* GetUISubsystem();
 
 // ── UI Widget Discovery ────────────────────────────────────────────
 
@@ -73,6 +78,10 @@ int32 URammsRemoteBridge::SetRobotMode(ERammsRobotMode Mode)
 		State.Mode = Mode;
 		Panel->ApplyRemoteState(State);
 	}
+	if (URammsUISubsystem* Sub = GetUISubsystem())
+	{
+		Sub->UpdateRobotMode(Mode);
+	}
 	return Panels.Num();
 }
 
@@ -84,6 +93,10 @@ int32 URammsRemoteBridge::SetBatteryLevel(float Level)
 		FRammsRobotState State = Panel->GetCachedRobotState();
 		State.BatteryLevel = FMath::Clamp(Level, 0.0f, 1.0f);
 		Panel->ApplyRemoteState(State);
+	}
+	if (URammsUISubsystem* Sub = GetUISubsystem())
+	{
+		Sub->UpdateBatteryLevel(Level);
 	}
 	return Panels.Num();
 }
@@ -97,6 +110,10 @@ int32 URammsRemoteBridge::SetSpeed(float SpeedMPS)
 		// Set speed as forward velocity
 		State.LinearVelocity = FVector(SpeedMPS, 0.0f, 0.0f);
 		Panel->ApplyRemoteState(State);
+	}
+	if (URammsUISubsystem* Sub = GetUISubsystem())
+	{
+		Sub->UpdateSpeed(SpeedMPS);
 	}
 	return Panels.Num();
 }
@@ -114,6 +131,10 @@ int32 URammsRemoteBridge::SetEmergencyStop(bool bActive)
 		}
 		Panel->ApplyRemoteState(State);
 	}
+	if (URammsUISubsystem* Sub = GetUISubsystem())
+	{
+		Sub->UpdateEmergencyStop(bActive);
+	}
 	return Panels.Num();
 }
 
@@ -124,6 +145,16 @@ int32 URammsRemoteBridge::SetRobotState(FRammsRobotState State)
 	{
 		Panel->ApplyRemoteState(State);
 	}
+
+	// Also broadcast through the subsystem so any widget can subscribe
+	if (UWorld* World = GetPlayWorld())
+	{
+		if (URammsUISubsystem* Sub = World->GetSubsystem<URammsUISubsystem>())
+		{
+			Sub->BroadcastRobotStateChanged(State);
+		}
+	}
+
 	return Panels.Num();
 }
 
@@ -274,4 +305,54 @@ int32 URammsRemoteBridge::DismissAllNotifications()
 		return 0;
 
 	return NotificationContainer->DismissAll();
+}
+
+// ── Key-Value Properties ──────────────────────────────────────────
+
+static URammsUISubsystem* GetUISubsystem()
+{
+	UWorld* World = GetPlayWorld();
+	return World ? World->GetSubsystem<URammsUISubsystem>() : nullptr;
+}
+
+bool URammsRemoteBridge::SetProperty(FName Key, const FString& Value)
+{
+	URammsUISubsystem* Sub = GetUISubsystem();
+	if (!Sub)
+		return false;
+
+	Sub->SetProperty(Key, Value);
+	return true;
+}
+
+bool URammsRemoteBridge::SetProperties(const TMap<FName, FString>& Properties)
+{
+	URammsUISubsystem* Sub = GetUISubsystem();
+	if (!Sub)
+		return false;
+
+	Sub->SetProperties(Properties);
+	return true;
+}
+
+FString URammsRemoteBridge::GetProperty(FName Key)
+{
+	URammsUISubsystem* Sub = GetUISubsystem();
+	return Sub ? Sub->GetProperty(Key) : FString();
+}
+
+TArray<FName> URammsRemoteBridge::GetAllPropertyKeys()
+{
+	URammsUISubsystem* Sub = GetUISubsystem();
+	return Sub ? Sub->GetAllPropertyKeys() : TArray<FName>();
+}
+
+bool URammsRemoteBridge::RemoveProperty(FName Key)
+{
+	URammsUISubsystem* Sub = GetUISubsystem();
+	if (!Sub || !Sub->HasProperty(Key))
+		return false;
+
+	Sub->RemoveProperty(Key);
+	return true;
 }
