@@ -10,6 +10,7 @@
 #include "Components/Button.h"
 #include "Components/VerticalBox.h"
 #include "Components/HorizontalBox.h"
+#include "Components/SizeBox.h"
 #include "Components/Overlay.h"
 #include "RammsStatusPanel.generated.h"
 
@@ -98,9 +99,9 @@ struct FRammsStatusField
 // ── Status Panel Widget ────────────────────────────────────────────────────
 
 /**
- * Data-driven collapsible status panel.
+ * Data-driven collapsible status panel with table-style layout.
  * Configurable rows that resolve values from robot state or the property store.
- * Supports custom enums, threshold colors, and live updates.
+ * Supports custom enums, threshold colors, animated collapse, and live updates.
  */
 UCLASS(meta = (DisplayName = "Ramms Status Panel"))
 class RAMMSUI_API URammsStatusPanel : public URammsBaseWidget
@@ -128,6 +129,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
 	bool bIsExpanded = true;
 
+	/** Show border around the panel */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	bool bShowBorder = true;
+
+	/** Fixed label column width in pixels (0 = auto) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style", meta = (ClampMin = "0.0"))
+	float LabelColumnWidth = 100.0f;
+
+	/** Animation duration in seconds for expand/collapse */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.0"))
+	float AnimationDuration = 0.25f;
+
 	/** Update frequency in seconds */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display",
 		meta = (ClampMin = "0.016"))
@@ -138,20 +151,40 @@ protected:
 	TObjectPtr<UBorder> PanelBorder;
 
 	UPROPERTY()
+	TObjectPtr<UBorder> HeaderBorder;
+
+	UPROPERTY()
 	TObjectPtr<UButton> ToggleButton;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> HeaderText;
 
 	UPROPERTY()
+	TObjectPtr<UTextBlock> ToggleIcon;
+
+	UPROPERTY()
 	TObjectPtr<UHorizontalBox> HeaderRow;
+
+	UPROPERTY()
+	TObjectPtr<USizeBox> ContentSizeBox;
 
 	UPROPERTY()
 	TObjectPtr<UVerticalBox> ContentBox;
 
-	/** Dynamic row text blocks (one per entry in Fields) */
+	/** Per-row: label text block */
 	UPROPERTY()
-	TArray<TObjectPtr<UTextBlock>> FieldWidgets;
+	TArray<TObjectPtr<UTextBlock>> LabelWidgets;
+
+	/** Per-row: value text block */
+	UPROPERTY()
+	TArray<TObjectPtr<UTextBlock>> ValueWidgets;
+
+	// Animation state
+	bool  bIsAnimating = false;
+	float AnimationProgress = 1.0f;
+	float AnimationTarget = 1.0f;
+	float ExpandedContentHeight = 0.0f;
+	bool  bNeedsCacheHeight = true;
 
 	float			TimeSinceUpdate = 0.0f;
 	FDelegateHandle StateUpdateHandle;
@@ -161,6 +194,7 @@ public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativePreConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	virtual void ApplyStyle_Implementation() override;
@@ -215,6 +249,10 @@ protected:
 
 	UFUNCTION()
 	void OnToggleClicked();
+
+	void UpdateToggleIcon();
+	void UpdateHeaderCornerRadii();
+	void ApplyAnimationState(float Alpha);
 
 	FLinearColor GetBatteryColor(float BatteryLevel) const;
 	FLinearColor GetModeColor(ERammsRobotMode Mode) const;

@@ -717,6 +717,10 @@ void URammsCollapsibleContainer::UpdateHeaderCornerRadii()
 	HeaderBg.A = 1.0f;
 	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(HeaderBg, Radii);
 	URammsUIStyle::ApplyRoundedBrushToBorder(HeaderBorder, Brush);
+	if (Style)
+	{
+		HeaderBorder->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+	}
 }
 
 void URammsCollapsibleContainer::ApplyAnimationState(float Alpha)

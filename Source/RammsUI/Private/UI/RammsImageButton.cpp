@@ -150,7 +150,8 @@ void URammsImageButton::SynchronizeProperties()
 		}
 		else
 		{
-			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor(0.3f, 0.3f, 0.35f)));
+			FLinearColor DisabledTint = Style ? Style->Colors.TextDisabled : FLinearColor(0.3f, 0.3f, 0.35f);
+			ContentImage->SetBrushTintColor(FSlateColor(DisabledTint));
 		}
 	}
 
@@ -174,7 +175,8 @@ void URammsImageButton::SetButtonImage(UTexture2D* Texture)
 		}
 		else
 		{
-			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor(0.3f, 0.3f, 0.35f)));
+			FLinearColor DisabledTint = Style ? Style->Colors.TextDisabled : FLinearColor(0.3f, 0.3f, 0.35f);
+			ContentImage->SetBrushTintColor(FSlateColor(DisabledTint));
 		}
 	}
 }
@@ -259,15 +261,14 @@ void URammsImageButton::UpdateVisualState()
 	if (!InnerButton)
 		return;
 
-	// Determine colors
-	FLinearColor BgColor(0.15f, 0.15f, 0.18f);
-	FLinearColor BorderColor(0.0f, 0.478f, 0.8f, 0.0f); // Transparent default
-	FLinearColor TextColor = FLinearColor::White;
+	// Determine colors — use Style properties with fallback defaults
+	FLinearColor BgColor = Style ? Style->Colors.Surface : FLinearColor(0.15f, 0.15f, 0.18f);
+	FLinearColor BorderColor = FLinearColor::Transparent;
+	FLinearColor TextColor = Style ? Style->Colors.TextPrimary : FLinearColor::White;
 	float		 Opacity = 1.0f;
 
 	if (Style)
 	{
-		BgColor = Style->Colors.Surface;
 		TextColor = Style->Colors.TextPrimary;
 	}
 
@@ -306,10 +307,12 @@ void URammsImageButton::UpdateVisualState()
 		Label->SetColorAndOpacity(FSlateColor(TextColor));
 	}
 
-	// Tint image slightly when disabled
+	// Tint image when disabled
 	if (ContentImage && ButtonImage)
 	{
-		FLinearColor Tint = bButtonEnabled ? FLinearColor::White : FLinearColor(0.5f, 0.5f, 0.5f);
+		FLinearColor Tint = bButtonEnabled ? FLinearColor::White
+										   : (Style ? FLinearColor(Style->Colors.TextDisabled.R, Style->Colors.TextDisabled.G, Style->Colors.TextDisabled.B)
+													: FLinearColor(0.5f, 0.5f, 0.5f));
 		ContentImage->SetBrushTintColor(FSlateColor(Tint));
 	}
 }

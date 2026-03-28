@@ -1,11 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/RammsStatusPanel.h"
+#include "UI/RammsUIStyle.h"
 #include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/SizeBoxSlot.h"
+#include "Components/ButtonSlot.h"
 
 // ── Constructor ────────────────────────────────────────────────────────
 
@@ -49,11 +52,15 @@ URammsStatusPanel::URammsStatusPanel()
 void URammsStatusPanel::ResetCachedWidgets()
 {
 	PanelBorder = nullptr;
+	HeaderBorder = nullptr;
 	ToggleButton = nullptr;
 	HeaderText = nullptr;
+	ToggleIcon = nullptr;
 	HeaderRow = nullptr;
+	ContentSizeBox = nullptr;
 	ContentBox = nullptr;
-	FieldWidgets.Empty();
+	LabelWidgets.Empty();
+	ValueWidgets.Empty();
 }
 
 void URammsStatusPanel::BuildWidgetTree()
@@ -61,46 +68,81 @@ void URammsStatusPanel::BuildWidgetTree()
 	if (!WidgetTree || PanelBorder)
 		return;
 
+	// Root: outer border with rounded corners and clipping
 	PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PanelBorder"));
-	PanelBorder->SetBrushColor(FLinearColor::Transparent);
-	PanelBorder->SetPadding(FMargin(12.0f));
+	PanelBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(
+		FLinearColor(0.06f, 0.06f, 0.08f, 0.92f), 4.0f, FLinearColor(0.3f, 0.3f, 0.3f, 1.0f), 1.0f);
+	PanelBorder->SetPadding(FMargin(1.0f));
+	PanelBorder->SetClipping(EWidgetClipping::ClipToBounds);
 	WidgetTree->RootWidget = PanelBorder;
 
 	UVerticalBox* MainBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MainBox"));
 	PanelBorder->AddChild(MainBox);
 
-	// Header
-	HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
-	if (UVerticalBoxSlot* HeaderRowSlot = MainBox->AddChildToVerticalBox(HeaderRow))
+	// ── Header: styled border with title + toggle ──
+	HeaderBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("HeaderBorder"));
+	HeaderBorder->Background = URammsUIStyle::MakeRoundedBoxBrushEx(
+		FLinearColor(0.1f, 0.1f, 0.12f, 1.0f), FVector4(3.0f, 3.0f, 0.0f, 0.0f));
+	HeaderBorder->SetPadding(FMargin(8.0f, 6.0f));
+	if (UVerticalBoxSlot* HeaderSlot = MainBox->AddChildToVerticalBox(HeaderBorder))
 	{
-		HeaderRowSlot->SetHorizontalAlignment(HAlign_Fill);
-		HeaderRowSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+		HeaderSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		HeaderSlot->SetHorizontalAlignment(HAlign_Fill);
 	}
+
+	HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HeaderRow"));
+	HeaderBorder->AddChild(HeaderRow);
 
 	HeaderText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeaderText"));
 	HeaderText->SetText(HeaderTitle);
-	if (UHorizontalBoxSlot* HeaderTextSlot = HeaderRow->AddChildToHorizontalBox(HeaderText))
+	HeaderText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	if (UHorizontalBoxSlot* LabelSlot = HeaderRow->AddChildToHorizontalBox(HeaderText))
 	{
-		HeaderTextSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		HeaderTextSlot->SetVerticalAlignment(VAlign_Center);
+		LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		LabelSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
+	// Toggle button — transparent background, matching CollapsibleContainer style
 	ToggleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ToggleButton"));
-	if (UHorizontalBoxSlot* ToggleSlot = HeaderRow->AddChildToHorizontalBox(ToggleButton))
+	ToggleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+	if (UHorizontalBoxSlot* BtnSlot = HeaderRow->AddChildToHorizontalBox(ToggleButton))
 	{
-		ToggleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
-		ToggleSlot->SetVerticalAlignment(VAlign_Center);
+		BtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		BtnSlot->SetVerticalAlignment(VAlign_Center);
+		BtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UTextBlock* ToggleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ToggleLabel"));
-	ToggleLabel->SetText(FText::FromString(TEXT("\u25BC")));
-	ToggleButton->AddChild(ToggleLabel);
+	ToggleIcon = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ToggleIcon"));
+	ToggleIcon->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	ToggleButton->AddChild(ToggleIcon);
 
-	// Content
-	ContentBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentBox"));
-	if (UVerticalBoxSlot* ContentSlot = MainBox->AddChildToVerticalBox(ContentBox))
+	// ── Content area: SizeBox → VBox (for animated collapse) ──
+	ContentSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ContentSizeBox"));
+	ContentSizeBox->SetClipping(EWidgetClipping::ClipToBounds);
+	if (UVerticalBoxSlot* SizeSlot = MainBox->AddChildToVerticalBox(ContentSizeBox))
 	{
-		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
+		SizeSlot->SetHorizontalAlignment(HAlign_Fill);
+		if (bIsExpanded)
+		{
+			SizeSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		}
+		else
+		{
+			SizeSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		}
+	}
+
+	ContentBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentBox"));
+	ContentSizeBox->AddChild(ContentBox);
+
+	// Initial collapsed state
+	if (!bIsExpanded)
+	{
+		ContentSizeBox->SetHeightOverride(0.0f);
+		ContentSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+		ContentSizeBox->SetRenderOpacity(0.0f);
+		AnimationProgress = 0.0f;
+		AnimationTarget = 0.0f;
 	}
 
 	BuildFieldRows();
@@ -111,21 +153,100 @@ void URammsStatusPanel::BuildFieldRows()
 	if (!ContentBox || !WidgetTree)
 		return;
 
-	FieldWidgets.Empty();
+	LabelWidgets.Empty();
+	ValueWidgets.Empty();
+
+	float RowPadding = Style ? Style->Spacing.XSmall : 2.0f;
+	float RowInternalPad = Style ? Style->Spacing.Small : 4.0f;
 
 	for (int32 i = 0; i < Fields.Num(); ++i)
 	{
-		FString		Name = FString::Printf(TEXT("FieldText_%d"), i);
-		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *Name);
-		Text->SetText(FText::Format(
-			FText::FromString(TEXT("{0}: --")),
-			Fields[i].Label));
-		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-		if (UVerticalBoxSlot* FieldSlot = ContentBox->AddChildToVerticalBox(Text))
+		// Separator line between rows (not before the first)
+		if (i > 0)
 		{
-			FieldSlot->SetPadding(FMargin(0.0f, 2.0f));
+			UBorder* Separator = WidgetTree->ConstructWidget<UBorder>(
+				UBorder::StaticClass(), *FString::Printf(TEXT("Separator_%d"), i));
+			Separator->SetBrushColor(Style ? Style->Colors.Border : FLinearColor(0.3f, 0.3f, 0.3f, 0.3f));
+			Separator->SetDesiredSizeScale(FVector2D(1.0f, 1.0f));
+			if (UVerticalBoxSlot* SepSlot = ContentBox->AddChildToVerticalBox(Separator))
+			{
+				SepSlot->SetHorizontalAlignment(HAlign_Fill);
+				SepSlot->SetPadding(FMargin(RowInternalPad, 0.0f, RowInternalPad, 0.0f));
+			}
+			// Use a SizeBox to enforce 1px height for the separator
+			USizeBox* SepSize = WidgetTree->ConstructWidget<USizeBox>(
+				USizeBox::StaticClass(), *FString::Printf(TEXT("SepSize_%d"), i));
+			SepSize->SetHeightOverride(1.0f);
+			// Re-parent: remove separator from ContentBox and put in SizeBox
+			ContentBox->RemoveChild(Separator);
+			SepSize->AddChild(Separator);
+			if (UVerticalBoxSlot* SepSizeSlot = ContentBox->AddChildToVerticalBox(SepSize))
+			{
+				SepSizeSlot->SetHorizontalAlignment(HAlign_Fill);
+				SepSizeSlot->SetPadding(FMargin(RowInternalPad, 0.0f, RowInternalPad, 0.0f));
+			}
 		}
-		FieldWidgets.Add(Text);
+
+		// Table row: HBox with fixed-width label + fill value
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(
+			UHorizontalBox::StaticClass(), *FString::Printf(TEXT("FieldRow_%d"), i));
+		if (UVerticalBoxSlot* RowSlot = ContentBox->AddChildToVerticalBox(Row))
+		{
+			RowSlot->SetHorizontalAlignment(HAlign_Fill);
+			RowSlot->SetPadding(FMargin(RowInternalPad, RowPadding, RowInternalPad, RowPadding));
+		}
+
+		// Label column
+		UTextBlock* LabelText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), *FString::Printf(TEXT("FieldLabel_%d"), i));
+		LabelText->SetText(Fields[i].Label);
+		LabelText->SetColorAndOpacity(FSlateColor(
+			Style ? Style->Colors.TextSecondary : FLinearColor(0.7f, 0.7f, 0.7f)));
+		if (UHorizontalBoxSlot* LblSlot = Row->AddChildToHorizontalBox(LabelText))
+		{
+			if (LabelColumnWidth > 0.0f)
+			{
+				LblSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			}
+			else
+			{
+				LblSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			}
+			LblSlot->SetVerticalAlignment(VAlign_Center);
+			LblSlot->SetPadding(FMargin(0.0f, 0.0f, RowInternalPad, 0.0f));
+		}
+
+		// If fixed-width label, wrap in a SizeBox
+		if (LabelColumnWidth > 0.0f)
+		{
+			// We need to re-parent the label into a SizeBox for fixed width
+			Row->RemoveChild(LabelText);
+			USizeBox* LabelSizeBox = WidgetTree->ConstructWidget<USizeBox>(
+				USizeBox::StaticClass(), *FString::Printf(TEXT("LabelSize_%d"), i));
+			LabelSizeBox->SetWidthOverride(LabelColumnWidth);
+			LabelSizeBox->AddChild(LabelText);
+			if (UHorizontalBoxSlot* SzSlot = Row->AddChildToHorizontalBox(LabelSizeBox))
+			{
+				SzSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				SzSlot->SetVerticalAlignment(VAlign_Center);
+				SzSlot->SetPadding(FMargin(0.0f, 0.0f, RowInternalPad, 0.0f));
+			}
+		}
+
+		// Value column (fills remaining space)
+		UTextBlock* ValueText = WidgetTree->ConstructWidget<UTextBlock>(
+			UTextBlock::StaticClass(), *FString::Printf(TEXT("FieldValue_%d"), i));
+		ValueText->SetText(FText::FromString(TEXT("--")));
+		ValueText->SetColorAndOpacity(FSlateColor(
+			Style ? Style->Colors.TextPrimary : FLinearColor::White));
+		if (UHorizontalBoxSlot* ValSlot = Row->AddChildToHorizontalBox(ValueText))
+		{
+			ValSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			ValSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
+		LabelWidgets.Add(LabelText);
+		ValueWidgets.Add(ValueText);
 	}
 }
 
@@ -135,6 +256,33 @@ void URammsStatusPanel::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildWidgetTree();
+}
+
+void URammsStatusPanel::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+	BuildWidgetTree();
+
+	if (!IsDesignTime())
+		return;
+
+	// Designer preview state
+	if (ContentSizeBox)
+	{
+		if (bIsExpanded)
+		{
+			ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			ContentSizeBox->ClearHeightOverride();
+			ContentSizeBox->SetRenderOpacity(1.0f);
+		}
+		else
+		{
+			ContentSizeBox->SetHeightOverride(0.0f);
+			ContentSizeBox->SetVisibility(ESlateVisibility::Hidden);
+			ContentSizeBox->SetRenderOpacity(0.0f);
+		}
+	}
+	UpdateToggleIcon();
 }
 
 void URammsStatusPanel::SynchronizeProperties()
@@ -150,19 +298,14 @@ void URammsStatusPanel::SynchronizeProperties()
 	}
 
 	// Rebuild rows if field count changed (designer editing)
-	if (ContentBox && WidgetTree && FieldWidgets.Num() != Fields.Num())
+	if (ContentBox && WidgetTree && LabelWidgets.Num() != Fields.Num())
 	{
-		for (UTextBlock* W : FieldWidgets)
-		{
-			if (W)
-			{
-				ContentBox->RemoveChild(W);
-			}
-		}
+		ContentBox->ClearChildren();
 		BuildFieldRows();
 		ApplyStyle_Implementation();
 	}
 
+	UpdateToggleIcon();
 	RefreshAllFields();
 }
 
@@ -197,7 +340,24 @@ void URammsStatusPanel::NativeConstruct()
 		}
 	}
 
-	SetExpanded(bIsExpanded, false);
+	UpdateToggleIcon();
+
+	// Apply initial state
+	if (ContentSizeBox)
+	{
+		if (bIsExpanded)
+		{
+			ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			ContentSizeBox->ClearHeightOverride();
+			ContentSizeBox->SetRenderOpacity(1.0f);
+		}
+		else
+		{
+			ContentSizeBox->SetHeightOverride(0.0f);
+			ContentSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+			ContentSizeBox->SetRenderOpacity(0.0f);
+		}
+	}
 }
 
 void URammsStatusPanel::NativeDestruct()
@@ -215,11 +375,66 @@ void URammsStatusPanel::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// Periodic data refresh
 	TimeSinceUpdate += InDeltaTime;
 	if (TimeSinceUpdate >= UpdateFrequency)
 	{
 		TimeSinceUpdate = 0.0f;
 		UpdateDisplay();
+	}
+
+	// Cache content height while expanded and stable
+	if (bNeedsCacheHeight && bIsExpanded && !bIsAnimating && ContentSizeBox)
+	{
+		float ActualH = ContentSizeBox->GetCachedGeometry().GetLocalSize().Y;
+		if (ActualH > 0.0f)
+		{
+			ExpandedContentHeight = ActualH;
+			bNeedsCacheHeight = false;
+		}
+		else if (ContentBox)
+		{
+			FVector2D DesiredSize = ContentBox->GetDesiredSize();
+			if (DesiredSize.Y > 0.0f)
+			{
+				ExpandedContentHeight = DesiredSize.Y + 16.0f;
+				bNeedsCacheHeight = false;
+			}
+		}
+	}
+
+	if (!bIsAnimating)
+		return;
+
+	// Advance animation
+	float Direction = (AnimationTarget > AnimationProgress) ? 1.0f : -1.0f;
+	float Speed = (AnimationDuration > 0.0f) ? (1.0f / AnimationDuration) : 100.0f;
+	AnimationProgress += Direction * Speed * InDeltaTime;
+	AnimationProgress = FMath::Clamp(AnimationProgress, 0.0f, 1.0f);
+
+	float EasedAlpha = EvaluateEasing(AnimationProgress, ERammsUIEasing::EaseInOut);
+	ApplyAnimationState(EasedAlpha);
+
+	if (FMath::IsNearlyEqual(AnimationProgress, AnimationTarget, 0.001f))
+	{
+		AnimationProgress = AnimationTarget;
+		bIsAnimating = false;
+
+		if (ContentSizeBox)
+		{
+			if (AnimationTarget >= 1.0f)
+			{
+				ContentSizeBox->ClearHeightOverride();
+				ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+				ContentSizeBox->SetRenderOpacity(1.0f);
+			}
+			else
+			{
+				ContentSizeBox->SetHeightOverride(0.0f);
+				ContentSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+				ContentSizeBox->SetRenderOpacity(0.0f);
+			}
+		}
 	}
 }
 
@@ -230,23 +445,68 @@ void URammsStatusPanel::ApplyStyle_Implementation()
 	if (!Style)
 		return;
 
+	float Radius = Style->Border.CornerRadiusMedium;
+	float BorderW = Style->Border.BorderWidth;
+
+	// Outer panel border
 	if (PanelBorder)
 	{
-		PanelBorder->SetBrushColor(FLinearColor::Transparent);
-		PanelBorder->SetPadding(FMargin(Style->Spacing.Medium));
+		FLinearColor Bg = Style->Colors.Background;
+		Bg.A = 0.92f;
+		if (bShowBorder)
+		{
+			FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(Bg, Radius, Style->Colors.Border, BorderW);
+			URammsUIStyle::ApplyRoundedBrushToBorder(PanelBorder, Brush);
+		}
+		else
+		{
+			FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::Transparent, Radius);
+			URammsUIStyle::ApplyRoundedBrushToBorder(PanelBorder, Brush);
+		}
+		PanelBorder->SetPadding(FMargin(BorderW));
 	}
 
+	// Header border
+	if (HeaderBorder)
+	{
+		UpdateHeaderCornerRadii();
+	}
+
+	// Header text
 	if (HeaderText)
 	{
 		HeaderText->SetFont(Style->Typography.HeadingSmall);
 		HeaderText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
-	for (UTextBlock* W : FieldWidgets)
+	// Toggle icon styling to match CollapsibleContainer
+	if (ToggleIcon)
+	{
+		ToggleIcon->SetFont(Style->Typography.Body);
+		ToggleIcon->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+
+	// Animation duration from style
+	if (Style->ExpandCollapseCurve.Duration > 0.0f)
+	{
+		AnimationDuration = Style->ExpandCollapseCurve.Duration;
+	}
+
+	// Field label + value typography
+	for (UTextBlock* W : LabelWidgets)
 	{
 		if (W)
 		{
 			W->SetFont(Style->Typography.Body);
+			W->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+		}
+	}
+
+	for (UTextBlock* W : ValueWidgets)
+	{
+		if (W)
+		{
+			W->SetFont(Style->Typography.Monospace);
 		}
 	}
 }
@@ -281,17 +541,121 @@ void URammsStatusPanel::ToggleExpand()
 
 void URammsStatusPanel::SetExpanded(bool bExpanded, bool bAnimated)
 {
-	if (bIsExpanded == bExpanded)
+	if (bIsExpanded == bExpanded && !bIsAnimating)
 		return;
 
 	bIsExpanded = bExpanded;
+	UpdateToggleIcon();
+	UpdateHeaderCornerRadii();
 
-	if (ContentBox)
+	if (!ContentSizeBox)
 	{
-		ContentBox->SetVisibility(bIsExpanded
-				? ESlateVisibility::SelfHitTestInvisible
-				: ESlateVisibility::Collapsed);
+		if (ContentBox)
+		{
+			ContentBox->SetVisibility(bIsExpanded
+					? ESlateVisibility::SelfHitTestInvisible
+					: ESlateVisibility::Collapsed);
+		}
+		return;
 	}
+
+	AnimationTarget = bIsExpanded ? 1.0f : 0.0f;
+
+	// Cache sizes before collapsing
+	if (!bIsExpanded)
+	{
+		float ActualH = ContentSizeBox->GetCachedGeometry().GetLocalSize().Y;
+		if (ActualH > 0.0f)
+		{
+			ExpandedContentHeight = ActualH;
+		}
+		else if (ContentBox)
+		{
+			FVector2D DesiredSize = ContentBox->GetDesiredSize();
+			if (DesiredSize.Y > 0.0f)
+			{
+				ExpandedContentHeight = DesiredSize.Y + 16.0f;
+			}
+		}
+	}
+	else
+	{
+		bNeedsCacheHeight = true;
+	}
+
+	if (bAnimated && AnimationDuration > 0.0f && ExpandedContentHeight > 0.0f)
+	{
+		bIsAnimating = true;
+
+		// Start from current position for smooth direction reversal
+		if (bIsExpanded)
+		{
+			ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+	}
+	else
+	{
+		// Instant
+		AnimationProgress = AnimationTarget;
+		bIsAnimating = false;
+		if (bIsExpanded)
+		{
+			ContentSizeBox->ClearHeightOverride();
+			ContentSizeBox->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			ContentSizeBox->SetRenderOpacity(1.0f);
+		}
+		else
+		{
+			ContentSizeBox->SetHeightOverride(0.0f);
+			ContentSizeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+			ContentSizeBox->SetRenderOpacity(0.0f);
+		}
+	}
+}
+
+void URammsStatusPanel::UpdateToggleIcon()
+{
+	if (!ToggleIcon)
+		return;
+
+	// ▼ when expanded, ▶ when collapsed (matching CollapsibleContainer)
+	ToggleIcon->SetText(FText::FromString(bIsExpanded ? TEXT("\u25BC") : TEXT("\u25B6")));
+}
+
+void URammsStatusPanel::UpdateHeaderCornerRadii()
+{
+	if (!HeaderBorder || !Style)
+		return;
+
+	float Radius = FMath::Max(Style->Border.CornerRadiusMedium - Style->Border.BorderWidth, 0.0f);
+
+	FVector4 HeaderRadii;
+	if (bIsExpanded)
+	{
+		// Expanded: round top corners only
+		HeaderRadii = FVector4(Radius, Radius, 0.0f, 0.0f);
+	}
+	else
+	{
+		// Collapsed: round all corners
+		HeaderRadii = FVector4(Radius, Radius, Radius, Radius);
+	}
+
+	FLinearColor HeaderBg = Style->Colors.Surface;
+	HeaderBg.A = 1.0f;
+	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(HeaderBg, HeaderRadii);
+	URammsUIStyle::ApplyRoundedBrushToBorder(HeaderBorder, Brush);
+	HeaderBorder->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+}
+
+void URammsStatusPanel::ApplyAnimationState(float Alpha)
+{
+	if (!ContentSizeBox || ExpandedContentHeight <= 0.0f)
+		return;
+
+	float Height = ExpandedContentHeight * Alpha;
+	ContentSizeBox->SetHeightOverride(Height);
+	ContentSizeBox->SetRenderOpacity(Alpha);
 }
 
 // ── Display Update ───────────────────────────────────────────────────────
@@ -341,7 +705,6 @@ void URammsStatusPanel::OnSubsystemStateChanged(const FRammsRobotState& State)
 
 void URammsStatusPanel::OnSubsystemPropertyChanged(FName Key, const FString& Value)
 {
-	// Only refresh if a displayed field cares about this key
 	for (const FRammsStatusField& Field : Fields)
 	{
 		if (Field.Source == ERammsStatusFieldSource::PropertyStore && Field.Key == Key)
@@ -361,7 +724,7 @@ void URammsStatusPanel::OnToggleClicked()
 
 void URammsStatusPanel::RefreshAllFields()
 {
-	if (FieldWidgets.Num() != Fields.Num())
+	if (LabelWidgets.Num() != Fields.Num() || ValueWidgets.Num() != Fields.Num())
 		return;
 
 	URammsUISubsystem* Sub = nullptr;
@@ -383,8 +746,8 @@ void URammsStatusPanel::RefreshAllFields()
 	for (int32 i = 0; i < Fields.Num(); ++i)
 	{
 		const FRammsStatusField& Field = Fields[i];
-		UTextBlock*				 Widget = FieldWidgets[i];
-		if (!Widget)
+		UTextBlock*				 ValueWidget = ValueWidgets[i];
+		if (!ValueWidget)
 			continue;
 
 		// ── Resolve raw value ────────────────────────────────────────────
@@ -545,11 +908,8 @@ void URammsStatusPanel::RefreshAllFields()
 			}
 		}
 
-		// Combine label + value
-		Widget->SetText(FText::Format(
-			FText::FromString(TEXT("{0}: {1}")),
-			Field.Label,
-			FormattedValue));
+		// Set value text (label is set once in BuildFieldRows and doesn't change)
+		ValueWidget->SetText(FormattedValue);
 
 		// ── Determine color ──────────────────────────────────────────────
 		FLinearColor Color = DefaultColor;
@@ -572,7 +932,7 @@ void URammsStatusPanel::RefreshAllFields()
 				Color = Style ? Style->Colors.Success : FLinearColor::Green;
 		}
 
-		Widget->SetColorAndOpacity(FSlateColor(Color));
+		ValueWidget->SetColorAndOpacity(FSlateColor(Color));
 	}
 }
 

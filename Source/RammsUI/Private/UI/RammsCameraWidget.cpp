@@ -625,6 +625,26 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 		CameraLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
+	// Style the collapse icon to match other headers
+	if (CollapseIcon)
+	{
+		CollapseIcon->SetFont(Style->Typography.Caption);
+		CollapseIcon->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+
+	// Style header action buttons (view mode / option)
+	if (ViewModeLabel)
+	{
+		ViewModeLabel->SetFont(Style->Typography.Caption);
+		ViewModeLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
+
+	if (OptionLabel)
+	{
+		OptionLabel->SetFont(Style->Typography.Caption);
+		OptionLabel->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
+
 	// Update title bar visibility
 	if (TitleBar)
 	{
@@ -1511,6 +1531,10 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 		TitleBg.A = 0.7f;
 	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrushEx(TitleBg, Radii);
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
+	if (Style)
+	{
+		TitleBar->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+	}
 }
 
 void URammsCameraWidget::EnsureDataMaterials()
