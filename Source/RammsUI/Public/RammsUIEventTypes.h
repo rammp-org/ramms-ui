@@ -124,7 +124,9 @@ struct RAMMSUI_API FRammsUIEvent
 		const FString* Found = Properties.Find(Key);
 		if (!Found || Found->IsEmpty())
 			return Default;
-		return Found->Equals(TEXT("true"), ESearchCase::IgnoreCase) || Found->Equals(TEXT("1"));
+		return Found->Equals(TEXT("true"), ESearchCase::IgnoreCase)
+			|| Found->Equals(TEXT("1"))
+			|| Found->Equals(TEXT("yes"), ESearchCase::IgnoreCase);
 	}
 
 	uint8 GetPayloadByte(FName Key, uint8 Default = 0) const

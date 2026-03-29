@@ -671,6 +671,12 @@ void URammsStatusPanel::UpdateDisplay()
 			CachedState = State;
 			bHasRemoteState = true;
 		}
+		else
+		{
+			// Provider exists but returned no valid data — mark stale so
+			// RefreshAllFields can show placeholder / disabled values.
+			bHasRemoteState = false;
+		}
 	}
 
 	RefreshAllFields();

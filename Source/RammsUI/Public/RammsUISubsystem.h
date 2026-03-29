@@ -128,9 +128,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
 	void BroadcastRobotStateChanged(const FRammsRobotState& State);
 
-	/** Get the most recently broadcast robot state. */
+	/** Get the most recently broadcast robot state (Blueprint-safe, returns by value). */
 	UFUNCTION(BlueprintPure, Category = "Ramms|Events")
-	const FRammsRobotState& GetCachedRobotState() const { return CachedRobotState; }
+	FRammsRobotState GetCachedRobotState() const { return CachedRobotState; }
+
+	/** C++ helper — returns by const reference to avoid copy when Blueprint exposure isn't needed. */
+	const FRammsRobotState& GetCachedRobotStateRef() const { return CachedRobotState; }
 
 	/** Returns true if at least one robot state has been broadcast this session. */
 	UFUNCTION(BlueprintPure, Category = "Ramms|Events")
