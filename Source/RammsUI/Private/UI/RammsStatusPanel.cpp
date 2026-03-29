@@ -122,14 +122,7 @@ void URammsStatusPanel::BuildWidgetTree()
 	if (UVerticalBoxSlot* SizeSlot = MainBox->AddChildToVerticalBox(ContentSizeBox))
 	{
 		SizeSlot->SetHorizontalAlignment(HAlign_Fill);
-		if (bIsExpanded)
-		{
-			SizeSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
-		}
-		else
-		{
-			SizeSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
-		}
+		SizeSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 	}
 
 	ContentBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentBox"));
