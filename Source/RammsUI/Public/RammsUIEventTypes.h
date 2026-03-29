@@ -110,7 +110,7 @@ struct RAMMSUI_API FRammsUIEvent
 	float GetPayloadFloat(FName Key, float Default = 0.0f) const
 	{
 		const FString* Found = Properties.Find(Key);
-		return (Found && !Found->IsEmpty()) ? FCString::Atof(**Found) : Default;
+		return (Found && Found->IsNumeric()) ? FCString::Atof(**Found) : Default;
 	}
 
 	int32 GetPayloadInt(FName Key, int32 Default = 0) const
