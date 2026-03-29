@@ -118,6 +118,144 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
 	FOnArmTaskChanged OnArmTaskChanged;
 
+	// ── UI Event Bus: Robot State ────────────────────────────────
+
+	/**
+	 * Broadcast a robot state update to all listeners.
+	 * Called by URammsRemoteBridge when state arrives via Remote Control.
+	 * Also caches the state for late-joining widgets.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void BroadcastRobotStateChanged(const FRammsRobotState& State);
+
+	/** Get the most recently broadcast robot state (Blueprint-safe, returns by value). */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Events")
+	FRammsRobotState GetCachedRobotState() const { return CachedRobotState; }
+
+	/** C++ helper — returns by const reference to avoid copy when Blueprint exposure isn't needed. */
+	const FRammsRobotState& GetCachedRobotStateRef() const { return CachedRobotState; }
+
+	/** Returns true if at least one robot state has been broadcast this session. */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Events")
+	bool HasRobotState() const { return bHasRobotState; }
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRobotStateChanged, const FRammsRobotState&, State);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events")
+	FOnRobotStateChanged OnRobotStateChanged;
+
+	// ── Per-field Robot State Setters ────────────────────────────
+
+	/** Update only the robot mode. Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateRobotMode(ERammsRobotMode Mode);
+
+	/** Update only the battery level (0-1). Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateBatteryLevel(float Level);
+
+	/** Update only the speed (forward velocity m/s). Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateSpeed(float SpeedMPS);
+
+	/** Update only the linear velocity. Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateLinearVelocity(FVector Velocity);
+
+	/** Update only the angular velocity. Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateAngularVelocity(FRotator Velocity);
+
+	/** Update only the emergency stop flag. Sets mode to Emergency if active. Merges and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateEmergencyStop(bool bActive);
+
+	/** Update only the base pose. Merges into cached state and broadcasts. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events")
+	void UpdateBasePose(FTransform Pose);
+
+	// ── UI Event Bus: Key-Value Property Store ──────────────────
+
+	/**
+	 * Set a named property value. Broadcasts OnPropertyChanged.
+	 * Useful for prototyping / extensible data from the robot or external systems.
+	 * Callable via Remote Control: PUT SetProperty(Key, Value).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetProperty(FName Key, const FString& Value);
+
+	/**
+	 * Get a named property value. Returns empty string if not set.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	FString GetProperty(FName Key) const;
+
+	/**
+	 * Get a named property as a float. Returns DefaultValue if not set or not parseable.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	float GetPropertyAsFloat(FName Key, float DefaultValue = 0.0f) const;
+
+	/**
+	 * Get a named property as an integer. Returns DefaultValue if not set or not parseable.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	int32 GetPropertyAsInt(FName Key, int32 DefaultValue = 0) const;
+
+	/**
+	 * Get a named property as a bool. Returns DefaultValue if not set.
+	 * Truthy values: "true", "1", "yes" (case-insensitive).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	bool GetPropertyAsBool(FName Key, bool DefaultValue = false) const;
+
+	/**
+	 * Get a named property as a byte. Returns DefaultValue if not set.
+	 * Useful for reading enum values stored via SetPropertyAsByte.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	uint8 GetPropertyAsByte(FName Key, uint8 DefaultValue = 0) const;
+
+	/** Check if a property exists. */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Properties")
+	bool HasProperty(FName Key) const;
+
+	/** Remove a property. Broadcasts OnPropertyChanged with empty value. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void RemoveProperty(FName Key);
+
+	/** Get all property keys. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	TArray<FName> GetAllPropertyKeys() const;
+
+	/**
+	 * Set multiple properties at once. Broadcasts OnPropertyChanged for each.
+	 * More efficient than calling SetProperty in a loop from Remote Control.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetProperties(const TMap<FName, FString>& Properties);
+
+	// ── Typed Property Setters ───────────────────────────────────
+
+	/** Set a property as a byte value. Enum pins auto-cast to uint8 in Blueprint. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetPropertyAsByte(FName Key, uint8 Value);
+
+	/** Set a property as a float value. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetPropertyAsFloat(FName Key, float Value);
+
+	/** Set a property as an integer value. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetPropertyAsInt(FName Key, int32 Value);
+
+	/** Set a property as a boolean value. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Properties")
+	void SetPropertyAsBool(FName Key, bool Value);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPropertyChanged, FName, Key, const FString&, Value);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Properties")
+	FOnPropertyChanged OnPropertyChanged;
+
 	// ── UI Event Bus: Seat State ─────────────────────────────────
 
 	/** Broadcast a seat state change to all listeners */
@@ -199,10 +337,31 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Custom")
 	FOnCustomUIEvent OnCustomUIEvent;
 
+	/**
+	 * Broadcast a custom event carrying a struct payload.
+	 * Use "Make InstancedStruct" in Blueprint to create the payload.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Custom", meta = (DisplayName = "Broadcast Custom Event (Struct)"))
+	void BroadcastCustomUIEventWithPayload(FName EventName, const FInstancedStruct& Payload);
+
+	/**
+	 * Broadcast a custom event carrying key-value properties.
+	 * Subscribers read values via FRammsUIEvent::Properties or typed getters.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Custom", meta = (DisplayName = "Broadcast Custom Event (Properties)"))
+	void BroadcastCustomUIEventWithProperties(FName EventName, const TMap<FName, FString>& EventProperties);
+
 private:
 	/** Registered robot controllers (weak references to avoid preventing GC) */
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> RegisteredControllers;
+
+	/** Cached robot state from most recent broadcast */
+	FRammsRobotState CachedRobotState;
+	bool			 bHasRobotState = false;
+
+	/** Key-value property store */
+	TMap<FName, FString> PropertyStore;
 
 	/** Remove stale (destroyed) entries from the registry */
 	void CleanupStaleControllers();

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "Components/Button.h"
+#include "Components/Border.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
@@ -23,7 +24,22 @@ enum class ERammsButtonState : uint8
 };
 
 /**
- * Styled button widget with hover/press states
+ * Button color variant — maps to style palette colors
+ */
+UENUM(BlueprintType)
+enum class ERammsButtonVariant : uint8
+{
+	Secondary UMETA(DisplayName = "Secondary"),
+	Primary	  UMETA(DisplayName = "Primary"),
+	Success	  UMETA(DisplayName = "Success"),
+	Warning	  UMETA(DisplayName = "Warning"),
+	Error	  UMETA(DisplayName = "Error"),
+	Ghost	  UMETA(DisplayName = "Ghost")
+};
+
+/**
+ * Styled button widget with rounded corners, clipping, and color variants.
+ * Uses a Border root for visual rendering and a transparent UButton for interaction.
  */
 UCLASS(meta = (DisplayName = "Ramms Button"))
 class RAMMSUI_API URammsButton : public URammsBaseWidget
@@ -39,15 +55,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Button")
 	bool bButtonEnabled = true;
 
-	/** Use primary color (accent) instead of secondary */
+	/** Color variant — determines background color from style palette */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
-	bool bUsePrimaryColor = false;
+	ERammsButtonVariant Variant = ERammsButtonVariant::Secondary;
 
 	/** Optional icon texture shown to the left of button text */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Button")
 	TObjectPtr<UTexture2D> IconTexture;
 
+	/** Content padding inside the button */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	FMargin ContentPadding = FMargin(12.0f, 6.0f);
+
 	// Widget references (built programmatically)
+	UPROPERTY()
+	TObjectPtr<UBorder> ButtonBorder;
+
 	UPROPERTY()
 	TObjectPtr<UButton> InnerButton;
 
@@ -71,29 +94,24 @@ public:
 	virtual void SynchronizeProperties() override;
 	virtual void ApplyStyle_Implementation() override;
 
-	/**
-	 * Set icon texture (nullptr to hide)
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Button")
 	void SetIcon(UTexture2D* Texture);
 
-	/**
-	 * Set button text
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Button")
 	void SetText(FText Text);
 
-	/**
-	 * Set button enabled state
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Button")
 	void SetEnabled(bool bEnabled);
 
-	/**
-	 * Is button enabled?
-	 */
+	/** Set the color variant at runtime */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetVariant(ERammsButtonVariant NewVariant);
+
 	UFUNCTION(BlueprintPure, Category = "Button")
 	bool IsButtonEnabled() const { return bButtonEnabled; }
+
+	UFUNCTION(BlueprintPure, Category = "Style")
+	ERammsButtonVariant GetVariant() const { return Variant; }
 
 protected:
 	UFUNCTION()
@@ -111,8 +129,11 @@ protected:
 	UFUNCTION()
 	void OnButtonReleased();
 
-	/** Update visual state */
+	/** Update visual state (border color, text color, opacity) */
 	void UpdateVisualState();
+
+	/** Get the base color for the current variant from the style palette */
+	FLinearColor GetVariantColor() const;
 
 	/** Build widget tree programmatically */
 	virtual void ResetCachedWidgets() override;

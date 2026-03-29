@@ -191,7 +191,7 @@ void URammsToolbar::ApplyStyle_Implementation()
 		float		BorderW = Style->Border.BorderWidth;
 		FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(Bg, Radius, Style->Colors.Border, BorderW);
 		URammsUIStyle::ApplyRoundedBrushToBorder(ToolbarBorder, Brush);
-		ToolbarBorder->SetPadding(FMargin(BorderW + 2.0f));
+		ToolbarBorder->SetPadding(FMargin(BorderW + Style->Spacing.XSmall));
 	}
 
 	// Update button visuals

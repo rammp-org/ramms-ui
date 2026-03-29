@@ -28,35 +28,35 @@ struct FRammsRobotState
 	GENERATED_BODY()
 
 	/** Current operating mode */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	ERammsRobotMode Mode = ERammsRobotMode::Unknown;
 
 	/** Battery level (0.0 to 1.0) */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	float BatteryLevel = 0.0f;
 
 	/** Linear velocity (m/s) */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	FVector LinearVelocity = FVector::ZeroVector;
 
 	/** Angular velocity (rad/s) */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	FRotator AngularVelocity = FRotator::ZeroRotator;
 
 	/** Base pose (position and orientation in world frame) */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	FTransform BasePose = FTransform::Identity;
 
 	/** Timestamp in microseconds */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	int64 Timestamp = 0;
 
 	/** Whether emergency stop is active */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	bool bEmergencyStop = false;
 
 	/** Additional state data as JSON (for extensibility) */
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	FString ExtendedStateJSON;
 };
 
@@ -69,31 +69,31 @@ struct FRammsArmState
 	GENERATED_BODY()
 
 	/** Joint names (e.g., ["j0", "j1", "j2", "j3", "j4", "j5"]) */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	TArray<FString> JointNames;
 
 	/** Joint positions in radians */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	TArray<float> Positions;
 
 	/** Joint velocities in rad/s (may be empty if not available) */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	TArray<float> Velocities;
 
 	/** Joint efforts/torques in Nm (may be empty if not available) */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	TArray<float> Efforts;
 
 	/** End effector pose (if computed) */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	FTransform EndEffectorPose = FTransform::Identity;
 
 	/** Timestamp in microseconds */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	int64 Timestamp = 0;
 
 	/** Additional arm state data as JSON (for extensibility) */
-	UPROPERTY(BlueprintReadOnly, Category = "Arm")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm")
 	FString ExtendedStateJSON;
 };
 
@@ -106,15 +106,15 @@ struct FRammsCurbInfo
 	GENERATED_BODY()
 
 	/** Curb detection points in robot frame */
-	UPROPERTY(BlueprintReadOnly, Category = "Navigation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Navigation")
 	TArray<FVector> CurbPoints;
 
 	/** Confidence (0.0 to 1.0) */
-	UPROPERTY(BlueprintReadOnly, Category = "Navigation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Navigation")
 	float Confidence = 0.0f;
 
 	/** Timestamp in microseconds */
-	UPROPERTY(BlueprintReadOnly, Category = "Navigation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Navigation")
 	int64 Timestamp = 0;
 };
 

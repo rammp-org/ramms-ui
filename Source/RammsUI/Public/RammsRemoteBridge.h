@@ -97,6 +97,43 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
 	static int32 DismissAllNotifications();
 
+	// ── Key-Value Properties ──────────────────────────────────────
+
+	/**
+	 * Set a named property in the UI subsystem's property store.
+	 * Broadcasts OnPropertyChanged to all subscribers.
+	 * @return true if a play world with the subsystem was found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
+	static bool SetProperty(FName Key, const FString& Value);
+
+	/**
+	 * Set multiple properties at once.
+	 * @return true if a play world with the subsystem was found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
+	static bool SetProperties(const TMap<FName, FString>& Properties);
+
+	/**
+	 * Get a property value from the UI subsystem.
+	 * @return The property value, or empty string if not found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
+	static FString GetProperty(FName Key);
+
+	/**
+	 * Get all property keys currently stored.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
+	static TArray<FName> GetAllPropertyKeys();
+
+	/**
+	 * Remove a property from the store. Broadcasts OnPropertyChanged with empty value.
+	 * @return true if the property existed and was removed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
+	static bool RemoveProperty(FName Key);
+
 private:
 	/** Lazily-created viewport container for notifications */
 	static TWeakObjectPtr<URammsNotificationContainer> NotificationContainer;

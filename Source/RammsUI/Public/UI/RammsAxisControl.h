@@ -48,6 +48,21 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Axis Control")
 	FOnAxisValueChanged OnValueChanged;
 
+	/** Fired when the reset button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAxisResetPressed, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Axis Control")
+	FOnAxisResetPressed OnResetPressed;
+
+	/** Fired when the increment (+) button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAxisIncrementPressed, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Axis Control")
+	FOnAxisIncrementPressed OnIncrementPressed;
+
+	/** Fired when the decrement (−) button is pressed. */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAxisDecrementPressed, float, NewValue);
+	UPROPERTY(BlueprintAssignable, Category = "Axis Control")
+	FOnAxisDecrementPressed OnDecrementPressed;
+
 	// ── Public API ─────────────────────────────────────────────────
 
 	/** Set value programmatically (does NOT fire OnValueChanged). */

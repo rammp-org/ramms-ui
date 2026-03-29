@@ -513,6 +513,7 @@ void URammsAxisControl::OnSliderChanged(float Value)
 void URammsAxisControl::OnResetClicked()
 {
 	ResetToDefault();
+	OnResetPressed.Broadcast(CurrentValue);
 }
 
 void URammsAxisControl::OnDecrementClicked()
@@ -526,6 +527,7 @@ void URammsAxisControl::OnDecrementClicked()
 	UpdateValueDisplay();
 	UpdateSliderFromValue();
 	OnValueChanged.Broadcast(CurrentValue);
+	OnDecrementPressed.Broadcast(CurrentValue);
 }
 
 void URammsAxisControl::OnIncrementClicked()
@@ -539,4 +541,5 @@ void URammsAxisControl::OnIncrementClicked()
 	UpdateValueDisplay();
 	UpdateSliderFromValue();
 	OnValueChanged.Broadcast(CurrentValue);
+	OnIncrementPressed.Broadcast(CurrentValue);
 }
