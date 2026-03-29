@@ -279,7 +279,10 @@ float URammsUISubsystem::GetPropertyAsFloat(FName Key, float DefaultValue) const
 	const FString* Found = PropertyStore.Find(Key);
 	if (Found && !Found->IsEmpty())
 	{
-		return FCString::Atof(**Found);
+		if (Found->IsNumeric())
+		{
+			return FCString::Atof(**Found);
+		}
 	}
 	return DefaultValue;
 }
