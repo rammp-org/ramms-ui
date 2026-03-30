@@ -169,6 +169,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetProjectionEnabled(bool bEnabled);
 
+	/** Enable or disable the PGM mesh at runtime */
+	UFUNCTION(BlueprintCallable, Category = "PGM")
+	void SetPGMEnabled(bool bEnabled);
+
 	/** Set whether the PGM mesh renders to custom depth/stencil, and the stencil value (at runtime) */
 	UFUNCTION(BlueprintCallable, Category = "PGM")
 	void SetPGMCustomDepthStencil(bool bEnable, int32 StencilValue = 1);
@@ -189,6 +193,10 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MaterialInstance;
+
+	/** Dynamic material instance for the PGM mesh (created from PGMMaterial) */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PGMMaterialInstance;
 
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> ProcMeshComponent;

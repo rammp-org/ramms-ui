@@ -147,6 +147,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	TArray<FString> GetProjectorStreamIDs() const;
 
+	/** Enable or disable PGM on all projectors at runtime */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetPGMEnabled(bool bEnabled);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;

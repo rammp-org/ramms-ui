@@ -418,7 +418,9 @@ void URammsCameraProjectorComponent::UpdatePGM()
 			GridToVertex[y * GridWidth + x] = Vertices.Num();
 			Vertices.Add(FVector(X_cam, Y_cam, Z_cam));
 			VertexColors.Add(SampledColor);
-			UV0.Add(FVector2D((float)SrcX / DepthW, (float)SrcY / DepthH));
+			// UV0 = parallax-corrected RGB texture coords (for material texture sampling)
+			UV0.Add(FVector2D(static_cast<float>(u_color) / static_cast<float>(ColorW),
+				static_cast<float>(v_color) / static_cast<float>(ColorH)));
 		}
 	}
 
@@ -467,7 +469,15 @@ void URammsCameraProjectorComponent::UpdatePGM()
 
 		if (PGMMaterial)
 		{
-			ProcMeshComponent->SetMaterial(0, PGMMaterial);
+			if (!PGMMaterialInstance || PGMMaterialInstance->Parent != PGMMaterial)
+			{
+				PGMMaterialInstance = UMaterialInstanceDynamic::Create(PGMMaterial, this);
+			}
+			if (PGMMaterialInstance && CurrentColorTexture)
+			{
+				PGMMaterialInstance->SetTextureParameterValue(FName("CameraTexture"), CurrentColorTexture);
+			}
+			ProcMeshComponent->SetMaterial(0, PGMMaterialInstance ? static_cast<UMaterialInterface*>(PGMMaterialInstance.Get()) : PGMMaterial.Get());
 		}
 	}
 	else
@@ -582,6 +592,10 @@ void URammsCameraProjectorComponent::SetColorTexture(UTexture* Texture, int64 Ti
 	{
 		MaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
 	}
+	if (PGMMaterialInstance)
+	{
+		PGMMaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
+	}
 
 	// PGM fallback: GPU readback when no raw data was provided via SetColorTextureWithData
 	if (bEnablePGM)
@@ -614,6 +628,10 @@ void URammsCameraProjectorComponent::SetColorTextureWithData(
 	if (MaterialInstance)
 	{
 		MaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
+	}
+	if (PGMMaterialInstance)
+	{
+		PGMMaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
 	}
 
 	MaybeUpdatePGM();
@@ -709,6 +727,20 @@ void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 	if (ProcMeshComponent)
 	{
 		ProcMeshComponent->SetVisibility(bEnabled && bEnablePGM);
+	}
+}
+
+void URammsCameraProjectorComponent::SetPGMEnabled(bool bEnabled)
+{
+	bEnablePGM = bEnabled;
+
+	if (ProcMeshComponent)
+	{
+		ProcMeshComponent->SetVisibility(bEnabled);
+		if (!bEnabled)
+		{
+			ProcMeshComponent->ClearAllMeshSections();
+		}
 	}
 }
 
