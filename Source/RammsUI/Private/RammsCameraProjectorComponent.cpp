@@ -465,7 +465,7 @@ void URammsCameraProjectorComponent::UpdatePGM()
 	if (Vertices.Num() > 0 && Triangles.Num() > 0)
 	{
 		ProcMeshComponent->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
-		ProcMeshComponent->SetVisibility(true);
+		ProcMeshComponent->SetVisibility(bProjectionEnabled && bEnablePGM);
 
 		if (PGMMaterial)
 		{
@@ -719,6 +719,8 @@ void URammsCameraProjectorComponent::SetCameraTransform(const FTransform& WorldT
 
 void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 {
+	bProjectionEnabled = bEnabled;
+
 	if (DecalComponent)
 	{
 		DecalComponent->SetVisibility(bEnabled);
@@ -726,7 +728,7 @@ void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 
 	if (ProcMeshComponent)
 	{
-		ProcMeshComponent->SetVisibility(bEnabled && bEnablePGM);
+		ProcMeshComponent->SetVisibility(bProjectionEnabled && bEnablePGM);
 	}
 }
 
@@ -736,11 +738,17 @@ void URammsCameraProjectorComponent::SetPGMEnabled(bool bEnabled)
 
 	if (ProcMeshComponent)
 	{
-		ProcMeshComponent->SetVisibility(bEnabled);
+		ProcMeshComponent->SetVisibility(bProjectionEnabled && bEnablePGM);
 		if (!bEnabled)
 		{
 			ProcMeshComponent->ClearAllMeshSections();
 		}
+	}
+
+	// Rebuild mesh immediately if enabling and data is already available
+	if (bEnabled)
+	{
+		MaybeUpdatePGM();
 	}
 }
 

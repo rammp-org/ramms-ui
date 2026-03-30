@@ -217,6 +217,7 @@ private:
 		int32& OutWidth, int32& OutHeight);
 
 	// State trackers
+	bool				 bProjectionEnabled = true;
 	TObjectPtr<UTexture> CurrentColorTexture;
 	TObjectPtr<UTexture> CurrentDepthTexture;
 	int64				 LastColorTimestamp = 0;
