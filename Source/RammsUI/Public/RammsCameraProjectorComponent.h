@@ -191,11 +191,11 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UDecalComponent> DecalComponent;
 
-	UPROPERTY()
+	UPROPERTY(Transient, DuplicateTransient)
 	TObjectPtr<UMaterialInstanceDynamic> MaterialInstance;
 
 	/** Dynamic material instance for the PGM mesh (created from PGMMaterial) */
-	UPROPERTY()
+	UPROPERTY(Transient, DuplicateTransient)
 	TObjectPtr<UMaterialInstanceDynamic> PGMMaterialInstance;
 
 	UPROPERTY()
