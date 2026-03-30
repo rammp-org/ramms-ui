@@ -356,7 +356,7 @@ public:
 	// Convenience methods that find the primary (first) registered
 	// controller and call the corresponding IRammsRobotController
 	// method. Widgets can call these instead of manually resolving
-	// the controller.  Each also fires OnCommandSent for logging /
+	// the controller.  Each also fires OnRobotCommandSent for logging /
 	// telemetry / UI feedback.
 
 	/**
