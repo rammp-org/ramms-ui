@@ -26,6 +26,7 @@ void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent
 		P->TargetStencilValue = DefaultTargetStencil;
 
 		P->bEnablePGM = bEnablePGM;
+		P->bGPUAccelerated = bGPUAccelerated;
 		P->PGMMaterial = PGMMaterial;
 		P->MaxEdgeStretchCM = MaxEdgeStretchCM;
 		P->DepthScaleToCM = DepthScaleToCM;
@@ -346,6 +347,7 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 
 	// Copy PGM settings
 	Projector->bEnablePGM = bEnablePGM;
+	Projector->bGPUAccelerated = bGPUAccelerated;
 	Projector->PGMMaterial = PGMMaterial;
 	Projector->MaxEdgeStretchCM = MaxEdgeStretchCM;
 	Projector->DepthScaleToCM = DepthScaleToCM;

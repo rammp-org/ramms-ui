@@ -89,7 +89,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM")
 	bool bEnablePGM = false;
 
-	/** Material used for PGM rendering (requires Vertex Color node) */
+	/**
+	 * When true, PGM runs entirely on the GPU via a WPO material.
+	 * The depth texture is sampled in the vertex shader and deprojected
+	 * using RammsPGM.ush — no CPU readback or per-frame mesh rebuild.
+	 * When false, falls back to the legacy CPU path.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
+	bool bGPUAccelerated = true;
+
+	/** Material used for PGM rendering.
+	 *  GPU mode: must include RammsPGM.ush and use WPO for deprojection.
+	 *  CPU mode: should use Vertex Color node for per-vertex colors. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PGM", meta = (EditCondition = "bEnablePGM"))
 	TObjectPtr<UMaterialInterface> PGMMaterial;
 
@@ -208,7 +219,14 @@ private:
 	void UpdateMaterialParameters();
 	void UpdateCameraTransformParameters();
 
-	void UpdatePGM();
+	// CPU PGM path (legacy fallback)
+	void UpdatePGM_CPU();
+
+	// GPU PGM path
+	void BuildPGMGrid(int32 GridW, int32 GridH);
+	void UpdatePGM_GPU();
+	void UpdatePGMMaterialParams();
+
 	void MaybeUpdatePGM();
 
 	/** GPU readback fallback: extract pixel data from a texture when no raw data was provided. */
@@ -224,7 +242,12 @@ private:
 	int64				 LastDepthTimestamp = 0;
 	int64				 LastPGMTimestamp = 0;
 
-	// CPU-side raw frame data for PGM (avoids GPU readback)
+	// GPU PGM grid state — grid is rebuilt only when these change
+	int32 LastGridDecimation = 0;
+	int32 LastGridDepthW = 0;
+	int32 LastGridDepthH = 0;
+
+	// CPU-side raw frame data for PGM (legacy CPU path only)
 	TArray<uint8> ColorRawData;
 	EPixelFormat  ColorPixelFormat = PF_Unknown;
 	int32		  ColorFrameWidth = 0;

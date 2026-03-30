@@ -1,0 +1,131 @@
+#ifndef RAMMS_PGM_USH
+#define RAMMS_PGM_USH
+
+// RammsPGM.ush — GPU-side Projective Grid Mapping
+//
+// Include this in a Material Custom node to perform depth deprojection
+// entirely on the GPU (no CPU readback needed).
+//
+// Virtual path: /RammsUI/Private/RammsPGM.ush
+//
+// Required material parameters (set from C++ per-frame):
+//   DepthTexture     (Texture2D)   — depth image
+//   CameraTexture    (Texture2D)   — RGB image
+//   PGMIntrinsics    (Vector4)     — float4(fx, fy, cx, cy)
+//   PGMImageSize     (Vector4)     — float4(colorW, colorH, depthW, depthH)
+//   PGMDepthConfig   (Vector4)     — float4(depthScaleToCM, minDepthCM, maxDepthCM, maxEdgeStretchCM)
+//   PGMParallax      (Vector4)     — float4(sensorBaselineY, colorFx, colorFy, 0)
+//   PGMGridStep      (Vector2)     — float2(1/gridW, 1/gridH)
+
+// ── Deprojection ────────────────────────────────────────────────────
+// Given a pixel coordinate in the depth image and a depth value (in cm),
+// returns the camera-space 3D position (Unreal convention: X=forward).
+float3 RammsPGM_Deproject(float2 PixelXY, float DepthCM, float4 Intrinsics)
+{
+	float X_cam = DepthCM;
+	float Y_cam = ((PixelXY.x - Intrinsics.z) * DepthCM) / Intrinsics.x;
+	float Z_cam = ((Intrinsics.w - PixelXY.y) * DepthCM) / Intrinsics.y;
+	return float3(X_cam, Y_cam, Z_cam);
+}
+
+// ── Parallax-corrected RGB UV ───────────────────────────────────────
+// Computes the UV in the RGB texture that corresponds to a camera-space
+// point, accounting for sensor baseline displacement.
+float2 RammsPGM_ParallaxUV(float3 CamPos, float SensorBaselineY,
+                           float ColorFx, float ColorFy,
+                           float ColorCx, float ColorCy,
+                           float2 ColorImageSize)
+{
+	float Y_rgb = CamPos.y - SensorBaselineY;
+	float u = ((Y_rgb * ColorFx) / CamPos.x) + ColorCx;
+	float v = ColorCy - ((CamPos.z * ColorFy) / CamPos.x);
+	return float2(u / ColorImageSize.x, v / ColorImageSize.y);
+}
+
+// ── World Position Offset (call from vertex shader) ─────────────────
+//
+// Inputs (wire from material parameters):
+//   UV              — vertex UV (maps to depth texture, 0..1)
+//   DepthTex        — depth texture object (Custom node input)
+//   DepthTexSampler — auto-generated sampler (UE names it <InputName>Sampler)
+//   Intrinsics      — float4(fx, fy, cx, cy) — depth camera intrinsics
+//   DepthImageSize  — float2(depthW, depthH) in pixels
+//   DepthConfig     — float4(scaleToCM, minCM, maxCM, maxEdgeStretchCM)
+//   GridStep        — float2(1/gridW, 1/gridH) — UV distance between grid verts
+//
+// Returns: float3 position offset in component LOCAL space.
+//          Invalid vertices collapse to a degenerate NaN position so the
+//          GPU rasterizer automatically discards any triangle that touches them.
+//
+// IMPORTANT: The output is in component-local (camera) space. In the material
+// editor, pass the result through a TransformVector node (Local → World)
+// before wiring to World Position Offset so camera extrinsics are applied.
+//
+float3 RammsPGM_WorldPositionOffset(
+	float2 UV,
+	Texture2D DepthTex, SamplerState DepthTexSampler,
+	float4 Intrinsics, float2 DepthImageSize,
+	float4 DepthConfig, float2 GridStep)
+{
+	// NaN collapse: any triangle with a NaN vertex is discarded by the rasterizer
+	float3 DEGENERATE = asfloat(0x7FC00000);  // quiet NaN
+
+	float Scale   = DepthConfig.x;
+	float MinCM   = DepthConfig.y;
+	float MaxCM   = DepthConfig.z;
+	float MaxEdge = DepthConfig.w;
+
+	// Sample depth at this vertex
+	float RawDepth = Texture2DSampleLevel(DepthTex, DepthTexSampler, UV, 0).r;
+	float DepthCM = RawDepth * Scale;
+
+	// Depth validity check
+	if (DepthCM < MinCM || DepthCM > MaxCM)
+	{
+		return DEGENERATE;
+	}
+
+	// Deproject to camera space
+	float2 PixelXY = UV * DepthImageSize;
+	float3 Pos = RammsPGM_Deproject(PixelXY, DepthCM, Intrinsics);
+
+	// Edge stretch + invalid-neighbor check: sample 4 grid neighbors.
+	// Collapse this vertex if ANY neighbor is:
+	//   (a) invalid depth  — prevents stretched tris at depth boundaries
+	//   (b) too far away   — prevents stretched tris at depth discontinuities
+	float2 Offsets[4] = {
+		float2( GridStep.x, 0),
+		float2(-GridStep.x, 0),
+		float2(0,  GridStep.y),
+		float2(0, -GridStep.y)
+	};
+
+	for (int i = 0; i < 4; i++)
+	{
+		float2 NUV = UV + Offsets[i];
+		// Skip out-of-bounds neighbors
+		if (NUV.x < 0 || NUV.x > 1 || NUV.y < 0 || NUV.y > 1)
+			continue;
+
+		float NRaw = Texture2DSampleLevel(DepthTex, DepthTexSampler, NUV, 0).r;
+		float NCM = NRaw * Scale;
+
+		// Collapse if neighbor has invalid depth (avoids stretched tris at boundaries)
+		if (NCM < MinCM || NCM > MaxCM)
+		{
+			return DEGENERATE;
+		}
+
+		// Collapse if 3D distance to neighbor exceeds threshold
+		float2 NPixel = NUV * DepthImageSize;
+		float3 NPos = RammsPGM_Deproject(NPixel, NCM, Intrinsics);
+		if (distance(Pos, NPos) > MaxEdge)
+		{
+			return DEGENERATE;
+		}
+	}
+
+	return Pos;
+}
+
+#endif // RAMMS_PGM_USH

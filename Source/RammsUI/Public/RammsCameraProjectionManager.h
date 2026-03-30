@@ -69,7 +69,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM")
 	bool bEnablePGM = false;
 
-	/** Material used for PGM rendering (requires Vertex Color node) */
+	/** GPU-accelerated PGM (WPO-based, no CPU readback). Requires a WPO material using RammsPGM.ush. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	bool bGPUAccelerated = true;
+
+	/** Material used for PGM rendering. (requires Vertex Color node) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
 	TObjectPtr<UMaterialInterface> PGMMaterial;
 
