@@ -166,10 +166,10 @@ void URammsStatusPanel::BuildFieldRows()
 				SepSlot->SetHorizontalAlignment(HAlign_Fill);
 				SepSlot->SetPadding(FMargin(RowInternalPad, 0.0f, RowInternalPad, 0.0f));
 			}
-			// Use a SizeBox to enforce 1px height for the separator
+			// Use a SizeBox to enforce separator height (2px avoids sub-pixel snapping at non-integer DPI)
 			USizeBox* SepSize = WidgetTree->ConstructWidget<USizeBox>(
 				USizeBox::StaticClass(), *FString::Printf(TEXT("SepSize_%d"), i));
-			SepSize->SetHeightOverride(1.0f);
+			SepSize->SetHeightOverride(2.0f);
 			// Re-parent: remove separator from ContentBox and put in SizeBox
 			ContentBox->RemoveChild(Separator);
 			SepSize->AddChild(Separator);
