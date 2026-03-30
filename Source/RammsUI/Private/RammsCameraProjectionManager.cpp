@@ -686,3 +686,16 @@ void URammsCameraProjectionManager::OnCameraExtrinsicUpdated(const FString& Stre
 		(*Found)->SetCameraTransform(WorldTransform);
 	}
 }
+
+void URammsCameraProjectionManager::SetPGMEnabled(bool bEnabled)
+{
+	bEnablePGM = bEnabled;
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->SetPGMEnabled(bEnabled);
+		}
+	}
+}

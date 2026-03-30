@@ -169,6 +169,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void SetProjectionEnabled(bool bEnabled);
 
+	/** Enable or disable the PGM mesh at runtime */
+	UFUNCTION(BlueprintCallable, Category = "PGM")
+	void SetPGMEnabled(bool bEnabled);
+
 	/** Set whether the PGM mesh renders to custom depth/stencil, and the stencil value (at runtime) */
 	UFUNCTION(BlueprintCallable, Category = "PGM")
 	void SetPGMCustomDepthStencil(bool bEnable, int32 StencilValue = 1);
@@ -187,8 +191,12 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UDecalComponent> DecalComponent;
 
-	UPROPERTY()
+	UPROPERTY(Transient, DuplicateTransient)
 	TObjectPtr<UMaterialInstanceDynamic> MaterialInstance;
+
+	/** Dynamic material instance for the PGM mesh (created from PGMMaterial) */
+	UPROPERTY(Transient, DuplicateTransient)
+	TObjectPtr<UMaterialInstanceDynamic> PGMMaterialInstance;
 
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> ProcMeshComponent;
@@ -209,6 +217,7 @@ private:
 		int32& OutWidth, int32& OutHeight);
 
 	// State trackers
+	bool				 bProjectionEnabled = true;
 	TObjectPtr<UTexture> CurrentColorTexture;
 	TObjectPtr<UTexture> CurrentDepthTexture;
 	int64				 LastColorTimestamp = 0;
