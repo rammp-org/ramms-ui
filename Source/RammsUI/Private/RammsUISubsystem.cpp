@@ -368,3 +368,119 @@ uint8 URammsUISubsystem::GetPropertyAsByte(FName Key, uint8 DefaultValue) const
 	const FString* Found = PropertyStore.Find(Key);
 	return (Found && Found->IsNumeric()) ? static_cast<uint8>(FCString::Atoi(**Found)) : DefaultValue;
 }
+
+// ── Robot Command Dispatch ────────────────────────────────────────
+
+bool URammsUISubsystem::SendRobotCommand(FName CommandName)
+{
+	AActor* Controller = FindRobotController();
+	if (!Controller)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SendRobotCommand('%s'): No robot controller registered"), *CommandName.ToString());
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return false;
+	}
+	bool bAccepted = IRammsRobotController::Execute_SendCommand(Controller, CommandName);
+	UE_LOG(LogTemp, Log, TEXT("SendRobotCommand('%s') → %s [%s]"), *CommandName.ToString(), bAccepted ? TEXT("accepted") : TEXT("rejected"), *Controller->GetName());
+	OnRobotCommandSent.Broadcast(CommandName, bAccepted);
+	return bAccepted;
+}
+
+bool URammsUISubsystem::SendRobotCommandWithValue(FName CommandName, uint8 Value)
+{
+	AActor* Controller = FindRobotController();
+	if (!Controller)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SendRobotCommandWithValue('%s', %d): No robot controller registered"), *CommandName.ToString(), Value);
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return false;
+	}
+	bool bAccepted = IRammsRobotController::Execute_SendCommandWithValue(Controller, CommandName, Value);
+	UE_LOG(LogTemp, Log, TEXT("SendRobotCommandWithValue('%s', %d) → %s [%s]"), *CommandName.ToString(), Value, bAccepted ? TEXT("accepted") : TEXT("rejected"), *Controller->GetName());
+	OnRobotCommandSent.Broadcast(CommandName, bAccepted);
+	return bAccepted;
+}
+
+bool URammsUISubsystem::SendRobotCommandWithPayload(FName CommandName, const FInstancedStruct& Payload)
+{
+	AActor* Controller = FindRobotController();
+	if (!Controller)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SendRobotCommandWithPayload('%s'): No robot controller registered"), *CommandName.ToString());
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return false;
+	}
+	bool bAccepted = IRammsRobotController::Execute_SendCommandWithPayload(Controller, CommandName, Payload);
+	UE_LOG(LogTemp, Log, TEXT("SendRobotCommandWithPayload('%s') → %s [%s]"), *CommandName.ToString(), bAccepted ? TEXT("accepted") : TEXT("rejected"), *Controller->GetName());
+	OnRobotCommandSent.Broadcast(CommandName, bAccepted);
+	return bAccepted;
+}
+
+int32 URammsUISubsystem::BroadcastRobotCommand(FName CommandName)
+{
+	CleanupStaleControllers();
+	if (RegisteredControllers.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BroadcastRobotCommand('%s'): No robot controllers registered"), *CommandName.ToString());
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return 0;
+	}
+	int32 Accepted = 0;
+	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
+	{
+		AActor* Actor = Weak.Get();
+		if (Actor && IRammsRobotController::Execute_SendCommand(Actor, CommandName))
+		{
+			++Accepted;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("BroadcastRobotCommand('%s'): %d/%d controllers accepted"), *CommandName.ToString(), Accepted, RegisteredControllers.Num());
+	OnRobotCommandSent.Broadcast(CommandName, Accepted > 0);
+	return Accepted;
+}
+
+int32 URammsUISubsystem::BroadcastRobotCommandWithValue(FName CommandName, uint8 Value)
+{
+	CleanupStaleControllers();
+	if (RegisteredControllers.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BroadcastRobotCommandWithValue('%s', %d): No robot controllers registered"), *CommandName.ToString(), Value);
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return 0;
+	}
+	int32 Accepted = 0;
+	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
+	{
+		AActor* Actor = Weak.Get();
+		if (Actor && IRammsRobotController::Execute_SendCommandWithValue(Actor, CommandName, Value))
+		{
+			++Accepted;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("BroadcastRobotCommandWithValue('%s', %d): %d/%d controllers accepted"), *CommandName.ToString(), Value, Accepted, RegisteredControllers.Num());
+	OnRobotCommandSent.Broadcast(CommandName, Accepted > 0);
+	return Accepted;
+}
+
+int32 URammsUISubsystem::BroadcastRobotCommandWithPayload(FName CommandName, const FInstancedStruct& Payload)
+{
+	CleanupStaleControllers();
+	if (RegisteredControllers.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BroadcastRobotCommandWithPayload('%s'): No robot controllers registered"), *CommandName.ToString());
+		OnRobotCommandSent.Broadcast(CommandName, false);
+		return 0;
+	}
+	int32 Accepted = 0;
+	for (const TWeakObjectPtr<AActor>& Weak : RegisteredControllers)
+	{
+		AActor* Actor = Weak.Get();
+		if (Actor && IRammsRobotController::Execute_SendCommandWithPayload(Actor, CommandName, Payload))
+		{
+			++Accepted;
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("BroadcastRobotCommandWithPayload('%s'): %d/%d controllers accepted"), *CommandName.ToString(), Accepted, RegisteredControllers.Num());
+	OnRobotCommandSent.Broadcast(CommandName, Accepted > 0);
+	return Accepted;
+}

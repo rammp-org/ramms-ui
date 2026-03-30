@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
+#include "StructUtils/InstancedStruct.h"
 #include "Interfaces/IRammsStateProvider.h"
 #include "RammsRobotTypes.h"
 #include "IRammsRobotController.generated.h"
@@ -164,4 +165,42 @@ public:
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|State")
 	bool GetRobotState(FRammsRobotState& OutState) const;
+
+	// ── Generic Commands ─────────────────────────────────────────
+	//
+	// For state-machine events and arbitrary command dispatch.
+	// Define your commands using Blueprint enums / structs — no C++
+	// changes required when the state machine evolves.
+	//
+	// In the implementing actor, override SendCommand_Implementation (etc.)
+	// to route the command into your state machine or subsystem.
+
+	/**
+	 * Send a named command with no payload.
+	 * @param CommandName - identifier for the command / state-machine event
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Command")
+	bool SendCommand(FName CommandName);
+
+	/**
+	 * Send a named command with a byte / enum value.
+	 * Use this for Blueprint-defined enums: cast the enum to uint8
+	 * on the caller side and cast back in the implementation.
+	 * @param CommandName - identifier for the command
+	 * @param Value       - byte / enum value
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Command")
+	bool SendCommandWithValue(FName CommandName, uint8 Value);
+
+	/**
+	 * Send a named command with a struct payload.
+	 * Use "Make Instanced Struct" in Blueprint to wrap any USTRUCT.
+	 * @param CommandName - identifier for the command
+	 * @param Payload     - struct payload (any USTRUCT)
+	 * @return true if the command was accepted
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Command")
+	bool SendCommandWithPayload(FName CommandName, const FInstancedStruct& Payload);
 };

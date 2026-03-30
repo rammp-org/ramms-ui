@@ -351,6 +351,62 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Custom", meta = (DisplayName = "Broadcast Custom Event (Properties)"))
 	void BroadcastCustomUIEventWithProperties(FName EventName, const TMap<FName, FString>& EventProperties);
 
+	// ── Robot Command Dispatch ────────────────────────────────────
+	//
+	// Convenience methods that find the primary (first) registered
+	// controller and call the corresponding IRammsRobotController
+	// method. Widgets can call these instead of manually resolving
+	// the controller.  Each also fires OnRobotCommandSent for logging /
+	// telemetry / UI feedback.
+
+	/**
+	 * Send a named command to the primary robot controller.
+	 * @return true if a controller was found AND accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Send Robot Command"))
+	bool SendRobotCommand(FName CommandName);
+
+	/**
+	 * Send a named command with a byte/enum value to the primary robot controller.
+	 * @return true if a controller was found AND accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Send Robot Command (Value)"))
+	bool SendRobotCommandWithValue(FName CommandName, uint8 Value);
+
+	/**
+	 * Send a named command with a struct payload to the primary robot controller.
+	 * Use "Make Instanced Struct" in Blueprint to wrap any USTRUCT.
+	 * @return true if a controller was found AND accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Send Robot Command (Struct)"))
+	bool SendRobotCommandWithPayload(FName CommandName, const FInstancedStruct& Payload);
+
+	/**
+	 * Broadcast a named command to ALL registered robot controllers.
+	 * @return number of controllers that accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Broadcast Robot Command"))
+	int32 BroadcastRobotCommand(FName CommandName);
+
+	/**
+	 * Broadcast a named command with a byte/enum value to ALL registered controllers.
+	 * @return number of controllers that accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Broadcast Robot Command (Value)"))
+	int32 BroadcastRobotCommandWithValue(FName CommandName, uint8 Value);
+
+	/**
+	 * Broadcast a named command with a struct payload to ALL registered controllers.
+	 * @return number of controllers that accepted the command
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Commands", meta = (DisplayName = "Broadcast Robot Command (Struct)"))
+	int32 BroadcastRobotCommandWithPayload(FName CommandName, const FInstancedStruct& Payload);
+
+	/** Fired after any command is dispatched (for logging / UI feedback / telemetry) */
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRobotCommandSent, FName, CommandName, bool, bAccepted);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Commands")
+	FOnRobotCommandSent OnRobotCommandSent;
+
 private:
 	/** Registered robot controllers (weak references to avoid preventing GC) */
 	UPROPERTY()
