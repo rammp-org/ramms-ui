@@ -1050,6 +1050,10 @@ void URammsCameraProjectorComponent::SetPGMEnabled(bool bEnabled)
 		if (!bEnabled)
 		{
 			ProcMeshComponent->ClearAllMeshSections();
+			// Reset grid state so BuildPGMGrid runs on next enable
+			LastGridDecimation = -1;
+			LastGridDepthW = 0;
+			LastGridDepthH = 0;
 		}
 	}
 
