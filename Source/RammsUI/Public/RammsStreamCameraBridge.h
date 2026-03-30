@@ -48,11 +48,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Streaming")
 	TArray<int32> ExcludeChannels;
 
+	/** Request that the bridge forwards CPU-side raw data alongside textures.
+	 *  Call once per consumer that needs raw bytes (e.g. CPU PGM path).
+	 *  Ref-counted: the bridge only queries sink raw data while count > 0. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Streaming")
+	void RequestRawDataForwarding();
+
+	/** Release a previous raw-data request. When count reaches 0 the bridge
+	 *  stops querying the sink for raw bytes, saving the per-frame CPU copy. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Streaming")
+	void ReleaseRawDataForwarding();
+
+	/** True when at least one consumer has requested raw data forwarding. */
+	bool NeedsRawData() const { return RawDataRequestCount > 0; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	/** Ref-count of consumers that need CPU-side raw data. */
+	int32 RawDataRequestCount = 0;
 	UPROPERTY()
 	URammsCameraProviderComponent* CameraProvider = nullptr;
 

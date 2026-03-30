@@ -3,6 +3,7 @@
 #include "RammsCameraProjectionManager.h"
 #include "RammsCameraProjectorComponent.h"
 #include "RammsCameraProviderComponent.h"
+#include "RammsStreamCameraBridge.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
@@ -87,10 +88,31 @@ void URammsCameraProjectionManager::BeginPlay()
 			);
 		}
 	}
+
+	// CPU PGM needs raw data from the bridge; GPU PGM does not.
+	if (bEnablePGM && !bGPUAccelerated)
+	{
+		if (URammsStreamCameraBridge* Bridge = GetOwner()->FindComponentByClass<URammsStreamCameraBridge>())
+		{
+			Bridge->RequestRawDataForwarding();
+			bRequestedRawData = true;
+			UE_LOG(LogRammsProjection, Log, TEXT("CPU PGM active — requested raw data forwarding from bridge"));
+		}
+	}
 }
 
 void URammsCameraProjectionManager::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
+	// Release raw data request if we made one
+	if (bRequestedRawData)
+	{
+		if (URammsStreamCameraBridge* Bridge = GetOwner()->FindComponentByClass<URammsStreamCameraBridge>())
+		{
+			Bridge->ReleaseRawDataForwarding();
+		}
+		bRequestedRawData = false;
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(DeferredDiscoveryHandle);

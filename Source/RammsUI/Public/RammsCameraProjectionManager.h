@@ -192,6 +192,9 @@ private:
 
 	FTimerHandle DeferredDiscoveryHandle;
 
+	/** True if we called RequestRawDataForwarding on the bridge (so we release on EndPlay). */
+	bool bRequestedRawData = false;
+
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
 	void OnCameraExtrinsicUpdated(const FString& StreamID, const FTransform& WorldTransform);
