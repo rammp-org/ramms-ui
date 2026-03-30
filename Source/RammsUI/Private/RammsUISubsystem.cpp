@@ -373,7 +373,6 @@ uint8 URammsUISubsystem::GetPropertyAsByte(FName Key, uint8 DefaultValue) const
 
 bool URammsUISubsystem::SendRobotCommand(FName CommandName)
 {
-	CleanupStaleControllers();
 	AActor* Controller = FindRobotController();
 	if (!Controller)
 	{
