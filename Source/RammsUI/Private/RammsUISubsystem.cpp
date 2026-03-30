@@ -389,7 +389,6 @@ bool URammsUISubsystem::SendRobotCommand(FName CommandName)
 
 bool URammsUISubsystem::SendRobotCommandWithValue(FName CommandName, uint8 Value)
 {
-	CleanupStaleControllers();
 	AActor* Controller = FindRobotController();
 	if (!Controller)
 	{
