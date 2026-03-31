@@ -399,7 +399,13 @@ void URammsCameraProjectorComponent::UpdatePGMMaterialParams()
 		FName("PGMParallax"),
 		FLinearColor(SensorBaselineY, FocalLengthX, FocalLengthY, 0.0f));
 
-	// Grid step: 1 / (gridW-1), 1 / (gridH-1)
+	// Color camera principal point + focal lengths for parallax UV correction.
+	// Without these the material would assume cx=0.5*colorW, cy=0.5*colorH.
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMColorIntrinsics"),
+		FLinearColor(FocalLengthX, FocalLengthY, PrincipalPointX, PrincipalPointY));
+
+	// Grid step: UV distance between adjacent grid vertices = 1/(gridDim - 1)
 	int32 Stride = FMath::Max(1, Decimation);
 	int32 GridW = DepthFrameWidth / Stride;
 	int32 GridH = DepthFrameHeight / Stride;
@@ -435,6 +441,19 @@ void URammsCameraProjectorComponent::UpdatePGM_GPU()
 	{
 		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM_GPU: PGMMaterial is not set — assign your WPO material"));
 		return;
+	}
+
+	// Sync check: skip if color/depth frames are too far apart in time
+	if (SyncThresholdMS > 0.0f && LastColorTimestamp > 0 && LastDepthTimestamp > 0)
+	{
+		double DeltaMS = FMath::Abs(static_cast<double>(LastColorTimestamp - LastDepthTimestamp)) / 1000.0;
+		if (DeltaMS > SyncThresholdMS)
+		{
+			UE_LOG(LogRammsPGM, Verbose,
+				TEXT("UpdatePGM_GPU: frames out of sync (%.1f ms > %.1f ms threshold), skipping"),
+				DeltaMS, SyncThresholdMS);
+			return;
+		}
 	}
 
 	// Determine depth texture dimensions
@@ -1080,5 +1099,8 @@ void URammsCameraProjectorComponent::RefreshMaterialParameters()
 {
 	UpdateDecalSize();
 	UpdateMaterialParameters();
+	// Invalidate timestamp so MaybeUpdatePGM forces a rebuild even if no new
+	// frames arrived (caller changed Decimation, DepthScale, etc.)
+	LastPGMTimestamp = 0;
 	MaybeUpdatePGM();
 }
