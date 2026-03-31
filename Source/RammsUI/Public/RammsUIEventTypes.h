@@ -41,7 +41,10 @@ enum class ERammsHighlightTarget : uint8
 	EndEffector UMETA(DisplayName = "End Effector"),
 	Base		UMETA(DisplayName = "Base"),
 	Wheels		UMETA(DisplayName = "Wheels"),
-	Sensors		UMETA(DisplayName = "Sensors")
+	Sensors		UMETA(DisplayName = "Sensors"),
+	Obstacles	UMETA(DisplayName = "Obstacles"),
+	Dropoff		UMETA(DisplayName = "Dropoff"),
+	Target		UMETA(DisplayName = "Target")
 };
 
 // ── Custom Event Payload (Blueprint-extensible) ──────────────────
