@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RammsUISubsystem.h"
+#include "UI/RammsBaseWidget.h"
 
 void URammsUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -414,6 +415,67 @@ bool URammsUISubsystem::SendRobotCommandWithPayload(FName CommandName, const FIn
 	UE_LOG(LogTemp, Log, TEXT("SendRobotCommandWithPayload('%s') → %s [%s]"), *CommandName.ToString(), bAccepted ? TEXT("accepted") : TEXT("rejected"), *Controller->GetName());
 	OnRobotCommandSent.Broadcast(CommandName, bAccepted);
 	return bAccepted;
+}
+
+// ── Theme Management ──────────────────────────────────────────────
+
+void URammsUISubsystem::SetTheme(URammsUIStyle* NewStyle)
+{
+	if (NewStyle == CurrentTheme)
+	{
+		return;
+	}
+
+	CurrentTheme = NewStyle;
+
+	UE_LOG(LogTemp, Log, TEXT("URammsUISubsystem::SetTheme('%s')"),
+		NewStyle ? *NewStyle->StyleName : TEXT("null"));
+
+	// Propagate to all live RammsBaseWidget instances
+	for (TObjectIterator<URammsBaseWidget> It; It; ++It)
+	{
+		URammsBaseWidget* W = *It;
+		if (!IsValid(W) || W->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+		{
+			continue;
+		}
+		// Only propagate to widgets that are in a world (constructed and active)
+		if (!W->GetWorld())
+		{
+			continue;
+		}
+		W->SetStyle(NewStyle);
+	}
+
+	OnThemeChanged.Broadcast(NewStyle);
+}
+
+void URammsUISubsystem::SetDarkTheme()
+{
+	if (DefaultDarkTheme)
+	{
+		SetTheme(DefaultDarkTheme);
+		return;
+	}
+	if (!BuiltinDarkTheme)
+	{
+		BuiltinDarkTheme = URammsUIStyle::CreateDefaultDarkTheme();
+	}
+	SetTheme(BuiltinDarkTheme);
+}
+
+void URammsUISubsystem::SetLightTheme()
+{
+	if (DefaultLightTheme)
+	{
+		SetTheme(DefaultLightTheme);
+		return;
+	}
+	if (!BuiltinLightTheme)
+	{
+		BuiltinLightTheme = URammsUIStyle::CreateDefaultLightTheme();
+	}
+	SetTheme(BuiltinLightTheme);
 }
 
 int32 URammsUISubsystem::BroadcastRobotCommand(FName CommandName)

@@ -313,6 +313,47 @@ struct FRammsSliderStyle
 };
 
 /**
+ * Checkbox / radio button appearance settings
+ */
+USTRUCT(BlueprintType)
+struct FRammsCheckBoxStyle
+{
+	GENERATED_BODY()
+
+	/** Size of the checkbox box (width & height in pixels) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	float Size = 20.0f;
+
+	/** Corner radius of the checkbox box */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	float CornerRadius = 4.0f;
+
+	/** Unchecked background color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor UncheckedColor = FLinearColor(0.15f, 0.15f, 0.15f, 1.0f);
+
+	/** Checked background color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor CheckedColor = FLinearColor(0.0f, 0.478f, 0.8f, 1.0f);
+
+	/** Hovered tint (mixed over unchecked/checked color) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor HoveredTint = FLinearColor(1.0f, 1.0f, 1.0f, 0.12f);
+
+	/** Border color (unchecked state) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor BorderColor = FLinearColor(0.35f, 0.35f, 0.35f, 1.0f);
+
+	/** Check mark / indicator color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor CheckMarkColor = FLinearColor::White;
+
+	/** Foreground (check image) color when disabled */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CheckBox")
+	FLinearColor DisabledColor = FLinearColor(0.3f, 0.3f, 0.3f, 0.5f);
+};
+
+/**
  * DataAsset defining the visual style for RammsUI
  * Create instances in the editor for different themes (Dark, Light, Custom, etc.)
  */
@@ -349,6 +390,10 @@ public:
 	/** Default slider appearance (thumb, bar, colors — used unless overridden per widget) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FRammsSliderStyle Slider;
+
+	/** Default checkbox / radio button appearance */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	FRammsCheckBoxStyle CheckBox;
 
 	/** Default fade in animation */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animations")
@@ -443,4 +488,72 @@ public:
 	 * @param SliderStyle  The slider appearance settings.
 	 */
 	static void ApplySliderStyle(class USlider* Slider, const FRammsSliderStyle& SliderStyle);
+
+	/**
+	 * Apply checkbox styling to a UCheckBox.
+	 * Builds rounded-box brushes for checked/unchecked/hovered states.
+	 *
+	 * @param CheckBox      The UCheckBox to style.
+	 * @param CBStyle       The checkbox appearance settings.
+	 */
+	static void ApplyCheckBoxStyle(class UCheckBox* CheckBox, const FRammsCheckBoxStyle& CBStyle);
+
+	// ── Built-in Theme Factories ────────────────────────────────
+
+	/**
+	 * Create a transient URammsUIStyle with dark theme defaults.
+	 * The returned object is Transient — it will not be serialized.
+	 */
+	static URammsUIStyle* CreateDefaultDarkTheme();
+
+	/**
+	 * Create a transient URammsUIStyle with light theme defaults.
+	 * The returned object is Transient — it will not be serialized.
+	 */
+	static URammsUIStyle* CreateDefaultLightTheme();
+
+	/**
+	 * Populate a color palette with light theme colors.
+	 */
+	static FRammsColorPalette MakeLightPalette();
+
+	/**
+	 * Create a typography set using UE's built-in engine fonts (Roboto + DroidSansMono).
+	 * Call this to get properly initialized fonts instead of empty FSlateFontInfo defaults.
+	 */
+	static FRammsTypography MakeDefaultTypography();
+
+	// ── Instance Utilities ──────────────────────────────────────
+
+	/**
+	 * Reset this theme's values to the built-in dark theme defaults.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void ResetToDarkDefaults();
+
+	/**
+	 * Reset this theme's values to the built-in light theme defaults.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void ResetToLightDefaults();
+
+	/**
+	 * Copy all style values from another theme into this one.
+	 * Does not change this object's name or outer — only style data.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void CopyFrom(const URammsUIStyle* Source);
+
+#if WITH_EDITOR
+	/**
+	 * Internal: create a DataAsset in the given content path, save, and register.
+	 * Called by URammsUISubsystem theme asset utilities.
+	 */
+	static URammsUIStyle* CreateAndSaveThemeAsset(const FString& AssetPath, bool bLight);
+
+	/**
+	 * Internal: duplicate an existing style into a saveable DataAsset.
+	 */
+	static URammsUIStyle* DuplicateAsAsset(URammsUIStyle* Source, const FString& AssetPath);
+#endif
 };

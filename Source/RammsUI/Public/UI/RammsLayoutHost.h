@@ -12,6 +12,30 @@
 class UOverlay;
 
 /**
+ * Detected display orientation based on viewport aspect ratio.
+ */
+UENUM(BlueprintType)
+enum class ERammsOrientation : uint8
+{
+	Landscape,
+	Portrait
+};
+
+/**
+ * Orientation override mode for the layout host.
+ */
+UENUM(BlueprintType)
+enum class ERammsOrientationOverride : uint8
+{
+	/** Detect automatically from viewport aspect ratio */
+	Auto,
+	/** Always treat as landscape */
+	ForceLandscape,
+	/** Always treat as portrait */
+	ForcePortrait
+};
+
+/**
  * Entry in the widget pool: a shared widget identified by a tag.
  * The LayoutHost injects pool widgets into layout NamedSlots by matching
  * WidgetTag to slot name.
@@ -178,6 +202,39 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Layout Host")
 	FOnLayoutTransition OnLayoutTransitionCompleted;
 
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOrientationChanged, ERammsOrientation, NewOrientation);
+
+	/** Fired when the detected orientation changes */
+	UPROPERTY(BlueprintAssignable, Category = "Layout Host|Orientation")
+	FOnOrientationChanged OnOrientationChanged;
+
+	// ── Orientation ─────────────────────────────────────────────
+
+	/** Override orientation detection (Auto = detect from viewport aspect ratio) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation")
+	ERammsOrientationOverride OrientationOverride = ERammsOrientationOverride::Auto;
+
+	/**
+	 * Explicit mapping of landscape layout names to portrait variants.
+	 * Example: { "3D" → "3D_Portrait", "Arm" → "Arm_Portrait" }
+	 * If a layout is not in this map, suffix fallback is attempted
+	 * (e.g., "3D" → "3D_Portrait" or "3D_Landscape" → "3D_Portrait").
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation")
+	TMap<FName, FName> PortraitLayoutMap;
+
+	/** Whether to animate orientation-triggered transitions (default: true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation")
+	bool bAnimateOrientationTransition = true;
+
+	/** Set orientation override at runtime */
+	UFUNCTION(BlueprintCallable, Category = "Layout Host|Orientation")
+	void SetOrientationOverride(ERammsOrientationOverride Override);
+
+	/** Get the current detected orientation */
+	UFUNCTION(BlueprintPure, Category = "Layout Host|Orientation")
+	ERammsOrientation GetCurrentOrientation() const { return CurrentOrientation; }
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
@@ -229,4 +286,27 @@ private:
 
 	/** Whether we are subscribed to the subsystem event */
 	bool bSubscribedToTransitionRequests = false;
+
+	// ── Orientation State ────────────────────────────────────────
+
+	ERammsOrientation CurrentOrientation = ERammsOrientation::Landscape;
+	bool			  bOrientationInitialized = false;
+
+	/** Resolve the effective orientation considering the override */
+	ERammsOrientation ComputeEffectiveOrientation() const;
+
+	/** Check viewport and handle orientation change if needed */
+	void UpdateOrientationCheck();
+
+	/**
+	 * Resolve the layout name to use for the given orientation.
+	 * Uses PortraitLayoutMap first, then suffix fallback (_Portrait / _Landscape).
+	 */
+	FName ResolveLayoutForOrientation(FName BaseName, ERammsOrientation Orientation) const;
+
+	/**
+	 * Given a layout name that may be orientation-specific, find the "base" name.
+	 * Strips _Portrait / _Landscape suffix, or does reverse lookup in PortraitLayoutMap.
+	 */
+	FName GetBaseLayoutName(FName LayoutName) const;
 };

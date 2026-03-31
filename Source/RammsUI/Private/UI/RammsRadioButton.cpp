@@ -105,8 +105,11 @@ void URammsRadioButton::ApplyStyle_Implementation()
 		RadioLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
-	// CheckBox styling would require UCheckBoxStyle asset
-	// In production, create and reference a styled checkbox asset
+	// Apply checkbox styling
+	if (InnerCheckBox)
+	{
+		URammsUIStyle::ApplyCheckBoxStyle(InnerCheckBox, Style->CheckBox);
+	}
 }
 
 void URammsRadioButton::SynchronizeProperties()

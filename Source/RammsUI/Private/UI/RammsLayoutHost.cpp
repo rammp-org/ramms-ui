@@ -3,8 +3,10 @@
 #include "UI/RammsLayoutHost.h"
 #include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Engine/GameViewportClient.h"
 
 URammsLayoutHost::URammsLayoutHost(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -66,6 +68,9 @@ void URammsLayoutHost::NativeDestruct()
 void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Check for orientation changes
+	UpdateOrientationCheck();
 
 	if (!bTransitioning || !RootOverlay)
 	{
@@ -467,4 +472,157 @@ void URammsLayoutHost::FinishTransition()
 void URammsLayoutHost::HandleLayoutTransitionRequest(FName LayoutName, bool bAnimated)
 {
 	TransitionToLayout(LayoutName, bAnimated);
+}
+
+// ── Orientation ───────────────────────────────────────────────────
+
+ERammsOrientation URammsLayoutHost::ComputeEffectiveOrientation() const
+{
+	if (OrientationOverride == ERammsOrientationOverride::ForceLandscape)
+	{
+		return ERammsOrientation::Landscape;
+	}
+	if (OrientationOverride == ERammsOrientationOverride::ForcePortrait)
+	{
+		return ERammsOrientation::Portrait;
+	}
+
+	// Auto-detect from viewport
+	FVector2D ViewportSize(1920, 1080);
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	}
+
+	// Hysteresis: require >5% beyond 1:1 to flip, prevents oscillation near square
+	const float Ratio = (ViewportSize.Y > 0.0f) ? (ViewportSize.X / ViewportSize.Y) : 1.0f;
+	if (CurrentOrientation == ERammsOrientation::Landscape)
+	{
+		return (Ratio < 0.95f) ? ERammsOrientation::Portrait : ERammsOrientation::Landscape;
+	}
+	else
+	{
+		return (Ratio > 1.05f) ? ERammsOrientation::Landscape : ERammsOrientation::Portrait;
+	}
+}
+
+void URammsLayoutHost::UpdateOrientationCheck()
+{
+	ERammsOrientation NewOrientation = ComputeEffectiveOrientation();
+
+	if (!bOrientationInitialized)
+	{
+		CurrentOrientation = NewOrientation;
+		bOrientationInitialized = true;
+		return;
+	}
+
+	if (NewOrientation == CurrentOrientation)
+	{
+		return;
+	}
+
+	ERammsOrientation OldOrientation = CurrentOrientation;
+	CurrentOrientation = NewOrientation;
+
+	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation changed %s → %s"),
+		OldOrientation == ERammsOrientation::Landscape ? TEXT("Landscape") : TEXT("Portrait"),
+		NewOrientation == ERammsOrientation::Landscape ? TEXT("Landscape") : TEXT("Portrait"));
+
+	OnOrientationChanged.Broadcast(NewOrientation);
+
+	// Auto-transition to the orientation-appropriate layout variant
+	if (!ActiveLayoutName.IsNone() && !bTransitioning)
+	{
+		FName BaseName = GetBaseLayoutName(ActiveLayoutName);
+		FName TargetName = ResolveLayoutForOrientation(BaseName, NewOrientation);
+
+		if (TargetName != ActiveLayoutName && LayoutMap.Contains(TargetName))
+		{
+			UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation auto-transition '%s' → '%s'"),
+				*ActiveLayoutName.ToString(), *TargetName.ToString());
+			TransitionToLayout(TargetName, bAnimateOrientationTransition);
+		}
+	}
+}
+
+void URammsLayoutHost::SetOrientationOverride(ERammsOrientationOverride Override)
+{
+	OrientationOverride = Override;
+	// Force immediate re-evaluation
+	UpdateOrientationCheck();
+}
+
+FName URammsLayoutHost::ResolveLayoutForOrientation(FName BaseName, ERammsOrientation Orientation) const
+{
+	if (Orientation == ERammsOrientation::Portrait)
+	{
+		// 1. Check explicit pair mapping
+		if (const FName* PortraitName = PortraitLayoutMap.Find(BaseName))
+		{
+			if (LayoutMap.Contains(*PortraitName))
+			{
+				return *PortraitName;
+			}
+		}
+
+		// 2. Suffix fallback: try BaseName_Portrait
+		FName SuffixedName = FName(*(BaseName.ToString() + TEXT("_Portrait")));
+		if (LayoutMap.Contains(SuffixedName))
+		{
+			return SuffixedName;
+		}
+
+		// 3. No portrait variant found — stay on base
+		return BaseName;
+	}
+	else
+	{
+		// Landscape: the base name IS the landscape variant.
+		// But if we're currently on a portrait layout, resolve back.
+		if (LayoutMap.Contains(BaseName))
+		{
+			return BaseName;
+		}
+
+		// Try BaseName_Landscape suffix
+		FName SuffixedName = FName(*(BaseName.ToString() + TEXT("_Landscape")));
+		if (LayoutMap.Contains(SuffixedName))
+		{
+			return SuffixedName;
+		}
+
+		return BaseName;
+	}
+}
+
+FName URammsLayoutHost::GetBaseLayoutName(FName LayoutName) const
+{
+	FString NameStr = LayoutName.ToString();
+
+	// Strip known suffixes
+	if (NameStr.EndsWith(TEXT("_Portrait")))
+	{
+		FName Stripped = FName(*NameStr.LeftChop(9)); // len("_Portrait") = 9
+		if (LayoutMap.Contains(Stripped) || PortraitLayoutMap.Contains(Stripped))
+		{
+			return Stripped;
+		}
+	}
+	else if (NameStr.EndsWith(TEXT("_Landscape")))
+	{
+		FName Stripped = FName(*NameStr.LeftChop(10)); // len("_Landscape") = 10
+		return Stripped;
+	}
+
+	// Reverse lookup in PortraitLayoutMap: if LayoutName is a portrait value, return its key
+	for (const auto& Pair : PortraitLayoutMap)
+	{
+		if (Pair.Value == LayoutName)
+		{
+			return Pair.Key;
+		}
+	}
+
+	return LayoutName;
 }

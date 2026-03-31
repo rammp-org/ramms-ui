@@ -6,6 +6,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "Interfaces/IRammsRobotController.h"
 #include "RammsUIEventTypes.h"
+#include "UI/RammsUIStyle.h"
 #include "RammsUISubsystem.generated.h"
 
 /**
@@ -407,6 +408,61 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Commands")
 	FOnRobotCommandSent OnRobotCommandSent;
 
+	// ── Theme Management ─────────────────────────────────────────
+	//
+	// The subsystem owns the current UI theme.  Calling SetTheme()
+	// stores the style, broadcasts OnThemeChanged, and propagates
+	// the new style to all live URammsBaseWidget instances.
+
+	/**
+	 * Set the active UI theme. Pass nullptr to clear.
+	 * Propagates to all live RammsBaseWidget instances.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void SetTheme(URammsUIStyle* NewStyle);
+
+	/**
+	 * Get the current active theme.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms|Theme")
+	URammsUIStyle* GetTheme() const { return CurrentTheme; }
+
+	/**
+	 * Switch to the dark theme.
+	 * Uses DefaultDarkTheme if set, otherwise falls back to built-in factory.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void SetDarkTheme();
+
+	/**
+	 * Switch to the light theme.
+	 * Uses DefaultLightTheme if set, otherwise falls back to built-in factory.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void SetLightTheme();
+
+	/**
+	 * Optional user-created dark theme DataAsset.
+	 * When set, SetDarkTheme() uses this instead of the built-in factory.
+	 * Create a URammsUIStyle DataAsset in the editor and assign it here.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms|Theme")
+	TObjectPtr<URammsUIStyle> DefaultDarkTheme;
+
+	/**
+	 * Optional user-created light theme DataAsset.
+	 * When set, SetLightTheme() uses this instead of the built-in factory.
+	 * Create a URammsUIStyle DataAsset in the editor and assign it here.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms|Theme")
+	TObjectPtr<URammsUIStyle> DefaultLightTheme;
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnThemeChanged, URammsUIStyle*, NewStyle);
+
+	/** Fired when the active UI theme changes */
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Theme")
+	FOnThemeChanged OnThemeChanged;
+
 private:
 	/** Registered robot controllers (weak references to avoid preventing GC) */
 	UPROPERTY()
@@ -418,6 +474,18 @@ private:
 
 	/** Key-value property store */
 	TMap<FName, FString> PropertyStore;
+
+	/** Current active UI theme */
+	UPROPERTY(Transient)
+	TObjectPtr<URammsUIStyle> CurrentTheme;
+
+	/** Cached built-in dark theme (created on first use) */
+	UPROPERTY(Transient)
+	TObjectPtr<URammsUIStyle> BuiltinDarkTheme;
+
+	/** Cached built-in light theme (created on first use) */
+	UPROPERTY(Transient)
+	TObjectPtr<URammsUIStyle> BuiltinLightTheme;
 
 	/** Remove stale (destroyed) entries from the registry */
 	void CleanupStaleControllers();

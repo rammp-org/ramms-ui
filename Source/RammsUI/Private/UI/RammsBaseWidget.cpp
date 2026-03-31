@@ -39,6 +39,21 @@ void URammsBaseWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	// Auto-pick up subsystem theme if no explicit style was set
+	if (!Style)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+			{
+				if (URammsUIStyle* Theme = Subsystem->GetTheme())
+				{
+					Style = Theme;
+				}
+			}
+		}
+	}
+
 	// Style is already applied by NativePreConstruct, but re-apply if
 	// style was set between PreConstruct and Construct (e.g., parent propagation)
 	if (bAutoApplyStyle && Style)
@@ -76,7 +91,7 @@ void URammsBaseWidget::SetStyle(URammsUIStyle* NewStyle)
 
 void URammsBaseWidget::PropagateStyleToChildren()
 {
-	if (!bPropagateStyleToChildren || !Style)
+	if (!bPropagateStyleToChildren || !Style || !WidgetTree)
 		return;
 
 	// Walk all widgets in our WidgetTree and propagate style to child RammsBaseWidgets
