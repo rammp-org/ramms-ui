@@ -354,6 +354,61 @@ struct FRammsCheckBoxStyle
 };
 
 /**
+ * Colour picker appearance settings (gradient bars, swatch, thumb)
+ */
+USTRUCT(BlueprintType)
+struct FRammsColorPickerStyle
+{
+	GENERATED_BODY()
+
+	/** Height of each gradient bar in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "8.0", ClampMax = "64.0"))
+	float GradientHeight = 20.0f;
+
+	/** Corner radius for the gradient bars */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "0.0", ClampMax = "16.0"))
+	float GradientCornerRadius = 4.0f;
+
+	/** Size of the colour swatch square in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "12.0", ClampMax = "64.0"))
+	float SwatchSize = 28.0f;
+
+	/** Corner radius for the swatch */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "0.0", ClampMax = "16.0"))
+	float SwatchCornerRadius = 4.0f;
+
+	/** Thumb diameter in pixels */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "4.0", ClampMax = "64.0"))
+	float ThumbSize = 24.0f;
+
+	/** Thumb color (normal state) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker")
+	FLinearColor ThumbColor = FLinearColor::White;
+
+	/** Thumb color when hovered */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker")
+	FLinearColor ThumbHoveredColor = FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
+
+	/** Thumb outline color (for visibility against any gradient colour) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker")
+	FLinearColor ThumbOutlineColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.6f);
+
+	/** Thumb outline width */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker", meta = (ClampMin = "0.0", ClampMax = "4.0"))
+	float ThumbOutlineWidth = 1.5f;
+
+	/** Swatch border color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ColorPicker")
+	FLinearColor SwatchBorderColor = FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
+
+	/** Get effective thumb diameter (falls back to 90% of gradient height if somehow 0). */
+	float GetEffectiveThumbSize(float FallbackGradientHeight) const
+	{
+		return (ThumbSize > 0.0f) ? ThumbSize : FMath::Max(FallbackGradientHeight * 0.9f, 12.0f);
+	}
+};
+
+/**
  * DataAsset defining the visual style for RammsUI
  * Create instances in the editor for different themes (Dark, Light, Custom, etc.)
  */
@@ -394,6 +449,10 @@ public:
 	/** Default checkbox / radio button appearance */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FRammsCheckBoxStyle CheckBox;
+
+	/** Default colour picker appearance (gradient bars, swatch, thumb) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	FRammsColorPickerStyle ColorPicker;
 
 	/** Default fade in animation */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animations")

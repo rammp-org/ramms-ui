@@ -272,6 +272,7 @@ void URammsUIStyle::ResetToDarkDefaults()
 	ScrollBar = FRammsScrollBarStyle();
 	Slider = FRammsSliderStyle();
 	CheckBox = FRammsCheckBoxStyle();
+	ColorPicker = FRammsColorPickerStyle();
 	FadeInCurve = FRammsAnimationCurve();
 	FadeOutCurve = FRammsAnimationCurve();
 	SlideCurve = FRammsAnimationCurve();
@@ -305,6 +306,12 @@ void URammsUIStyle::ResetToLightDefaults()
 	CheckBox.BorderColor = FLinearColor(0.7f, 0.7f, 0.7f, 1.0f);
 	CheckBox.CheckMarkColor = FLinearColor::White;
 
+	// Light-theme colour picker: dark thumb for contrast against bright gradients
+	ColorPicker.ThumbColor = Colors.Primary;
+	ColorPicker.ThumbHoveredColor = FLinearColor(0.15f, 0.15f, 0.15f, 1.0f);
+	ColorPicker.ThumbOutlineColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.8f);
+	ColorPicker.SwatchBorderColor = FLinearColor(0.7f, 0.7f, 0.7f, 1.0f);
+
 	MarkPackageDirty();
 }
 
@@ -321,6 +328,7 @@ void URammsUIStyle::CopyFrom(const URammsUIStyle* Source)
 	ScrollBar = Source->ScrollBar;
 	Slider = Source->Slider;
 	CheckBox = Source->CheckBox;
+	ColorPicker = Source->ColorPicker;
 	FadeInCurve = Source->FadeInCurve;
 	FadeOutCurve = Source->FadeOutCurve;
 	SlideCurve = Source->SlideCurve;

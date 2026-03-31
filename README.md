@@ -308,6 +308,7 @@ All widgets inherit from **`URammsBaseWidget`** (`UUserWidget`), which provides:
 | `URammsJoystickWidget` | 2D joystick input for movement commands |
 | `URammsRadioButton` | Mutual-exclusion radio group, themed checkboxes via `FRammsCheckBoxStyle` |
 | `URammsTextBlock` | Themed text block — variant (`HeadingLarge` … `Monospace`), color mode (`Primary` / `Secondary` / `Accent` / `Custom` / …), auto-updates on theme change |
+| `URammsColorPicker` | HSV colour picker with hue rainbow gradient slider, optional saturation/brightness sliders, live colour preview swatch, and hex value display. Gradient textures are generated procedurally. |
 | `URammsImageButton` | Icon button with image background |
 | `URammsNotificationWidget` | Single toast notification with severity level |
 | `URammsNotificationContainer` | Viewport container that stacks and auto-dismisses notifications |
