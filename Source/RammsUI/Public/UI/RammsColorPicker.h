@@ -186,7 +186,13 @@ private:
 	/** Rebuild the saturation and brightness gradient textures to reflect current HSV. */
 	void RefreshDependentGradients();
 
-	/** Update the swatch color, hex label, and slider bar transparent style. */
+	/** Rebuild only the saturation gradient (depends on Hue). */
+	void RefreshSaturationGradient();
+
+	/** Rebuild only the brightness gradient (depends on Hue + Saturation). */
+	void RefreshBrightnessGradient();
+
+	/** Update the swatch colour and hex label. */
 	void UpdateSwatchAndLabels();
 
 	/** Make a slider's bar fully transparent so the gradient image shows through. */

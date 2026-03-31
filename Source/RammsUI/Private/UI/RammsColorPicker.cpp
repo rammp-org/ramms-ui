@@ -454,33 +454,40 @@ void URammsColorPicker::UpdateTextureData(UTexture2D* Texture, const TArray<FCol
 	Texture->UpdateResource();
 }
 
+void URammsColorPicker::RefreshSaturationGradient()
+{
+	if (!SatTexture)
+		return;
+
+	TArray<FColor> Pixels;
+	Pixels.SetNum(GRADIENT_WIDTH);
+	for (int32 X = 0; X < GRADIENT_WIDTH; ++X)
+	{
+		float S = static_cast<float>(X) / (GRADIENT_WIDTH - 1);
+		Pixels[X] = HSVToLinear(Hue, S, 1.0f).ToFColor(true);
+	}
+	UpdateTextureData(SatTexture, Pixels);
+}
+
+void URammsColorPicker::RefreshBrightnessGradient()
+{
+	if (!BriTexture)
+		return;
+
+	TArray<FColor> Pixels;
+	Pixels.SetNum(GRADIENT_WIDTH);
+	for (int32 X = 0; X < GRADIENT_WIDTH; ++X)
+	{
+		float V = static_cast<float>(X) / (GRADIENT_WIDTH - 1);
+		Pixels[X] = HSVToLinear(Hue, Saturation, V).ToFColor(true);
+	}
+	UpdateTextureData(BriTexture, Pixels);
+}
+
 void URammsColorPicker::RefreshDependentGradients()
 {
-	// Saturation gradient depends on current Hue
-	if (SatTexture)
-	{
-		TArray<FColor> Pixels;
-		Pixels.SetNum(GRADIENT_WIDTH);
-		for (int32 X = 0; X < GRADIENT_WIDTH; ++X)
-		{
-			float S = static_cast<float>(X) / (GRADIENT_WIDTH - 1);
-			Pixels[X] = HSVToLinear(Hue, S, 1.0f).ToFColor(true);
-		}
-		UpdateTextureData(SatTexture, Pixels);
-	}
-
-	// Brightness gradient depends on current Hue + Saturation
-	if (BriTexture)
-	{
-		TArray<FColor> Pixels;
-		Pixels.SetNum(GRADIENT_WIDTH);
-		for (int32 X = 0; X < GRADIENT_WIDTH; ++X)
-		{
-			float V = static_cast<float>(X) / (GRADIENT_WIDTH - 1);
-			Pixels[X] = HSVToLinear(Hue, Saturation, V).ToFColor(true);
-		}
-		UpdateTextureData(BriTexture, Pixels);
-	}
+	RefreshSaturationGradient();
+	RefreshBrightnessGradient();
 }
 
 void URammsColorPicker::UpdateSwatchBrush(const FRammsColorPickerStyle& PS)
@@ -498,21 +505,13 @@ void URammsColorPicker::UpdateSwatchBrush(const FRammsColorPickerStyle& PS)
 
 void URammsColorPicker::UpdateSwatchAndLabels()
 {
-	FLinearColor CurrentColor = GetColor();
-
-	if (SwatchImage)
-	{
-		FRammsColorPickerStyle PS = ResolvePickerStyle();
-		FSlateBrush			   Brush = URammsUIStyle::MakeRoundedBoxBrush(
-					   CurrentColor, PS.SwatchCornerRadius,
-					   PS.SwatchBorderColor, 1.0f);
-		SwatchImage->SetBrush(Brush);
-	}
+	UpdateSwatchBrush(ResolvePickerStyle());
 
 	if (HexLabel && bShowHexValue)
 	{
-		FColor	Quantized = CurrentColor.ToFColor(true);
-		FString Hex = FString::Printf(TEXT("#%02X%02X%02X"), Quantized.R, Quantized.G, Quantized.B);
+		FLinearColor CurrentColor = GetColor();
+		FColor		 Quantized = CurrentColor.ToFColor(true);
+		FString		 Hex = FString::Printf(TEXT("#%02X%02X%02X"), Quantized.R, Quantized.G, Quantized.B);
 		HexLabel->SetText(FText::FromString(Hex));
 	}
 }
@@ -524,28 +523,28 @@ void URammsColorPicker::OnHueSliderChanged(float NewValue)
 	Hue = NewValue * 360.0f;
 	RefreshDependentGradients();
 	UpdateSwatchAndLabels();
-	BroadcastChange();
+	OnColorChanged.Broadcast(GetColor());
+	OnHueChanged.Broadcast(Hue);
 }
 
 void URammsColorPicker::OnSaturationSliderChanged(float NewValue)
 {
 	Saturation = NewValue;
-	RefreshDependentGradients();
+	RefreshBrightnessGradient();
 	UpdateSwatchAndLabels();
-	BroadcastChange();
+	OnColorChanged.Broadcast(GetColor());
 }
 
 void URammsColorPicker::OnBrightnessSliderChanged(float NewValue)
 {
 	Brightness = NewValue;
 	UpdateSwatchAndLabels();
-	BroadcastChange();
+	OnColorChanged.Broadcast(GetColor());
 }
 
 void URammsColorPicker::BroadcastChange()
 {
 	OnColorChanged.Broadcast(GetColor());
-	OnHueChanged.Broadcast(Hue);
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

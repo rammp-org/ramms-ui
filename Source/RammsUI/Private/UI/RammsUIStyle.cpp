@@ -258,6 +258,12 @@ URammsUIStyle* URammsUIStyle::CreateDefaultLightTheme()
 	Style->CheckBox.BorderColor = FLinearColor(0.7f, 0.7f, 0.7f, 1.0f);
 	Style->CheckBox.CheckMarkColor = FLinearColor::White;
 
+	// Light-theme colour picker: dark thumb for contrast against bright gradients
+	Style->ColorPicker.ThumbColor = Style->Colors.Primary;
+	Style->ColorPicker.ThumbHoveredColor = FLinearColor(0.15f, 0.15f, 0.15f, 1.0f);
+	Style->ColorPicker.ThumbOutlineColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.8f);
+	Style->ColorPicker.SwatchBorderColor = FLinearColor(0.7f, 0.7f, 0.7f, 1.0f);
+
 	return Style;
 }
 
