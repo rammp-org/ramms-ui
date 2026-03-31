@@ -3,6 +3,7 @@
 #include "RammsCameraProjectionManager.h"
 #include "RammsCameraProjectorComponent.h"
 #include "RammsCameraProviderComponent.h"
+#include "RammsStreamCameraBridge.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
@@ -26,6 +27,7 @@ void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent
 		P->TargetStencilValue = DefaultTargetStencil;
 
 		P->bEnablePGM = bEnablePGM;
+		P->bGPUAccelerated = bGPUAccelerated;
 		P->PGMMaterial = PGMMaterial;
 		P->MaxEdgeStretchCM = MaxEdgeStretchCM;
 		P->DepthScaleToCM = DepthScaleToCM;
@@ -86,10 +88,23 @@ void URammsCameraProjectionManager::BeginPlay()
 			);
 		}
 	}
+
+	// CPU PGM needs raw data from the bridge; GPU PGM does not.
+	UpdateRawDataRequest();
 }
 
 void URammsCameraProjectionManager::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
+	// Release raw data request if we made one
+	if (bRequestedRawData)
+	{
+		if (URammsStreamCameraBridge* Bridge = GetOwner()->FindComponentByClass<URammsStreamCameraBridge>())
+		{
+			Bridge->ReleaseRawDataForwarding();
+		}
+		bRequestedRawData = false;
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(DeferredDiscoveryHandle);
@@ -346,6 +361,7 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 
 	// Copy PGM settings
 	Projector->bEnablePGM = bEnablePGM;
+	Projector->bGPUAccelerated = bGPUAccelerated;
 	Projector->PGMMaterial = PGMMaterial;
 	Projector->MaxEdgeStretchCM = MaxEdgeStretchCM;
 	Projector->DepthScaleToCM = DepthScaleToCM;
@@ -697,5 +713,54 @@ void URammsCameraProjectionManager::SetPGMEnabled(bool bEnabled)
 		{
 			Pair.Value->SetPGMEnabled(bEnabled);
 		}
+	}
+
+	UpdateRawDataRequest();
+}
+
+void URammsCameraProjectionManager::SetGPUAccelerated(bool bGPU)
+{
+	bGPUAccelerated = bGPU;
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->bGPUAccelerated = bGPU;
+		}
+	}
+
+	UpdateRawDataRequest();
+}
+
+void URammsCameraProjectionManager::UpdateRawDataRequest()
+{
+	const bool bNeedRawData = bEnablePGM && !bGPUAccelerated;
+
+	if (bNeedRawData == bRequestedRawData)
+	{
+		return;
+	}
+
+	URammsStreamCameraBridge* Bridge = GetOwner()
+		? GetOwner()->FindComponentByClass<URammsStreamCameraBridge>()
+		: nullptr;
+
+	if (!Bridge)
+	{
+		return;
+	}
+
+	if (bNeedRawData)
+	{
+		Bridge->RequestRawDataForwarding();
+		bRequestedRawData = true;
+		UE_LOG(LogRammsProjection, Log, TEXT("CPU PGM active — requested raw data forwarding from bridge"));
+	}
+	else
+	{
+		Bridge->ReleaseRawDataForwarding();
+		bRequestedRawData = false;
+		UE_LOG(LogRammsProjection, Log, TEXT("Raw data forwarding released (GPU PGM or PGM disabled)"));
 	}
 }

@@ -165,18 +165,21 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 		}
 	}
 
-	// Forward the texture with CPU-side raw data for PGM consumers.
-	// Query the sink that owns this channel's raw data.
+	// Forward the texture with CPU-side raw data for PGM consumers
+	// (only when at least one consumer has requested raw data forwarding).
 	TArray<uint8> SinkRaw;
 	EPixelFormat  PixelFormat = PF_Unknown;
-	for (URammsStreamSinkComponent* Sink : BoundSinks)
+	if (RawDataRequestCount > 0)
 	{
-		if (!Sink)
-			continue;
-		if (Sink->GetLatestRawData(ChannelID, SinkRaw) && SinkRaw.Num() > 0)
+		for (URammsStreamSinkComponent* Sink : BoundSinks)
 		{
-			PixelFormat = Sink->GetLatestPixelFormat(ChannelID);
-			break;
+			if (!Sink)
+				continue;
+			if (Sink->GetLatestRawData(ChannelID, SinkRaw) && SinkRaw.Num() > 0)
+			{
+				PixelFormat = Sink->GetLatestPixelFormat(ChannelID);
+				break;
+			}
 		}
 	}
 
@@ -231,4 +234,16 @@ bool URammsStreamCameraBridge::ParseTransformFromMeta(
 		OutTransform = ParsedTransform;
 	}
 	return true;
+}
+
+void URammsStreamCameraBridge::RequestRawDataForwarding()
+{
+	++RawDataRequestCount;
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: raw data requested (count=%d)"), RawDataRequestCount);
+}
+
+void URammsStreamCameraBridge::ReleaseRawDataForwarding()
+{
+	RawDataRequestCount = FMath::Max(0, RawDataRequestCount - 1);
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: raw data released (count=%d)"), RawDataRequestCount);
 }

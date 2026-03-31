@@ -32,7 +32,7 @@ void URammsCameraProjectorComponent::PostEditChangeProperty(FPropertyChangedEven
 
 	if (PropertyChangedEvent.Property && (PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, bEnablePGM) || PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(URammsCameraProjectorComponent, PGMMaterial)))
 	{
-		UpdatePGM();
+		MaybeUpdatePGM();
 	}
 
 	if (ProcMeshComponent && PropertyChangedEvent.Property)
@@ -245,14 +245,315 @@ void URammsCameraProjectorComponent::MaybeUpdatePGM()
 	if (!bEnablePGM)
 		return;
 
-	// Only rebuild when BOTH color and depth have been updated since last PGM run
-	if (LastColorTimestamp > LastPGMTimestamp && LastDepthTimestamp > LastPGMTimestamp)
+	if (bGPUAccelerated)
 	{
-		UpdatePGM();
+		// GPU path: only needs depth + color textures (no raw data)
+		if (CurrentDepthTexture && CurrentColorTexture)
+		{
+			UpdatePGM_GPU();
+		}
+	}
+	else
+	{
+		// CPU path: needs both raw data buffers updated since last PGM
+		if (LastColorTimestamp > LastPGMTimestamp && LastDepthTimestamp > LastPGMTimestamp)
+		{
+			UpdatePGM_CPU();
+		}
 	}
 }
 
-void URammsCameraProjectorComponent::UpdatePGM()
+// ── GPU PGM Path ──────────────────────────────────────────────────
+
+void URammsCameraProjectorComponent::BuildPGMGrid(int32 GridW, int32 GridH)
+{
+	EnsurePGMCreated();
+	if (!ProcMeshComponent)
+		return;
+
+	const int32 NumVerts = GridW * GridH;
+	const int32 NumQuads = (GridW - 1) * (GridH - 1);
+
+	TArray<FVector>			 Vertices;
+	TArray<int32>			 Triangles;
+	TArray<FVector>			 Normals;
+	TArray<FVector2D>		 UV0;
+	TArray<FLinearColor>	 VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+
+	Vertices.Reserve(NumVerts);
+	UV0.Reserve(NumVerts);
+	Triangles.Reserve(NumQuads * 6);
+
+	// Generate flat grid with UVs mapping to depth texture coords
+	for (int32 y = 0; y < GridH; ++y)
+	{
+		for (int32 x = 0; x < GridW; ++x)
+		{
+			float U = static_cast<float>(x) / static_cast<float>(GridW - 1);
+			float V = static_cast<float>(y) / static_cast<float>(GridH - 1);
+
+			// Place vertices at origin — WPO will move them
+			Vertices.Add(FVector::ZeroVector);
+			UV0.Add(FVector2D(U, V));
+		}
+	}
+
+	// Generate full grid triangles (all quads, material handles validity)
+	for (int32 y = 0; y < GridH - 1; ++y)
+	{
+		for (int32 x = 0; x < GridW - 1; ++x)
+		{
+			int32 i0 = y * GridW + x;
+			int32 i1 = y * GridW + (x + 1);
+			int32 i2 = (y + 1) * GridW + x;
+			int32 i3 = (y + 1) * GridW + (x + 1);
+
+			// Two CCW triangles per quad
+			Triangles.Add(i0);
+			Triangles.Add(i2);
+			Triangles.Add(i1);
+
+			Triangles.Add(i1);
+			Triangles.Add(i2);
+			Triangles.Add(i3);
+		}
+	}
+
+	Normals.Init(FVector(1, 0, 0), NumVerts);
+
+	// Add two sentinel vertices at bounds extremes (not referenced by any triangle).
+	// All real vertices are at origin (WPO moves them), which produces zero-size
+	// bounds and immediate frustum culling. These sentinels force a large bounding
+	// box so the mesh survives culling while WPO displaces the actual geometry.
+	float Extent = MaxDepthCM * 2.0f;
+	Vertices.Add(FVector(-Extent, -Extent, -Extent));
+	Vertices.Add(FVector(Extent, Extent, Extent));
+	UV0.Add(FVector2D(0, 0));
+	UV0.Add(FVector2D(0, 0));
+	Normals.Add(FVector(1, 0, 0));
+	Normals.Add(FVector(1, 0, 0));
+
+	ProcMeshComponent->ClearAllMeshSections();
+	ProcMeshComponent->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
+
+	LastGridDecimation = Decimation;
+	LastGridDepthW = GridW;
+	LastGridDepthH = GridH;
+
+	UE_LOG(LogRammsPGM, Log,
+		TEXT("BuildPGMGrid: %dx%d grid (%d verts, %d tris)"),
+		GridW, GridH, NumVerts, NumQuads * 2);
+}
+
+void URammsCameraProjectorComponent::UpdatePGMMaterialParams()
+{
+	if (!PGMMaterialInstance)
+		return;
+
+	// Depth texture
+	if (CurrentDepthTexture)
+	{
+		PGMMaterialInstance->SetTextureParameterValue(FName("DepthTexture"), CurrentDepthTexture);
+	}
+
+	// RGB texture
+	if (CurrentColorTexture)
+	{
+		PGMMaterialInstance->SetTextureParameterValue(FName("CameraTexture"), CurrentColorTexture);
+	}
+
+	// Intrinsics (depth camera, adjusted for depth texture resolution)
+	float Fx = FocalLengthX;
+	float Fy = FocalLengthY;
+	float Cx = PrincipalPointX;
+	float Cy = PrincipalPointY;
+
+	if (ImageWidth > 0 && ImageHeight > 0 && DepthFrameWidth > 0 && DepthFrameHeight > 0)
+	{
+		float ScaleX = static_cast<float>(DepthFrameWidth) / static_cast<float>(ImageWidth);
+		float ScaleY = static_cast<float>(DepthFrameHeight) / static_cast<float>(ImageHeight);
+		Fx *= ScaleX;
+		Fy *= ScaleY;
+		Cx *= ScaleX;
+		Cy *= ScaleY;
+	}
+
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMIntrinsics"),
+		FLinearColor(Fx, Fy, Cx, Cy));
+
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMImageSize"),
+		FLinearColor(
+			static_cast<float>(ColorFrameWidth > 0 ? ColorFrameWidth : ImageWidth),
+			static_cast<float>(ColorFrameHeight > 0 ? ColorFrameHeight : ImageHeight),
+			static_cast<float>(DepthFrameWidth),
+			static_cast<float>(DepthFrameHeight)));
+
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMDepthConfig"),
+		FLinearColor(DepthScaleToCM, MinDepthCM, MaxDepthCM, MaxEdgeStretchCM));
+
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMParallax"),
+		FLinearColor(SensorBaselineY, FocalLengthX, FocalLengthY, 0.0f));
+
+	// Color camera principal point + focal lengths for parallax UV correction.
+	// Without these the material would assume cx=0.5*colorW, cy=0.5*colorH.
+	PGMMaterialInstance->SetVectorParameterValue(
+		FName("PGMColorIntrinsics"),
+		FLinearColor(FocalLengthX, FocalLengthY, PrincipalPointX, PrincipalPointY));
+
+	// Grid step: UV distance between adjacent grid vertices = 1/(gridDim - 1)
+	int32 Stride = FMath::Max(1, Decimation);
+	int32 GridW = DepthFrameWidth / Stride;
+	int32 GridH = DepthFrameHeight / Stride;
+	if (GridW > 1 && GridH > 1)
+	{
+		PGMMaterialInstance->SetVectorParameterValue(
+			FName("PGMGridStep"),
+			FLinearColor(
+				1.0f / static_cast<float>(GridW - 1),
+				1.0f / static_cast<float>(GridH - 1),
+				0.0f, 0.0f));
+	}
+}
+
+void URammsCameraProjectorComponent::UpdatePGM_GPU()
+{
+	if (!bEnablePGM)
+	{
+		if (ProcMeshComponent)
+			ProcMeshComponent->SetVisibility(false);
+		return;
+	}
+
+	if (!CurrentDepthTexture || !CurrentColorTexture)
+	{
+		UE_LOG(LogRammsPGM, Verbose, TEXT("UpdatePGM_GPU: waiting for textures (depth=%s, color=%s)"),
+			CurrentDepthTexture ? TEXT("yes") : TEXT("no"),
+			CurrentColorTexture ? TEXT("yes") : TEXT("no"));
+		return;
+	}
+
+	if (!PGMMaterial)
+	{
+		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM_GPU: PGMMaterial is not set — assign your WPO material"));
+		return;
+	}
+
+	// Sync check: skip if color/depth frames are too far apart in time
+	if (SyncThresholdMS > 0.0f && LastColorTimestamp > 0 && LastDepthTimestamp > 0)
+	{
+		double DeltaMS = FMath::Abs(static_cast<double>(LastColorTimestamp - LastDepthTimestamp)) / 1000.0;
+		if (DeltaMS > SyncThresholdMS)
+		{
+			UE_LOG(LogRammsPGM, Verbose,
+				TEXT("UpdatePGM_GPU: frames out of sync (%.1f ms > %.1f ms threshold), skipping"),
+				DeltaMS, SyncThresholdMS);
+			return;
+		}
+	}
+
+	// Determine depth texture dimensions
+	int32 DepthW = DepthFrameWidth;
+	int32 DepthH = DepthFrameHeight;
+
+	// If no raw data dimensions were set, try to get from texture
+	if (DepthW <= 0 || DepthH <= 0)
+	{
+		if (UTexture2D* Tex2D = Cast<UTexture2D>(CurrentDepthTexture.Get()))
+		{
+			DepthW = Tex2D->GetSizeX();
+			DepthH = Tex2D->GetSizeY();
+		}
+		else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(CurrentDepthTexture.Get()))
+		{
+			DepthW = RT->SizeX;
+			DepthH = RT->SizeY;
+		}
+
+		if (DepthW > 0 && DepthH > 0)
+		{
+			DepthFrameWidth = DepthW;
+			DepthFrameHeight = DepthH;
+		}
+	}
+
+	if (DepthW <= 0 || DepthH <= 0)
+	{
+		UE_LOG(LogRammsPGM, Warning, TEXT("UpdatePGM_GPU: cannot determine depth texture size"));
+		return;
+	}
+
+	// Similarly for color dimensions
+	if (ColorFrameWidth <= 0 || ColorFrameHeight <= 0)
+	{
+		if (UTexture2D* Tex2D = Cast<UTexture2D>(CurrentColorTexture.Get()))
+		{
+			ColorFrameWidth = Tex2D->GetSizeX();
+			ColorFrameHeight = Tex2D->GetSizeY();
+		}
+		else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(CurrentColorTexture.Get()))
+		{
+			ColorFrameWidth = RT->SizeX;
+			ColorFrameHeight = RT->SizeY;
+		}
+	}
+
+	int32 Stride = FMath::Max(1, Decimation);
+	// Compute grid size so that vertices land on integer stride steps:
+	// grid index (0..GridW-1) maps to pixel x = index * Stride, similarly for y.
+	int32 GridW = (DepthW - 1) / Stride + 1;
+	int32 GridH = (DepthH - 1) / Stride + 1;
+
+	if (GridW < 2 || GridH < 2)
+	{
+		UE_LOG(LogRammsPGM, Warning,
+			TEXT("UpdatePGM_GPU: grid too small (%dx%d) with decimation %d on %dx%d depth"),
+			GridW, GridH, Decimation, DepthW, DepthH);
+		return;
+	}
+
+	EnsurePGMCreated();
+
+	// Rebuild grid mesh only if decimation or resolution changed
+	if (Decimation != LastGridDecimation || GridW != LastGridDepthW || GridH != LastGridDepthH)
+	{
+		BuildPGMGrid(GridW, GridH);
+	}
+
+	// Create / update MID
+	if (PGMMaterial)
+	{
+		if (!PGMMaterialInstance || PGMMaterialInstance->Parent != PGMMaterial)
+		{
+			PGMMaterialInstance = UMaterialInstanceDynamic::Create(PGMMaterial, this);
+		}
+		ProcMeshComponent->SetMaterial(0, PGMMaterialInstance.Get());
+	}
+
+	// Push per-frame parameters (textures + intrinsics)
+	UpdatePGMMaterialParams();
+
+	ProcMeshComponent->SetVisibility(bProjectionEnabled && bEnablePGM);
+
+	UE_LOG(LogRammsPGM, Verbose,
+		TEXT("UpdatePGM_GPU: grid=%dx%d, depth=%dx%d, color=%dx%d, intrinsics=(%.1f,%.1f,%.1f,%.1f), depthScale=%.4f, visible=%s"),
+		LastGridDepthW, LastGridDepthH,
+		DepthFrameWidth, DepthFrameHeight,
+		ColorFrameWidth, ColorFrameHeight,
+		FocalLengthX, FocalLengthY, PrincipalPointX, PrincipalPointY,
+		DepthScaleToCM,
+		(bProjectionEnabled && bEnablePGM) ? TEXT("yes") : TEXT("no"));
+
+	LastPGMTimestamp = FMath::Max(LastColorTimestamp, LastDepthTimestamp);
+}
+
+// ── CPU PGM Path (legacy fallback) ───────────────────────────────
+
+void URammsCameraProjectorComponent::UpdatePGM_CPU()
 {
 	if (!bEnablePGM)
 	{
@@ -597,13 +898,27 @@ void URammsCameraProjectorComponent::SetColorTexture(UTexture* Texture, int64 Ti
 		PGMMaterialInstance->SetTextureParameterValue(FName("CameraTexture"), Texture);
 	}
 
-	// PGM fallback: GPU readback when no raw data was provided via SetColorTextureWithData
-	if (bEnablePGM)
+	// CPU PGM path: GPU readback when no raw data was provided via SetColorTextureWithData
+	if (bEnablePGM && !bGPUAccelerated)
 	{
 		ColorRawData.Reset();
 		if (!TryReadTextureToRawData(Texture, ColorRawData, ColorPixelFormat, ColorFrameWidth, ColorFrameHeight))
 		{
 			UE_LOG(LogRammsPGM, Warning, TEXT("SetColorTexture: GPU readback failed for PGM"));
+		}
+	}
+	else if (bGPUAccelerated)
+	{
+		// GPU path: just need texture dimensions for grid sizing
+		if (UTexture2D* Tex2D = Cast<UTexture2D>(Texture))
+		{
+			ColorFrameWidth = Tex2D->GetSizeX();
+			ColorFrameHeight = Tex2D->GetSizeY();
+		}
+		else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
+		{
+			ColorFrameWidth = RT->SizeX;
+			ColorFrameHeight = RT->SizeY;
 		}
 	}
 
@@ -645,13 +960,27 @@ void URammsCameraProjectorComponent::SetDepthTexture(UTexture* Texture, int64 Ti
 	CurrentDepthTexture = Texture;
 	LastDepthTimestamp = Timestamp;
 
-	// PGM fallback: GPU readback when no raw data was provided
-	if (bEnablePGM)
+	// CPU PGM path: GPU readback when no raw data was provided
+	if (bEnablePGM && !bGPUAccelerated)
 	{
 		DepthRawData.Reset();
 		if (!TryReadTextureToRawData(Texture, DepthRawData, DepthPixelFormat, DepthFrameWidth, DepthFrameHeight))
 		{
 			UE_LOG(LogRammsPGM, Warning, TEXT("SetDepthTexture: GPU readback failed for PGM"));
+		}
+	}
+	else if (bGPUAccelerated)
+	{
+		// GPU path: just need texture dimensions for grid sizing
+		if (UTexture2D* Tex2D = Cast<UTexture2D>(Texture))
+		{
+			DepthFrameWidth = Tex2D->GetSizeX();
+			DepthFrameHeight = Tex2D->GetSizeY();
+		}
+		else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
+		{
+			DepthFrameWidth = RT->SizeX;
+			DepthFrameHeight = RT->SizeY;
 		}
 	}
 
@@ -742,6 +1071,10 @@ void URammsCameraProjectorComponent::SetPGMEnabled(bool bEnabled)
 		if (!bEnabled)
 		{
 			ProcMeshComponent->ClearAllMeshSections();
+			// Reset grid state so BuildPGMGrid runs on next enable
+			LastGridDecimation = -1;
+			LastGridDepthW = 0;
+			LastGridDepthH = 0;
 		}
 	}
 
@@ -768,5 +1101,8 @@ void URammsCameraProjectorComponent::RefreshMaterialParameters()
 {
 	UpdateDecalSize();
 	UpdateMaterialParameters();
-	UpdatePGM();
+	// Invalidate timestamp so MaybeUpdatePGM forces a rebuild even if no new
+	// frames arrived (caller changed Decimation, DepthScale, etc.)
+	LastPGMTimestamp = 0;
+	MaybeUpdatePGM();
 }

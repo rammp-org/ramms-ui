@@ -69,7 +69,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM")
 	bool bEnablePGM = false;
 
-	/** Material used for PGM rendering (requires Vertex Color node) */
+	/** GPU-accelerated PGM (WPO-based, no CPU readback). Requires a WPO material using RammsPGM.ush. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
+	bool bGPUAccelerated = true;
+
+	/** Material used for PGM rendering.
+	 *  GPU mode: must include RammsPGM.ush and use WPO for deprojection.
+	 *  CPU mode: should use Vertex Color node for per-vertex colors. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|PGM", meta = (EditCondition = "bEnablePGM"))
 	TObjectPtr<UMaterialInterface> PGMMaterial;
 
@@ -151,6 +157,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
 	void SetPGMEnabled(bool bEnabled);
 
+	/** Switch between GPU and CPU PGM at runtime. Propagates to all projectors
+	 *  and updates raw-data forwarding on the bridge accordingly. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetGPUAccelerated(bool bGPU);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
@@ -187,6 +198,13 @@ private:
 	void DiscoverProviders();
 
 	FTimerHandle DeferredDiscoveryHandle;
+
+	/** True if we called RequestRawDataForwarding on the bridge (so we release on EndPlay). */
+	bool bRequestedRawData = false;
+
+	/** Requests or releases raw-data forwarding on the bridge to match current mode.
+	 *  CPU PGM (bEnablePGM && !bGPUAccelerated) needs raw data; all other modes don't. */
+	void UpdateRawDataRequest();
 
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
