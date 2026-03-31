@@ -239,11 +239,11 @@ bool URammsStreamCameraBridge::ParseTransformFromMeta(
 void URammsStreamCameraBridge::RequestRawDataForwarding()
 {
 	++RawDataRequestCount;
-	UE_LOG(LogTemp, Log, TEXT("StreamCameraBridge: raw data requested (count=%d)"), RawDataRequestCount);
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: raw data requested (count=%d)"), RawDataRequestCount);
 }
 
 void URammsStreamCameraBridge::ReleaseRawDataForwarding()
 {
 	RawDataRequestCount = FMath::Max(0, RawDataRequestCount - 1);
-	UE_LOG(LogTemp, Log, TEXT("StreamCameraBridge: raw data released (count=%d)"), RawDataRequestCount);
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: raw data released (count=%d)"), RawDataRequestCount);
 }
