@@ -43,8 +43,7 @@ public class RammsUI : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Json",           // FJsonObject/FJsonSerializer used by StreamCameraBridge
-				"CameraCapture"   // TODO: @alex check if I need this as a private dependency 
+				"Json"           // FJsonObject/FJsonSerializer used by StreamCameraBridge
 			}
 			);
 
