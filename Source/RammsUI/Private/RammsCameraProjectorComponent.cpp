@@ -503,8 +503,10 @@ void URammsCameraProjectorComponent::UpdatePGM_GPU()
 	}
 
 	int32 Stride = FMath::Max(1, Decimation);
-	int32 GridW = DepthW / Stride;
-	int32 GridH = DepthH / Stride;
+	// Compute grid size so that vertices land on integer stride steps:
+	// grid index (0..GridW-1) maps to pixel x = index * Stride, similarly for y.
+	int32 GridW = (DepthW - 1) / Stride + 1;
+	int32 GridH = (DepthH - 1) / Stride + 1;
 
 	if (GridW < 2 || GridH < 2)
 	{
