@@ -157,6 +157,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
 	void SetPGMEnabled(bool bEnabled);
 
+	/** Switch between GPU and CPU PGM at runtime. Propagates to all projectors
+	 *  and updates raw-data forwarding on the bridge accordingly. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetGPUAccelerated(bool bGPU);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
@@ -196,6 +201,10 @@ private:
 
 	/** True if we called RequestRawDataForwarding on the bridge (so we release on EndPlay). */
 	bool bRequestedRawData = false;
+
+	/** Requests or releases raw-data forwarding on the bridge to match current mode.
+	 *  CPU PGM (bEnablePGM && !bGPUAccelerated) needs raw data; all other modes don't. */
+	void UpdateRawDataRequest();
 
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
