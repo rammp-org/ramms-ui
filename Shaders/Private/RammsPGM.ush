@@ -122,7 +122,9 @@ float3 RammsPGM_WorldPositionOffset(
 		// Collapse if 3D distance to neighbor exceeds threshold
 		float2 NPixel = NUV * (DepthImageSize - 1);
 		float3 NPos = RammsPGM_Deproject(NPixel, NCM, Intrinsics);
-		if (distance(Pos, NPos) > MaxEdge)
+		float3 Delta = NPos - Pos;
+		float DistSq = dot(Delta, Delta);
+		if (DistSq > MaxEdge * MaxEdge)
 		{
 			return DEGENERATE;
 		}
