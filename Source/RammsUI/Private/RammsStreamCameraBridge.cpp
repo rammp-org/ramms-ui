@@ -92,9 +92,19 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 		}
 	}
 
-	// Auto-register the stream on first frame
-	if (!RegisteredChannels.Contains(ChannelID))
+	// Check if this channel needs (re-)registration.
+	// A stream_id override arriving after the first frame requires re-registration.
+	const FString* PreviousStreamID = ChannelStreamIDs.Find(ChannelID);
+	const bool	   bNeedsRegistration = !PreviousStreamID || *PreviousStreamID != StreamID;
+
+	if (bNeedsRegistration)
 	{
+		// Deactivate the old stream if the ID changed
+		if (PreviousStreamID && !PreviousStreamID->IsEmpty())
+		{
+			CameraProvider->SetStreamActive(*PreviousStreamID, false);
+		}
+
 		const int32 Width = Texture->GetSizeX();
 		const int32 Height = Texture->GetSizeY();
 
@@ -221,7 +231,7 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 
 		CameraProvider->RegisterStream(Info);
 		CameraProvider->SetStreamActive(StreamID, true);
-		RegisteredChannels.Add(ChannelID);
+		ChannelStreamIDs.Add(ChannelID, StreamID);
 
 		UE_LOG(LogRammsStreamBridge, Log,
 			TEXT("Auto-registered stream '%s' (group='%s', role=%d, %dx%d, fmt=%s, intrinsics=%d)"),

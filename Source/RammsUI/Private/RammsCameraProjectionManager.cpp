@@ -424,6 +424,14 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		if (!DepthID.IsEmpty())
 		{
 			Projector->DepthStreamID = DepthID;
+
+			// Apply depth format scaling from the depth stream's info
+			FRammsCameraStreamInfo DepthInfo;
+			if (Iface->GetStreamInfo(DepthID, DepthInfo))
+			{
+				Projector->ApplyDepthStreamFormat(DepthInfo);
+			}
+
 			if (!Iface->IsStreamActive(DepthID))
 			{
 				Iface->StartStream(DepthID);

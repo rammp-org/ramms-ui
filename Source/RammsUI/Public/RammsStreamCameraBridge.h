@@ -76,8 +76,8 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<URammsStreamSinkComponent>> BoundSinks;
 
-	/** Track which channels have been registered as streams. */
-	TSet<int32> RegisteredChannels;
+	/** Track which channels have been registered and their current stream IDs. */
+	TMap<int32, FString> ChannelStreamIDs;
 
 	/** Bound to URammsStreamSinkComponent::OnFrameReceived. */
 	UFUNCTION()

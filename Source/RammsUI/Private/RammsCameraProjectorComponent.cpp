@@ -412,7 +412,17 @@ void URammsCameraProjectorComponent::UpdatePGMMaterialParams()
 
 	// G16 (uint16) textures are normalized to [0,1] by the GPU when sampled.
 	// Multiply by 65535 to recover the raw integer value before applying DepthScaleToCM.
-	const float DepthUnnormalize = (DepthPixelFormat == PF_G16) ? 65535.0f : 1.0f;
+	// Use DetectedDepthFormat (set from stream info) as the primary source;
+	// fall back to DepthPixelFormat (set when raw data is provided).
+	float DepthUnnormalize = 1.0f;
+	if (DetectedDepthFormat == ERammsDepthFormat::Uint16MM)
+	{
+		DepthUnnormalize = 65535.0f;
+	}
+	else if (DepthPixelFormat == PF_G16)
+	{
+		DepthUnnormalize = 65535.0f;
+	}
 	PGMMaterialInstance->SetScalarParameterValue(
 		FName("PGMDepthUnnormalize"), DepthUnnormalize);
 
@@ -992,11 +1002,12 @@ void URammsCameraProjectorComponent::SetDepthTexture(UTexture* Texture, int64 Ti
 	}
 	else if (bGPUAccelerated)
 	{
-		// GPU path: just need texture dimensions for grid sizing
+		// GPU path: need texture dimensions and pixel format for grid sizing and unnormalization
 		if (UTexture2D* Tex2D = Cast<UTexture2D>(Texture))
 		{
 			DepthFrameWidth = Tex2D->GetSizeX();
 			DepthFrameHeight = Tex2D->GetSizeY();
+			DepthPixelFormat = Tex2D->GetPixelFormat();
 		}
 		else if (UTextureRenderTarget2D* RT = Cast<UTextureRenderTarget2D>(Texture))
 		{
