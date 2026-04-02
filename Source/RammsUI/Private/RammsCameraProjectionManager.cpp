@@ -296,8 +296,9 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 	for (const FRammsCameraStreamInfo& Info : Streams)
 	{
 		UE_LOG(LogRammsProjection, Verbose,
-			TEXT("  Stream '%s': depth=%d, %dx%d, intrinsics=%d, hasExtrinsic=%d, category=%d"),
-			*Info.StreamID, Info.bIsDepth ? 1 : 0, Info.Width, Info.Height,
+			TEXT("  Stream '%s': role=%d, group='%s', %dx%d, intrinsics=%d, hasExtrinsic=%d, category=%d"),
+			*Info.StreamID, static_cast<int32>(Info.StreamRole), *Info.GroupID,
+			Info.Width, Info.Height,
 			Info.Intrinsics.Num(), Info.bHasExtrinsic ? 1 : 0,
 			static_cast<int32>(Info.FrameCategory));
 
@@ -316,7 +317,7 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 		// Depth streams don't get their own decal projector — they are
 		// linked to a color projector for PGM use.  But we must still
 		// ensure the depth stream is started so frames flow.
-		if (Info.bIsDepth)
+		if (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth)
 		{
 			if (!Iface->IsStreamActive(Info.StreamID))
 			{
@@ -335,6 +336,18 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 			if (Info.bHasExtrinsic)
 			{
 				Projector->SetCameraTransform(Info.Extrinsic);
+			}
+
+			// Auto-link depth stream if one is already registered
+			FString DepthStreamID = FindDepthStreamForColor(Info.StreamID, Iface);
+			if (!DepthStreamID.IsEmpty())
+			{
+				Projector->DepthStreamID = DepthStreamID;
+				FRammsCameraStreamInfo DepthInfo;
+				if (Iface->GetStreamInfo(DepthStreamID, DepthInfo))
+				{
+					Projector->ApplyDepthStreamFormat(DepthInfo);
+				}
 			}
 		}
 	}
@@ -407,38 +420,26 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 		}
 
 		// --- Auto-Link Depth Stream ---
-		// RMSS convention: depth channel = color channel + 100.
-		// Stream IDs are formatted as "prefix/channelID".
-		FString PotentialDepthID;
-		int32	SlashIdx = INDEX_NONE;
-		if (StreamID.FindLastChar(TEXT('/'), SlashIdx))
+		FString DepthID = FindDepthStreamForColor(StreamID, Iface);
+		if (!DepthID.IsEmpty())
 		{
-			FString Prefix = StreamID.Left(SlashIdx);
-			FString ChannelStr = StreamID.Mid(SlashIdx + 1);
-			if (ChannelStr.IsNumeric())
-			{
-				int32 ColorChannel = FCString::Atoi(*ChannelStr);
-				int32 DepthChannel = ColorChannel + 100;
-				PotentialDepthID = FString::Printf(TEXT("%s/%d"), *Prefix, DepthChannel);
-			}
-		}
+			Projector->DepthStreamID = DepthID;
 
-		if (!PotentialDepthID.IsEmpty())
-		{
+			// Apply depth format scaling from the depth stream's info
 			FRammsCameraStreamInfo DepthInfo;
-			if (Iface->GetStreamInfo(PotentialDepthID, DepthInfo))
+			if (Iface->GetStreamInfo(DepthID, DepthInfo))
 			{
-				Projector->DepthStreamID = PotentialDepthID;
-				if (!Iface->IsStreamActive(PotentialDepthID))
-				{
-					Iface->StartStream(PotentialDepthID);
-				}
-				UTexture* DepthTex = Iface->GetStreamTexture(PotentialDepthID);
-				if (DepthTex)
-				{
-					Projector->SetDepthTexture(DepthTex, Iface->GetLastFrameTimestamp(PotentialDepthID));
-				}
-				UE_LOG(LogRammsProjection, Log, TEXT("Linked depth stream '%s' to projector '%s'"), *PotentialDepthID, *StreamID);
+				Projector->ApplyDepthStreamFormat(DepthInfo);
+			}
+
+			if (!Iface->IsStreamActive(DepthID))
+			{
+				Iface->StartStream(DepthID);
+			}
+			UTexture* DepthTex = Iface->GetStreamTexture(DepthID);
+			if (DepthTex)
+			{
+				Projector->SetDepthTexture(DepthTex, Iface->GetLastFrameTimestamp(DepthID));
 			}
 		}
 
@@ -580,36 +581,23 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 	if (Provider && bAutoCreateProjectors)
 	{
 		FRammsCameraStreamInfo Info;
-		if (Provider->GetStreamInfo(StreamID, Info) && Info.bIsDepth)
+		if (Provider->GetStreamInfo(StreamID, Info)
+			&& (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth))
 		{
-			// This is an unlinked depth stream — try to find its color projector
-			int32 SlashIdx = INDEX_NONE;
-			if (StreamID.FindLastChar(TEXT('/'), SlashIdx))
+			FString ColorStreamID = FindColorStreamForDepth(StreamID, Provider);
+			if (!ColorStreamID.IsEmpty())
 			{
-				FString Prefix = StreamID.Left(SlashIdx);
-				FString ChannelStr = StreamID.Mid(SlashIdx + 1);
-				if (ChannelStr.IsNumeric())
+				if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
 				{
-					int32 DepthChannel = FCString::Atoi(*ChannelStr);
-					int32 ColorChannel = DepthChannel - 100;
-					if (ColorChannel >= 0)
+					(*ColorProjector)->DepthStreamID = StreamID;
+					(*ColorProjector)->ApplyDepthStreamFormat(Info);
+					if (RawData && RawData->Num() > 0)
 					{
-						FString ColorStreamID = FString::Printf(TEXT("%s/%d"), *Prefix, ColorChannel);
-						if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
-						{
-							(*ColorProjector)->DepthStreamID = StreamID;
-							if (RawData && RawData->Num() > 0)
-							{
-								(*ColorProjector)->SetDepthTextureWithData(Texture, Timestamp, TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
-							}
-							else
-							{
-								(*ColorProjector)->SetDepthTexture(Texture, Timestamp);
-							}
-							UE_LOG(LogRammsProjection, Log,
-								TEXT("Auto-linked depth '%s' to projector '%s' on frame arrival"),
-								*StreamID, *ColorStreamID);
-						}
+						(*ColorProjector)->SetDepthTextureWithData(Texture, Timestamp, TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
+					}
+					else
+					{
+						(*ColorProjector)->SetDepthTexture(Texture, Timestamp);
 					}
 				}
 			}
@@ -646,29 +634,16 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 							TEXT("OnCameraStreamStatus: skipping non-visual stream '%s' (category=%d)"),
 							*StreamID, static_cast<int32>(Info.FrameCategory));
 					}
-					else if (Info.bIsDepth)
+					else if (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth)
 					{
 						// Depth stream activated — try to auto-link to its color projector
-						int32 SlashIdx = INDEX_NONE;
-						if (StreamID.FindLastChar(TEXT('/'), SlashIdx))
+						FString ColorStreamID = FindColorStreamForDepth(StreamID, Iface);
+						if (!ColorStreamID.IsEmpty())
 						{
-							FString Prefix = StreamID.Left(SlashIdx);
-							FString ChannelStr = StreamID.Mid(SlashIdx + 1);
-							if (ChannelStr.IsNumeric())
+							if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
 							{
-								int32 DepthChannel = FCString::Atoi(*ChannelStr);
-								int32 ColorChannel = DepthChannel - 100;
-								if (ColorChannel >= 0)
-								{
-									FString ColorStreamID = FString::Printf(TEXT("%s/%d"), *Prefix, ColorChannel);
-									if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
-									{
-										(*ColorProjector)->DepthStreamID = StreamID;
-										UE_LOG(LogRammsProjection, Log,
-											TEXT("Auto-linked depth '%s' to projector '%s' on stream activation"),
-											*StreamID, *ColorStreamID);
-									}
-								}
+								(*ColorProjector)->DepthStreamID = StreamID;
+								(*ColorProjector)->ApplyDepthStreamFormat(Info);
 							}
 						}
 					}
@@ -763,4 +738,121 @@ void URammsCameraProjectionManager::UpdateRawDataRequest()
 		bRequestedRawData = false;
 		UE_LOG(LogRammsProjection, Log, TEXT("Raw data forwarding released (GPU PGM or PGM disabled)"));
 	}
+}
+
+// ── Stream Association Helpers ───────────────────────────────────
+
+FString URammsCameraProjectionManager::FindDepthStreamForColor(
+	const FString& ColorStreamID, IRammsCameraProvider* Provider) const
+{
+	if (!Provider)
+		return FString();
+
+	FRammsCameraStreamInfo ColorInfo;
+	if (!Provider->GetStreamInfo(ColorStreamID, ColorInfo))
+		return FString();
+
+	// ── Primary: match by GroupID ──
+	if (!ColorInfo.GroupID.IsEmpty())
+	{
+		TArray<FRammsCameraStreamInfo> AllStreams = Provider->GetAvailableStreams();
+		for (const FRammsCameraStreamInfo& S : AllStreams)
+		{
+			if (S.StreamID != ColorStreamID
+				&& S.GroupID == ColorInfo.GroupID
+				&& (S.StreamRole == ERammsStreamRole::Depth || S.bIsDepth))
+			{
+				UE_LOG(LogRammsProjection, Log,
+					TEXT("Linked depth '%s' to color '%s' via GroupID '%s'"),
+					*S.StreamID, *ColorStreamID, *ColorInfo.GroupID);
+				return S.StreamID;
+			}
+		}
+	}
+
+	// ── Fallback (deprecated): channel + 100 convention ──
+	int32 SlashIdx = INDEX_NONE;
+	if (ColorStreamID.FindLastChar(TEXT('/'), SlashIdx))
+	{
+		FString Prefix = ColorStreamID.Left(SlashIdx);
+		FString ChannelStr = ColorStreamID.Mid(SlashIdx + 1);
+		if (ChannelStr.IsNumeric())
+		{
+			int32	ColorChannel = FCString::Atoi(*ChannelStr);
+			int32	DepthChannel = ColorChannel + 100;
+			FString PotentialDepthID = FString::Printf(TEXT("%s/%d"), *Prefix, DepthChannel);
+
+			FRammsCameraStreamInfo DepthInfo;
+			if (Provider->GetStreamInfo(PotentialDepthID, DepthInfo))
+			{
+				UE_LOG(LogRammsProjection, Warning,
+					TEXT("Linked depth '%s' to color '%s' via deprecated channel+100 convention. "
+						 "Please set 'group' and 'role' in stream metadata instead."),
+					*PotentialDepthID, *ColorStreamID);
+				return PotentialDepthID;
+			}
+		}
+	}
+
+	return FString();
+}
+
+FString URammsCameraProjectionManager::FindColorStreamForDepth(
+	const FString& DepthStreamID, IRammsCameraProvider* Provider) const
+{
+	if (!Provider)
+		return FString();
+
+	FRammsCameraStreamInfo DepthInfo;
+	if (!Provider->GetStreamInfo(DepthStreamID, DepthInfo))
+		return FString();
+
+	// ── Primary: match by GroupID ──
+	if (!DepthInfo.GroupID.IsEmpty())
+	{
+		for (auto& Pair : Projectors)
+		{
+			if (!Pair.Value)
+				continue;
+
+			FRammsCameraStreamInfo ColorInfo;
+			if (Provider->GetStreamInfo(Pair.Key, ColorInfo)
+				&& ColorInfo.GroupID == DepthInfo.GroupID
+				&& (ColorInfo.StreamRole == ERammsStreamRole::Color
+					|| (ColorInfo.StreamRole == ERammsStreamRole::Other && !ColorInfo.bIsDepth)))
+			{
+				UE_LOG(LogRammsProjection, Log,
+					TEXT("Linked depth '%s' to projector '%s' via GroupID '%s'"),
+					*DepthStreamID, *Pair.Key, *DepthInfo.GroupID);
+				return Pair.Key;
+			}
+		}
+	}
+
+	// ── Fallback (deprecated): channel - 100 convention ──
+	int32 SlashIdx = INDEX_NONE;
+	if (DepthStreamID.FindLastChar(TEXT('/'), SlashIdx))
+	{
+		FString Prefix = DepthStreamID.Left(SlashIdx);
+		FString ChannelStr = DepthStreamID.Mid(SlashIdx + 1);
+		if (ChannelStr.IsNumeric())
+		{
+			int32 DepthChannel = FCString::Atoi(*ChannelStr);
+			int32 ColorChannel = DepthChannel - 100;
+			if (ColorChannel >= 0)
+			{
+				FString ColorStreamID = FString::Printf(TEXT("%s/%d"), *Prefix, ColorChannel);
+				if (Projectors.Contains(ColorStreamID))
+				{
+					UE_LOG(LogRammsProjection, Warning,
+						TEXT("Linked depth '%s' to projector '%s' via deprecated channel-100 convention. "
+							 "Please set 'group' and 'role' in stream metadata instead."),
+						*DepthStreamID, *ColorStreamID);
+					return ColorStreamID;
+				}
+			}
+		}
+	}
+
+	return FString();
 }

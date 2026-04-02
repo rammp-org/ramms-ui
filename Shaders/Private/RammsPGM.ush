@@ -14,6 +14,7 @@
 //   PGMIntrinsics    (Vector4)     — float4(fx, fy, cx, cy)
 //   PGMImageSize     (Vector4)     — float4(colorW, colorH, depthW, depthH)
 //   PGMDepthConfig   (Vector4)     — float4(depthScaleToCM, minDepthCM, maxDepthCM, maxEdgeStretchCM)
+//   PGMDepthUnnormalize (Scalar)   — 1.0 for R32F, 65535.0 for G16 (uint16) depth textures
 //   PGMParallax      (Vector4)     — float4(sensorBaselineY, colorFx, colorFy, 0)
 //   PGMColorIntrinsics (Vector4)  — float4(colorFx, colorFy, colorCx, colorCy)
 //   PGMGridStep      (Vector4)     — float4(1/(gridW-1), 1/(gridH-1), 0, 0) — UV spacing
@@ -52,6 +53,8 @@ float2 RammsPGM_ParallaxUV(float3 CamPos, float SensorBaselineY,
 //   Intrinsics      — float4(fx, fy, cx, cy) — depth camera intrinsics
 //   DepthImageSize  — float2(depthW, depthH) in pixels
 //   DepthConfig     — float4(scaleToCM, minCM, maxCM, maxEdgeStretchCM)
+//   DepthUnnorm     — scalar: 1.0 for float32 textures, 65535.0 for G16 (uint16) textures.
+//                     GPU normalizes G16 to [0,1]; multiply by 65535 to recover raw value.
 //   GridStep        — float2(1/(gridW-1), 1/(gridH-1)) — UV distance between grid verts
 //
 // Returns: float3 position offset in component LOCAL space.
@@ -66,7 +69,7 @@ float3 RammsPGM_WorldPositionOffset(
 	float2 UV,
 	Texture2D DepthTex, SamplerState DepthTexSampler,
 	float4 Intrinsics, float2 DepthImageSize,
-	float4 DepthConfig, float2 GridStep)
+	float4 DepthConfig, float DepthUnnorm, float2 GridStep)
 {
 	// NaN collapse: any triangle with a NaN vertex is discarded by the rasterizer
 	float3 DEGENERATE = asfloat(0x7FC00000);  // quiet NaN
@@ -76,8 +79,8 @@ float3 RammsPGM_WorldPositionOffset(
 	float MaxCM   = DepthConfig.z;
 	float MaxEdge = DepthConfig.w;
 
-	// Sample depth at this vertex
-	float RawDepth = Texture2DSampleLevel(DepthTex, DepthTexSampler, UV, 0).r;
+	// Sample depth at this vertex. Unnormalize for G16 textures (GPU normalizes uint16 to [0,1]).
+	float RawDepth = Texture2DSampleLevel(DepthTex, DepthTexSampler, UV, 0).r * DepthUnnorm;
 	float DepthCM = RawDepth * Scale;
 
 	// Depth validity check
@@ -110,7 +113,7 @@ float3 RammsPGM_WorldPositionOffset(
 		if (NUV.x < 0 || NUV.x > 1 || NUV.y < 0 || NUV.y > 1)
 			continue;
 
-		float NRaw = Texture2DSampleLevel(DepthTex, DepthTexSampler, NUV, 0).r;
+		float NRaw = Texture2DSampleLevel(DepthTex, DepthTexSampler, NUV, 0).r * DepthUnnorm;
 		float NCM = NRaw * Scale;
 
 		// Collapse if neighbor has invalid depth (avoids stretched tris at boundaries)

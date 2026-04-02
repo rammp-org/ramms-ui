@@ -14,8 +14,9 @@ class URammsCameraProjectorComponent;
  *
  * Attach this component to any actor. When camera providers are discovered
  * (or assigned), the manager auto-creates URammsCameraProjectorComponent
- * children for each non-depth stream and keeps their textures and transforms
- * up to date.
+ * children for each color stream and keeps their textures and transforms
+ * up to date. Depth streams are automatically linked to the matching
+ * color projector (via GroupID) for PGM use.
  *
  * Supports multiple providers simultaneously — e.g. an actor-based provider
  * for in-scene cameras AND a component-based provider for streamed cameras.
@@ -54,10 +55,6 @@ public:
 	/** Auto-create projectors when streams become available */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	bool bAutoCreateProjectors = true;
-
-	/** Skip depth streams when auto-creating projectors */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
-	bool bSkipDepthStreams = true;
 
 	/** Stream IDs to never create projectors for (e.g. "stream/100"). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
@@ -209,4 +206,12 @@ private:
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
 	void OnCameraExtrinsicUpdated(const FString& StreamID, const FTransform& WorldTransform);
+
+	/** Find the depth stream associated with a color stream.
+	 *  Uses GroupID matching first, falls back to deprecated channel+100 convention. */
+	FString FindDepthStreamForColor(const FString& ColorStreamID, IRammsCameraProvider* Provider) const;
+
+	/** Find the color projector associated with a depth stream.
+	 *  Uses GroupID matching first, falls back to deprecated channel+100 convention. */
+	FString FindColorStreamForDepth(const FString& DepthStreamID, IRammsCameraProvider* Provider) const;
 };
