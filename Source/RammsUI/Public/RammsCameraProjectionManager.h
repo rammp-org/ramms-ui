@@ -14,8 +14,9 @@ class URammsCameraProjectorComponent;
  *
  * Attach this component to any actor. When camera providers are discovered
  * (or assigned), the manager auto-creates URammsCameraProjectorComponent
- * children for each non-depth stream and keeps their textures and transforms
- * up to date.
+ * children for each color stream and keeps their textures and transforms
+ * up to date. Depth streams are automatically linked to the matching
+ * color projector (via GroupID) for PGM use.
  *
  * Supports multiple providers simultaneously — e.g. an actor-based provider
  * for in-scene cameras AND a component-based provider for streamed cameras.
@@ -54,10 +55,6 @@ public:
 	/** Auto-create projectors when streams become available */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	bool bAutoCreateProjectors = true;
-
-	/** Skip depth streams when auto-creating projectors */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")
-	bool bSkipDepthStreams = true;
 
 	/** Stream IDs to never create projectors for (e.g. "stream/100"). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection|Filtering")

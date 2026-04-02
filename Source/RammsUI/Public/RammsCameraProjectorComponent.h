@@ -192,6 +192,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection")
 	void RefreshMaterialParameters();
 
+	/** Apply depth-format scaling derived from a linked depth stream's info.
+	 *  Call this when associating a depth stream with this projector so that
+	 *  DepthScaleToCM is configured correctly for the depth encoding. */
+	void ApplyDepthStreamFormat(const FRammsCameraStreamInfo& DepthStreamInfo);
+
 protected:
 	virtual void BeginPlay() override;
 

@@ -317,7 +317,7 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 		// Depth streams don't get their own decal projector — they are
 		// linked to a color projector for PGM use.  But we must still
 		// ensure the depth stream is started so frames flow.
-		if (bSkipDepthStreams && (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth))
+		if (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth)
 		{
 			if (!Iface->IsStreamActive(Info.StreamID))
 			{
@@ -336,6 +336,18 @@ void URammsCameraProjectionManager::CreateProjectorsForProvider(IRammsCameraProv
 			if (Info.bHasExtrinsic)
 			{
 				Projector->SetCameraTransform(Info.Extrinsic);
+			}
+
+			// Auto-link depth stream if one is already registered
+			FString DepthStreamID = FindDepthStreamForColor(Info.StreamID, Iface);
+			if (!DepthStreamID.IsEmpty())
+			{
+				Projector->DepthStreamID = DepthStreamID;
+				FRammsCameraStreamInfo DepthInfo;
+				if (Iface->GetStreamInfo(DepthStreamID, DepthInfo))
+				{
+					Projector->ApplyDepthStreamFormat(DepthInfo);
+				}
 			}
 		}
 	}
@@ -570,6 +582,7 @@ void URammsCameraProjectionManager::OnCameraFrameReady(const FString& StreamID, 
 				if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
 				{
 					(*ColorProjector)->DepthStreamID = StreamID;
+					(*ColorProjector)->ApplyDepthStreamFormat(Info);
 					if (RawData && RawData->Num() > 0)
 					{
 						(*ColorProjector)->SetDepthTextureWithData(Texture, Timestamp, TConstArrayView<uint8>(*RawData), RawFormat, TexWidth, TexHeight);
@@ -613,7 +626,7 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 							TEXT("OnCameraStreamStatus: skipping non-visual stream '%s' (category=%d)"),
 							*StreamID, static_cast<int32>(Info.FrameCategory));
 					}
-					else if (bSkipDepthStreams && (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth))
+					else if (Info.bIsDepth || Info.StreamRole == ERammsStreamRole::Depth)
 					{
 						// Depth stream activated — try to auto-link to its color projector
 						FString ColorStreamID = FindColorStreamForDepth(StreamID, Iface);
@@ -622,6 +635,7 @@ void URammsCameraProjectionManager::OnCameraStreamStatus(const FString& StreamID
 							if (TObjectPtr<URammsCameraProjectorComponent>* ColorProjector = Projectors.Find(ColorStreamID))
 							{
 								(*ColorProjector)->DepthStreamID = StreamID;
+								(*ColorProjector)->ApplyDepthStreamFormat(Info);
 							}
 						}
 					}
@@ -796,7 +810,8 @@ FString URammsCameraProjectionManager::FindColorStreamForDepth(
 			FRammsCameraStreamInfo ColorInfo;
 			if (Provider->GetStreamInfo(Pair.Key, ColorInfo)
 				&& ColorInfo.GroupID == DepthInfo.GroupID
-				&& (ColorInfo.StreamRole == ERammsStreamRole::Color || !ColorInfo.bIsDepth))
+				&& (ColorInfo.StreamRole == ERammsStreamRole::Color
+					|| (ColorInfo.StreamRole == ERammsStreamRole::Other && !ColorInfo.bIsDepth)))
 			{
 				UE_LOG(LogRammsProjection, Log,
 					TEXT("Linked depth '%s' to projector '%s' via GroupID '%s'"),

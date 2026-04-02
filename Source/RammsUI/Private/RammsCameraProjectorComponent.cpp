@@ -1074,6 +1074,26 @@ void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCam
 	UpdateMaterialParameters();
 }
 
+void URammsCameraProjectorComponent::ApplyDepthStreamFormat(const FRammsCameraStreamInfo& DepthStreamInfo)
+{
+	if (DepthStreamInfo.DepthFormat == ERammsDepthFormat::Unknown)
+		return;
+
+	DetectedDepthFormat = DepthStreamInfo.DepthFormat;
+	switch (DepthStreamInfo.DepthFormat)
+	{
+		case ERammsDepthFormat::Uint16MM:
+			DepthScaleToCM = 0.1f; // mm → cm
+			break;
+		case ERammsDepthFormat::Float32CM:
+			DepthScaleToCM = 1.0f; // already cm
+			break;
+		default:
+			break;
+	}
+	RefreshMaterialParameters();
+}
+
 void URammsCameraProjectorComponent::SetCameraTransform(const FTransform& WorldTransform)
 {
 	// Use only location and rotation from the extrinsic — ignore scale so that

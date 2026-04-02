@@ -984,7 +984,9 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	{
 		CurrentDataTexture = Texture;
 
-		// Auto-detect depth format from provider on first data frame (or format change)
+		// Auto-detect depth format from provider on the first data frame.
+		// Once set, the format is cached for the lifetime of the stream
+		// subscription; it resets when the stream is re-subscribed.
 		if (CachedDataDepthFormat == ERammsDepthFormat::Unknown && !DataStreamID.IsEmpty())
 		{
 			for (const auto& Sub : ProviderSubscriptions)
