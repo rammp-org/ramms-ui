@@ -142,7 +142,7 @@ External:   RMSS Stream ──► URammsStreamCameraBridge ──► IRammsCamer
 | `IRammsCameraProvider` | Interface — any actor can provide camera frames via `OnCameraFrameReady` |
 | `URammsCameraProviderBase` | Actor-based provider with socket and transform support |
 | `URammsCameraProviderComponent` | Actor component implementing `IRammsCameraProvider` |
-| `URammsStreamCameraBridge` | Bridges an RammsStreaming sink → `IRammsCameraProvider`; demand-driven raw-data forwarding, auto-registers streams with intrinsics/extrinsics metadata |
+| `URammsStreamCameraBridge` | Bridges RammsStreaming sink → `IRammsCameraProvider`; demand-driven raw-data forwarding, auto-registers streams with intrinsics/extrinsics/group/role metadata. Tracks channel→stream_id mapping and re-registers when a stream_id override changes mid-session. |
 | `URammsCameraWidget` | Display widget — **Fullscreen / Windowed / Corner** modes, aspect-ratio maintenance, collapsible header, drag-to-move, multi-view (RGB / Data / SideBySide / Overlay), material-based data visualization |
 
 ---
@@ -182,7 +182,6 @@ Real-time camera-feed projection onto scene surfaces using Deferred Decals.
 |---|---|---|
 | `ProjectionMaterial` | — | Deferred Decal material (Translucent) |
 | `bAutoCreateProjectors` | `true` | Auto-discover providers and create projectors |
-| `bSkipDepthStreams` | `true` | Don't create decal projectors for depth-only streams |
 | `ExcludeStreamIDs` | — | Stream IDs to skip |
 | `DefaultMaxDistance` | 5000 cm | Frustum max depth |
 | `DefaultFadeWidth` | 0.05 | Edge fade (5%) |
@@ -190,7 +189,11 @@ Real-time camera-feed projection onto scene surfaces using Deferred Decals.
 
 ### Depth stream auto-linking
 
-RMSS convention: depth stream channel = color channel + 100 (e.g. `stream/0` → `stream/100`). The manager automatically discovers, starts, and links depth streams to the corresponding color projector.
+**Primary: GroupID + Role matching.** The manager links depth streams to color projectors by matching `GroupID` (set in stream metadata) and checking `StreamRole`. A depth stream (`StreamRole::Depth`) is linked to the color projector in the same group that has `StreamRole::Color` (falling back to `!bIsDepth` only when role is `Other`/unset). When a depth stream is linked, its `DepthFormat` (from `FRammsCameraStreamInfo`) is applied to the projector via `ApplyDepthStreamFormat()`, automatically configuring `DepthScaleToCM` (e.g. 0.1 for uint16-mm → cm).
+
+**Fallback: channel ± 100 convention (deprecated).** For legacy streams without group/role metadata, the manager falls back to the old `channel + 100` convention (e.g. `stream/0` → `stream/100`).
+
+Auto-linking occurs at three points: initial projector creation (`CreateProjectorsForProvider`), runtime stream activation (`OnCameraStreamStatus`), and first-frame depth delivery (`OnCameraFrameReady`).
 
 ---
 
@@ -215,9 +218,11 @@ Per-frame vertex position + color computation from raw RGBD data on the CPU.
 
 Deprojection from depth, parallax-corrected RGB UV lookup, NaN degenerate-vertex collapse, neighbor edge-stretch check.
 
-**Material parameters:** `DepthTexture`, `CameraTexture`, `PGMIntrinsics`, `PGMImageSize`, `PGMDepthConfig`, `PGMParallax`, `PGMColorIntrinsics`, `PGMGridStep`.
+**Material parameters:** `DepthTexture`, `CameraTexture`, `PGMIntrinsics`, `PGMImageSize`, `PGMDepthConfig`, `PGMParallax`, `PGMColorIntrinsics`, `PGMGridStep`, `PGMDepthUnnormalize`.
 
-**Projector properties:** `Decimation`, `SensorBaselineY`, `MaxEdgeStretchCM`, `DepthScaleToCM`, `MinDepthCM` / `MaxDepthCM`, `SyncThresholdMS` for frame synchronization.
+`PGMDepthUnnormalize` is automatically derived from `DetectedDepthFormat` (set via stream info) or the depth texture's pixel format (`PF_G16` → 65535.0, otherwise 1.0). This ensures uint16 depth textures (which are GPU-normalized to [0,1]) are correctly rescaled.
+
+**Projector properties:** `Decimation`, `SensorBaselineY`, `MaxEdgeStretchCM`, `DepthScaleToCM`, `MinDepthCM` / `MaxDepthCM`, `DetectedDepthFormat`, `SyncThresholdMS` for frame synchronization. `DetectedDepthFormat` is configured by `ApplyDepthStreamFormat()` when a depth stream is linked.
 
 ---
 
