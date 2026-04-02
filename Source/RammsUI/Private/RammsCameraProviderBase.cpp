@@ -8,10 +8,16 @@ ARammsCameraProviderBase::ARammsCameraProviderBase()
 	PrimaryActorTick.TickInterval = 1.0f; // Only need tick for frame rate calculation
 }
 
-void ARammsCameraProviderBase::RegisterStream(const FRammsCameraStreamInfo& StreamInfo)
+void ARammsCameraProviderBase::RegisterStream(const FRammsCameraStreamInfo& StreamInfo, bool bActivate)
 {
 	FRammsCameraStreamState& State = Streams.FindOrAdd(StreamInfo.StreamID);
 	State.Info = StreamInfo;
+
+	if (bActivate && !State.bActive)
+	{
+		State.bActive = true;
+		CameraStreamStatusDelegate.Broadcast(StreamInfo.StreamID, true);
+	}
 }
 
 void ARammsCameraProviderBase::UnregisterStream(const FString& StreamID)

@@ -13,10 +13,16 @@ URammsCameraProviderComponent::URammsCameraProviderComponent()
 
 // ── Stream Management ──────────────────────────────────────────────
 
-void URammsCameraProviderComponent::RegisterStream(const FRammsCameraStreamInfo& StreamInfo)
+void URammsCameraProviderComponent::RegisterStream(const FRammsCameraStreamInfo& StreamInfo, bool bActivate)
 {
 	FRammsCameraStreamState& State = Streams.FindOrAdd(StreamInfo.StreamID);
 	State.Info = StreamInfo;
+
+	if (bActivate && !State.bActive)
+	{
+		State.bActive = true;
+		CameraStreamStatusDelegate.Broadcast(StreamInfo.StreamID, true);
+	}
 }
 
 void URammsCameraProviderComponent::UnregisterStream(const FString& StreamID)

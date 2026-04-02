@@ -30,9 +30,12 @@ public:
 
 	// --- Blueprint API ---
 
-	/** Register a new camera stream. */
+	/** Register a new camera stream.
+	 *  @param bActivate  When true (default), the stream is activated immediately
+	 *                    and OnCameraStreamStatus is broadcast so downstream
+	 *                    consumers (e.g. ProjectionManager) learn about it. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
-	void RegisterStream(const FRammsCameraStreamInfo& StreamInfo);
+	void RegisterStream(const FRammsCameraStreamInfo& StreamInfo, bool bActivate = true);
 
 	/** Unregister a camera stream. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
