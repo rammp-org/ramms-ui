@@ -75,7 +75,12 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 	if (ExcludeChannels.Contains(ChannelID))
 		return;
 
-	FString StreamID = FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
+	// Default to the previously-resolved StreamID for this channel (prevents
+	// flapping back to the auto-generated ID when a frame omits stream_id).
+	const FString* CachedStreamID = ChannelStreamIDs.Find(ChannelID);
+	FString		   StreamID = CachedStreamID
+			   ? *CachedStreamID
+			   : FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
 
 	// Parse metadata (needed for both registration and per-frame updates)
 	TSharedPtr<FJsonObject>	  Meta;
@@ -94,15 +99,14 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 
 	// Check if this channel needs (re-)registration.
 	// A stream_id override arriving after the first frame requires re-registration.
-	const FString* PreviousStreamID = ChannelStreamIDs.Find(ChannelID);
-	const bool	   bNeedsRegistration = !PreviousStreamID || *PreviousStreamID != StreamID;
+	const bool bNeedsRegistration = !CachedStreamID || *CachedStreamID != StreamID;
 
 	if (bNeedsRegistration)
 	{
-		// Deactivate the old stream if the ID changed
-		if (PreviousStreamID && !PreviousStreamID->IsEmpty())
+		// Fully unregister the old stream so it doesn't linger in GetAvailableStreams()
+		if (CachedStreamID && !CachedStreamID->IsEmpty())
 		{
-			CameraProvider->SetStreamActive(*PreviousStreamID, false);
+			CameraProvider->UnregisterStream(*CachedStreamID);
 		}
 
 		const int32 Width = Texture->GetSizeX();
