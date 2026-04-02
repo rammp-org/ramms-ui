@@ -343,6 +343,9 @@ protected:
 	};
 	TArray<FProviderSubscription> ProviderSubscriptions;
 
+	/** Cached depth format from the data stream provider (auto-detected on first frame) */
+	ERammsDepthFormat CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+
 public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;

@@ -983,6 +983,25 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	else if (InStreamID == DataStreamID)
 	{
 		CurrentDataTexture = Texture;
+
+		// Auto-detect depth format from provider on first data frame (or format change)
+		if (CachedDataDepthFormat == ERammsDepthFormat::Unknown && !DataStreamID.IsEmpty())
+		{
+			for (const auto& Sub : ProviderSubscriptions)
+			{
+				if (Sub.Object.IsValid() && Sub.Interface)
+				{
+					FRammsCameraStreamInfo Info;
+					if (Sub.Interface->GetStreamInfo(DataStreamID, Info) && Info.DepthFormat != ERammsDepthFormat::Unknown)
+					{
+						CachedDataDepthFormat = Info.DepthFormat;
+						UpdateDataMaterialParams();
+						break;
+					}
+				}
+			}
+		}
+
 		UpdateDisplayedImages();
 	}
 }
@@ -1291,6 +1310,7 @@ void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
 
 	DataStreamID = NewDataStreamID;
 	CurrentDataTexture = nullptr;
+	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
 
 	// Start new data stream
 	if (!DataStreamID.IsEmpty())
@@ -1566,19 +1586,31 @@ void URammsCameraWidget::EnsureDataMaterials()
 
 void URammsCameraWidget::UpdateDataMaterialParams()
 {
-	// Apply all scalar params from config to both materials
-	auto ApplyScalarParams = [this](UMaterialInstanceDynamic* MID) {
+	// Compute depth format params from auto-detected format
+	float DepthUnnormalize = 1.0f;
+	float DepthScaleToCM = 1.0f;
+	if (CachedDataDepthFormat == ERammsDepthFormat::Uint16MM)
+	{
+		DepthUnnormalize = 65535.0f; // G16 texture is GPU-normalized to [0,1]
+		DepthScaleToCM = 0.1f;		 // mm → cm
+	}
+
+	// Apply all scalar params from config, then depth format params, to both materials
+	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
 		if (!MID)
 			return;
 		for (const auto& Pair : DataStreamConfig.ScalarParams)
 		{
 			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
 		}
+		// Auto-injected depth format params (materials can use these to normalize depth)
+		MID->SetScalarParameterValue(FName("DepthUnnormalize"), DepthUnnormalize);
+		MID->SetScalarParameterValue(FName("DepthScaleToCM"), DepthScaleToCM);
 	};
 
 	if (DataMID)
 	{
-		ApplyScalarParams(DataMID);
+		ApplyParams(DataMID);
 		if (CurrentDataTexture)
 		{
 			DataMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
@@ -1587,7 +1619,7 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 
 	if (OverlayMID)
 	{
-		ApplyScalarParams(OverlayMID);
+		ApplyParams(OverlayMID);
 		OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
 		if (CurrentTexture)
 		{

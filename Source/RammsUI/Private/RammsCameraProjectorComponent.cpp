@@ -199,6 +199,21 @@ namespace
 				}
 				return true;
 			}
+			case PF_G16:
+			{
+				// uint16 depth (typically millimeters). Store raw mm value as float in .R
+				const int32 Expected = PixelCount * 2;
+				if (RawData.Num() < Expected)
+					return false;
+				const uint8* Src = RawData.GetData();
+				for (int32 i = 0; i < PixelCount; ++i)
+				{
+					uint16 Val;
+					FMemory::Memcpy(&Val, Src + i * sizeof(uint16), sizeof(uint16));
+					OutPixels[i] = FLinearColor(static_cast<float>(Val), 0.0f, 0.0f, 1.0f);
+				}
+				return true;
+			}
 			default:
 				return false;
 		}
@@ -394,6 +409,12 @@ void URammsCameraProjectorComponent::UpdatePGMMaterialParams()
 	PGMMaterialInstance->SetVectorParameterValue(
 		FName("PGMDepthConfig"),
 		FLinearColor(DepthScaleToCM, MinDepthCM, MaxDepthCM, MaxEdgeStretchCM));
+
+	// G16 (uint16) textures are normalized to [0,1] by the GPU when sampled.
+	// Multiply by 65535 to recover the raw integer value before applying DepthScaleToCM.
+	const float DepthUnnormalize = (DepthPixelFormat == PF_G16) ? 65535.0f : 1.0f;
+	PGMMaterialInstance->SetScalarParameterValue(
+		FName("PGMDepthUnnormalize"), DepthUnnormalize);
 
 	PGMMaterialInstance->SetVectorParameterValue(
 		FName("PGMParallax"),
@@ -1030,6 +1051,23 @@ void URammsCameraProjectorComponent::SetIntrinsicsFromStreamInfo(const FRammsCam
 	if (StreamInfo.bHasExtrinsic)
 	{
 		SetCameraTransform(StreamInfo.Extrinsic);
+	}
+
+	// Auto-configure depth scale from detected format
+	if (StreamInfo.DepthFormat != ERammsDepthFormat::Unknown)
+	{
+		DetectedDepthFormat = StreamInfo.DepthFormat;
+		switch (StreamInfo.DepthFormat)
+		{
+			case ERammsDepthFormat::Uint16MM:
+				DepthScaleToCM = 0.1f; // mm → cm
+				break;
+			case ERammsDepthFormat::Float32CM:
+				DepthScaleToCM = 1.0f; // already cm
+				break;
+			default:
+				break;
+		}
 	}
 
 	UpdateDecalSize();

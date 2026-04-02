@@ -209,4 +209,12 @@ private:
 	void OnCameraFrameReady(const FString& StreamID, UTexture* Texture, int64 Timestamp);
 	void OnCameraStreamStatus(const FString& StreamID, bool bActive);
 	void OnCameraExtrinsicUpdated(const FString& StreamID, const FTransform& WorldTransform);
+
+	/** Find the depth stream associated with a color stream.
+	 *  Uses GroupID matching first, falls back to deprecated channel+100 convention. */
+	FString FindDepthStreamForColor(const FString& ColorStreamID, IRammsCameraProvider* Provider) const;
+
+	/** Find the color projector associated with a depth stream.
+	 *  Uses GroupID matching first, falls back to deprecated channel+100 convention. */
+	FString FindColorStreamForDepth(const FString& DepthStreamID, IRammsCameraProvider* Provider) const;
 };

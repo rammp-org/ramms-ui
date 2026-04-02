@@ -257,4 +257,7 @@ private:
 	EPixelFormat  DepthPixelFormat = PF_Unknown;
 	int32		  DepthFrameWidth = 0;
 	int32		  DepthFrameHeight = 0;
+
+	/** Detected depth encoding format (auto-set from stream info) */
+	ERammsDepthFormat DetectedDepthFormat = ERammsDepthFormat::Unknown;
 };

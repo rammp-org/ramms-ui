@@ -9,6 +9,34 @@
 #include "RammsStreamProtocol.h"
 #include "IRammsCameraProvider.generated.h"
 
+/** Role of a stream within a camera group (color, depth, mask, etc.). */
+UENUM(BlueprintType)
+enum class ERammsStreamRole : uint8
+{
+	/** RGB / RGBA colour image. */
+	Color,
+	/** Depth map (float32 cm, uint16 mm, etc.). */
+	Depth,
+	/** Segmentation / instance mask. */
+	Mask,
+	/** Infrared / thermal image. */
+	Infrared,
+	/** Unspecified / other auxiliary stream. */
+	Other,
+};
+
+/** Depth data encoding on the wire / in the texture. */
+UENUM(BlueprintType)
+enum class ERammsDepthFormat : uint8
+{
+	/** Unknown / not a depth stream. */
+	Unknown,
+	/** 32-bit float, values in centimetres (PF_R32_FLOAT). */
+	Float32CM,
+	/** 16-bit unsigned int, values in millimetres (PF_G16). */
+	Uint16MM,
+};
+
 /**
  * Camera stream information
  */
@@ -41,9 +69,22 @@ struct FRammsCameraStreamInfo
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	FString PixelFormat;
 
-	/** Whether this is a depth camera stream */
+	/** Whether this is a depth camera stream (legacy — prefer StreamRole) */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	bool bIsDepth = false;
+
+	/** Semantic role of this stream within its camera group. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	ERammsStreamRole StreamRole = ERammsStreamRole::Other;
+
+	/** Camera group identifier — streams sharing a GroupID come from the same
+	 *  physical camera (e.g., "wrist_camera"). Empty = ungrouped. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	FString GroupID;
+
+	/** Depth data encoding (only meaningful when StreamRole == Depth). */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	ERammsDepthFormat DepthFormat = ERammsDepthFormat::Unknown;
 
 	/** High-level category: Visual streams are renderable, Data streams
 	 *  carry auxiliary information (motion vectors, point clouds, etc.). */

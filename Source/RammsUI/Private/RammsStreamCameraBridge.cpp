@@ -82,6 +82,16 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(MetadataJson);
 	const bool				  bHasMeta = FJsonSerializer::Deserialize(Reader, Meta) && Meta.IsValid();
 
+	// Allow sender to override the auto-generated stream ID via metadata
+	if (bHasMeta)
+	{
+		FString OverrideID;
+		if (Meta->TryGetStringField(TEXT("stream_id"), OverrideID) && !OverrideID.IsEmpty())
+		{
+			StreamID = OverrideID;
+		}
+	}
+
 	// Auto-register the stream on first frame
 	if (!RegisteredChannels.Contains(ChannelID))
 	{
@@ -97,7 +107,36 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 
 		if (bHasMeta)
 		{
-			// Detect depth vs RGB from format metadata
+			// Override display name from metadata
+			FString NameStr;
+			if (Meta->TryGetStringField(TEXT("name"), NameStr) && !NameStr.IsEmpty())
+			{
+				Info.DisplayName = NameStr;
+			}
+
+			// ── Stream association: group & role ──
+			FString GroupStr;
+			if (Meta->TryGetStringField(TEXT("group"), GroupStr))
+			{
+				Info.GroupID = GroupStr;
+			}
+
+			FString RoleStr;
+			if (Meta->TryGetStringField(TEXT("role"), RoleStr))
+			{
+				if (RoleStr == TEXT("color") || RoleStr == TEXT("rgb"))
+					Info.StreamRole = ERammsStreamRole::Color;
+				else if (RoleStr == TEXT("depth"))
+					Info.StreamRole = ERammsStreamRole::Depth;
+				else if (RoleStr == TEXT("mask") || RoleStr == TEXT("segmentation"))
+					Info.StreamRole = ERammsStreamRole::Mask;
+				else if (RoleStr == TEXT("infrared") || RoleStr == TEXT("ir"))
+					Info.StreamRole = ERammsStreamRole::Infrared;
+				else
+					Info.StreamRole = ERammsStreamRole::Other;
+			}
+
+			// ── Format detection ──
 			FString Fmt;
 			if (Meta->TryGetStringField(TEXT("fmt"), Fmt))
 			{
@@ -105,6 +144,23 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 				{
 					Info.bIsDepth = true;
 					Info.PixelFormat = TEXT("R32F");
+					Info.DepthFormat = ERammsDepthFormat::Float32CM;
+					if (Info.StreamRole == ERammsStreamRole::Other)
+						Info.StreamRole = ERammsStreamRole::Depth;
+				}
+				else if (Fmt == TEXT("16uc1") || Fmt == TEXT("uint16") || Fmt == TEXT("mono16"))
+				{
+					Info.bIsDepth = true;
+					Info.PixelFormat = TEXT("G16");
+					Info.DepthFormat = ERammsDepthFormat::Uint16MM;
+					if (Info.StreamRole == ERammsStreamRole::Other)
+						Info.StreamRole = ERammsStreamRole::Depth;
+				}
+				else if (Fmt == TEXT("rgb8"))
+				{
+					Info.PixelFormat = TEXT("RGB8");
+					if (Info.StreamRole == ERammsStreamRole::Other)
+						Info.StreamRole = ERammsStreamRole::Color;
 				}
 				else
 				{
@@ -114,6 +170,16 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			else
 			{
 				Info.PixelFormat = TEXT("BGRA8");
+			}
+
+			// Infer role from bIsDepth / message type if role wasn't set explicitly
+			if (Info.StreamRole == ERammsStreamRole::Other)
+			{
+				if (Info.bIsDepth || MessageType == ERammsStreamMessageType::FrameDepth)
+					Info.StreamRole = ERammsStreamRole::Depth;
+				else if (MessageType == ERammsStreamMessageType::FrameRGB
+					|| MessageType == ERammsStreamMessageType::ImageData)
+					Info.StreamRole = ERammsStreamRole::Color;
 			}
 
 			// Extract intrinsics [fx, fy, cx, cy]
@@ -147,13 +213,20 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			Info.PixelFormat = TEXT("BGRA8");
 		}
 
+		// Auto-generate GroupID from StreamPrefix + channel if sender didn't provide one
+		if (Info.GroupID.IsEmpty())
+		{
+			Info.GroupID = FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
+		}
+
 		CameraProvider->RegisterStream(Info);
 		CameraProvider->SetStreamActive(StreamID, true);
 		RegisteredChannels.Add(ChannelID);
 
 		UE_LOG(LogRammsStreamBridge, Log,
-			TEXT("Auto-registered stream '%s' (%dx%d, depth=%d, intrinsics=%d)"),
-			*StreamID, Width, Height, Info.bIsDepth ? 1 : 0, Info.Intrinsics.Num());
+			TEXT("Auto-registered stream '%s' (group='%s', role=%d, %dx%d, fmt=%s, intrinsics=%d)"),
+			*StreamID, *Info.GroupID, static_cast<int32>(Info.StreamRole),
+			Width, Height, *Info.PixelFormat, Info.Intrinsics.Num());
 	}
 	else if (bHasMeta)
 	{
