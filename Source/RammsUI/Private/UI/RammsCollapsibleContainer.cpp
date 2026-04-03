@@ -106,7 +106,12 @@ void URammsCollapsibleContainer::BuildWidgetTree()
 	ContentScrollBox->AddChild(ContentBox);
 
 	ContentSlot = WidgetTree->ConstructWidget<UNamedSlot>(UNamedSlot::StaticClass(), TEXT("ContentSlot"));
-	ContentBox->AddChildToVerticalBox(ContentSlot);
+	UVerticalBoxSlot* NamedSlotVB = ContentBox->AddChildToVerticalBox(ContentSlot);
+	if (NamedSlotVB)
+	{
+		NamedSlotVB->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		NamedSlotVB->SetHorizontalAlignment(HAlign_Fill);
+	}
 
 	// Initial collapsed state: HeightOverride(0) + HitTestInvisible
 	// NOT Visibility::Collapsed, because Collapsed removes from layout and loses width
@@ -798,4 +803,9 @@ void URammsCollapsibleContainer::SetMaxContentHeight(float Height)
 void URammsCollapsibleContainer::OnToggleClicked()
 {
 	ToggleExpand();
+}
+
+void URammsCollapsibleContainer::GetSlotNames(TArray<FName>& SlotNames) const
+{
+	SlotNames.Add(TEXT("ContentSlot"));
 }

@@ -18,8 +18,45 @@ bool URammsBaseWidget::Initialize()
 		// At runtime, NativeOnInitialized (called by Super) may have already built
 		// it; the guard in each derived BuildWidgetTree prevents double-building.
 		BuildWidgetTree();
+
+		// Re-apply NamedSlot content from serialized NamedSlotBindings.
+		// UUserWidget::InitializeNamedSlots() (called by Super before BuildWidgetTree)
+		// uses UPROPERTY lookup to find UNamedSlot pointers, which fails because our
+		// pointers are marked Transient (null at that point). After BuildWidgetTree
+		// creates the actual UNamedSlot widgets, re-apply via our known-good pointers.
+		TArray<FName> SlotNames;
+		GetSlotNames(SlotNames);
+		for (const FName& SlotName : SlotNames)
+		{
+			if (UWidget* Content = GetContentForSlot(SlotName))
+			{
+				if (UNamedSlot* NamedSlot = GetNamedSlotWidget(SlotName))
+				{
+					NamedSlot->ClearChildren();
+					NamedSlot->AddChild(Content);
+				}
+			}
+		}
 	}
 	return bResult;
+}
+
+void URammsBaseWidget::SetContentForSlot(FName SlotName, UWidget* Content)
+{
+	// Let Super handle NamedSlotBindings persistence and WidgetTree->FindWidget.
+	Super::SetContentForSlot(SlotName, Content);
+
+	// Also directly populate our UNamedSlot via known-good pointer.
+	// Super may have found a stale deserialized widget with the same name
+	// instead of the one created by BuildWidgetTree.
+	if (UNamedSlot* NamedSlot = GetNamedSlotWidget(SlotName))
+	{
+		NamedSlot->ClearChildren();
+		if (Content)
+		{
+			NamedSlot->AddChild(Content);
+		}
+	}
 }
 
 void URammsBaseWidget::NativePreConstruct()
@@ -119,12 +156,30 @@ void URammsBaseWidget::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
 
-	// After Blueprint recompilation, the WidgetTree root may be cleared
-	// while our cached widget pointers (InnerButton, etc.) are stale.
-	// Detect this and force a rebuild.
-	if (WidgetTree && !WidgetTree->RootWidget)
+	// After Blueprint recompilation or deserialization the WidgetTree root may
+	// be cleared while our cached widget pointers are stale.  Also detect stale
+	// cached pointers that reference widgets not owned by the current WidgetTree
+	// (happens when a C++ UUserWidget is serialized inside a parent WBP and the
+	// cached TObjectPtr was not marked Transient).  In either case, wipe the
+	// cached pointers so BuildWidgetTree can recreate the tree.
+	if (WidgetTree)
 	{
-		ResetCachedWidgets();
+		if (!WidgetTree->RootWidget)
+		{
+			ResetCachedWidgets();
+		}
+		else
+		{
+			// Verify the root widget is actually one of ours.  If a stale pointer
+			// slipped through serialization, the WidgetTree root will differ from
+			// what BuildWidgetTree would have set.
+			UWidget* ExpectedRoot = GetRootWidgetForValidation();
+			if (ExpectedRoot && WidgetTree->RootWidget != ExpectedRoot)
+			{
+				ResetCachedWidgets();
+				WidgetTree->RootWidget = nullptr;
+			}
+		}
 	}
 
 	// Ensure the widget tree is built (covers the case where NativePreConstruct

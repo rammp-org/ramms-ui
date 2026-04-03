@@ -16,11 +16,15 @@
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
 
+int32 URammsCameraWidget::FocusZOrderCounter = 0;
+
 void URammsCameraWidget::ResetCachedWidgets()
 {
 	CameraBorder = nullptr;
 	CameraImage = nullptr;
 	CameraLabel = nullptr;
+	CameraLabelWrap = nullptr;
+	ButtonRow = nullptr;
 	TitleBar = nullptr;
 	CollapseButton = nullptr;
 	CollapseIcon = nullptr;
@@ -31,9 +35,12 @@ void URammsCameraWidget::ResetCachedWidgets()
 	ViewModeLabel = nullptr;
 	OptionButton = nullptr;
 	OptionLabel = nullptr;
+	DisplayModeCycleButton = nullptr;
+	DisplayModeCycleLabel = nullptr;
 	ImageAspectRatioBox = nullptr;
 	PassthroughMID_RGB = nullptr;
 	PassthroughMID_Data = nullptr;
+	bHeaderNarrowMode = false;
 }
 
 void URammsCameraWidget::BuildWidgetTree()
@@ -84,38 +91,50 @@ void URammsCameraWidget::BuildWidgetTree()
 			TitleSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 
-		UHorizontalBox* TitleRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TitleRow"));
-		TitleBar->AddChild(TitleRow);
+		// VBox inside TitleBar: ButtonRow on top, CameraLabelWrap below (for narrow mode)
+		UVerticalBox* TitleVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("TitleVBox"));
+		TitleBar->AddChild(TitleVBox);
 
-		CameraLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabel"));
-		FText LabelText = CustomLabel.IsEmpty() ? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID) : CustomLabel;
-		CameraLabel->SetText(LabelText);
-		CameraLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-		UHorizontalBoxSlot* LabelSlot = TitleRow->AddChildToHorizontalBox(CameraLabel);
-		if (LabelSlot)
+		ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
+		UVerticalBoxSlot* BtnRowSlot = TitleVBox->AddChildToVerticalBox(ButtonRow);
+		if (BtnRowSlot)
 		{
-			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			LabelSlot->SetVerticalAlignment(VAlign_Center);
+			BtnRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			BtnRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 
+		// Collapse button (leftmost, before label)
 		CollapseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CollapseButton"));
 		CollapseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* CollapseBtnSlot = TitleRow->AddChildToHorizontalBox(CollapseButton);
+		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseButton);
 		if (CollapseBtnSlot)
 		{
 			CollapseBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 			CollapseBtnSlot->SetVerticalAlignment(VAlign_Center);
-			CollapseBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			CollapseBtnSlot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
 		}
 
 		CollapseIcon = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CollapseIcon"));
 		CollapseIcon->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 		CollapseButton->AddChild(CollapseIcon);
 
-		// View mode toggle button (between collapse button and label)
+		// Camera label inline (fills remaining space — visible in wide mode)
+		CameraLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabel"));
+		FText LabelText = CustomLabel.IsEmpty() ? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID) : CustomLabel;
+		CameraLabel->SetText(LabelText);
+		CameraLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		CameraLabel->SetAutoWrapText(false);
+		UHorizontalBoxSlot* LabelSlot = ButtonRow->AddChildToHorizontalBox(CameraLabel);
+		if (LabelSlot)
+		{
+			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
+		// View mode toggle button
 		ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 		ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* ViewModeBtnSlot = TitleRow->AddChildToHorizontalBox(ViewModeButton);
+		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
 		if (ViewModeBtnSlot)
 		{
 			ViewModeBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -131,7 +150,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		// Data stream option cycling button (hidden until config has options)
 		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* OptBtnSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
 		if (OptBtnSlot)
 		{
 			OptBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -143,6 +162,35 @@ void URammsCameraWidget::BuildWidgetTree()
 		OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		OptionButton->AddChild(OptionLabel);
 		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+
+		// Display mode cycle button (rightmost)
+		DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
+		DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+		if (CycleBtnSlot)
+		{
+			CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
+			CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+		}
+		DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
+		DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
+		DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+		DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+
+		// Wrapped label row (shown in narrow mode, below buttons)
+		CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
+		CameraLabelWrap->SetText(LabelText);
+		CameraLabelWrap->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		CameraLabelWrap->SetAutoWrapText(true);
+		CameraLabelWrap->SetVisibility(ESlateVisibility::Collapsed);
+		UVerticalBoxSlot* WrapLabelSlot = TitleVBox->AddChildToVerticalBox(CameraLabelWrap);
+		if (WrapLabelSlot)
+		{
+			WrapLabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			WrapLabelSlot->SetHorizontalAlignment(HAlign_Fill);
+			WrapLabelSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
+		}
 
 		// SizeBox wrapping camera content(Fill = takes remaining space, for collapse animation)
 		CameraSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CameraSizeBox"));
@@ -265,14 +313,24 @@ void URammsCameraWidget::BuildWidgetTree()
 				TitleSlot->SetVerticalAlignment(VAlign_Top);
 			}
 
-			UHorizontalBox* TitleRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TitleRow"));
-			TitleBar->AddChild(TitleRow);
+			// VBox inside TitleBar: ButtonRow on top, CameraLabelWrap below (for narrow mode)
+			UVerticalBox* TitleVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("TitleVBox"));
+			TitleBar->AddChild(TitleVBox);
+
+			ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
+			UVerticalBoxSlot* BtnRowSlot = TitleVBox->AddChildToVerticalBox(ButtonRow);
+			if (BtnRowSlot)
+			{
+				BtnRowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				BtnRowSlot->SetHorizontalAlignment(HAlign_Fill);
+			}
 
 			CameraLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabel"));
 			FText LabelText = CustomLabel.IsEmpty() ? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID) : CustomLabel;
 			CameraLabel->SetText(LabelText);
 			CameraLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-			UHorizontalBoxSlot* LabelSlot = TitleRow->AddChildToHorizontalBox(CameraLabel);
+			CameraLabel->SetAutoWrapText(false);
+			UHorizontalBoxSlot* LabelSlot = ButtonRow->AddChildToHorizontalBox(CameraLabel);
 			if (LabelSlot)
 			{
 				LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -282,7 +340,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			// View mode button in non-collapsible title bar
 			ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 			ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* VMSlot = TitleRow->AddChildToHorizontalBox(ViewModeButton);
+			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
 			if (VMSlot)
 			{
 				VMSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -298,7 +356,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			// Data stream option cycling button (hidden until config has options)
 			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* OptSlot = TitleRow->AddChildToHorizontalBox(OptionButton);
+			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
 			if (OptSlot)
 			{
 				OptSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -310,6 +368,35 @@ void URammsCameraWidget::BuildWidgetTree()
 			OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			OptionButton->AddChild(OptionLabel);
 			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+
+			// Display mode cycle button
+			DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
+			DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+			if (CycleBtnSlot)
+			{
+				CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
+				CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			}
+			DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
+			DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
+			DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+			DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+
+			// Wrapped label row (shown in narrow mode, below buttons)
+			CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
+			CameraLabelWrap->SetText(LabelText);
+			CameraLabelWrap->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+			CameraLabelWrap->SetAutoWrapText(true);
+			CameraLabelWrap->SetVisibility(ESlateVisibility::Collapsed);
+			UVerticalBoxSlot* WrapLabelSlot = TitleVBox->AddChildToVerticalBox(CameraLabelWrap);
+			if (WrapLabelSlot)
+			{
+				WrapLabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				WrapLabelSlot->SetHorizontalAlignment(HAlign_Fill);
+				WrapLabelSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
+			}
 		}
 	}
 }
@@ -359,6 +446,13 @@ void URammsCameraWidget::NativeConstruct()
 	}
 	UpdateOptionButton();
 	ApplyViewModeLayout();
+
+	// Bind display mode cycle button
+	if (DisplayModeCycleButton)
+	{
+		DisplayModeCycleButton->OnClicked.AddUniqueDynamic(this, &URammsCameraWidget::OnDisplayModeCycleClicked);
+	}
+	UpdateDisplayModeCycleButton();
 
 	// Cache expanded slot size for Canvas Panel parents
 	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
@@ -483,6 +577,10 @@ void URammsCameraWidget::SynchronizeProperties()
 			? FText::FromString(StreamID.IsEmpty() ? TEXT("Camera") : StreamID)
 			: CustomLabel;
 		CameraLabel->SetText(LabelText);
+		if (CameraLabelWrap)
+		{
+			CameraLabelWrap->SetText(LabelText);
+		}
 	}
 
 	// Sync view mode label
@@ -511,6 +609,41 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// Check if header needs to switch between single-line and two-row layout
+	UpdateHeaderLayout();
+
+	// Display mode transition animation (smooth size/position interpolation)
+	if (bDisplayModeTransitioning)
+	{
+		float Speed = 4.0f; // ~0.25s
+		DisplayModeTransitionProgress += Speed * InDeltaTime;
+		DisplayModeTransitionProgress = FMath::Clamp(DisplayModeTransitionProgress, 0.0f, 1.0f);
+
+		float Alpha = DisplayModeTransitionProgress * DisplayModeTransitionProgress
+			* (3.0f - 2.0f * DisplayModeTransitionProgress); // smoothstep
+
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			FVector2D CurPos = FMath::Lerp(TransitionStartPos, TransitionTargetPos, Alpha);
+			FVector2D CurSize = FMath::Lerp(TransitionStartSize, TransitionTargetSize, Alpha);
+			CanvasSlot->SetPosition(CurPos);
+			CanvasSlot->SetSize(CurSize);
+		}
+
+		if (DisplayModeTransitionProgress >= 1.0f)
+		{
+			bDisplayModeTransitioning = false;
+			// Ensure exact final values
+			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+			{
+				CanvasSlot->SetPosition(TransitionTargetPos);
+				CanvasSlot->SetSize(TransitionTargetSize);
+				CachedExpandedSlotSize = TransitionTargetSize;
+			}
+		}
+	}
+
+	// Collapse animation
 	if (!bCollapseAnimating || !CameraSizeBox)
 		return;
 
@@ -624,6 +757,11 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 		CameraLabel->SetFont(Style->Typography.Caption);
 		CameraLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
+	if (CameraLabelWrap)
+	{
+		CameraLabelWrap->SetFont(Style->Typography.Caption);
+		CameraLabelWrap->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
 
 	// Style the collapse icon to match other headers
 	if (CollapseIcon)
@@ -655,6 +793,10 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 		if (CameraLabel)
 		{
 			CameraLabel->SetText(LabelText);
+		}
+		if (CameraLabelWrap)
+		{
+			CameraLabelWrap->SetText(LabelText);
 		}
 	}
 }
@@ -713,6 +855,10 @@ void URammsCameraWidget::SetStreamID(const FString& NewStreamID)
 	{
 		CameraLabel->SetText(FText::FromString(StreamID));
 	}
+	if (CameraLabelWrap && CustomLabel.IsEmpty())
+	{
+		CameraLabelWrap->SetText(FText::FromString(StreamID));
+	}
 
 	// Start new stream
 	if (CameraProvider.GetInterface())
@@ -726,8 +872,49 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 	if (DisplayMode == NewMode)
 		return;
 
+	// Cancel any active drag
+	if (bIsDragging)
+	{
+		bIsDragging = false;
+	}
+
+	// Cache current position + size for smooth transition animation
+	if (bAnimateTransition)
+	{
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			TransitionStartPos = CanvasSlot->GetPosition();
+			TransitionStartSize = CanvasSlot->GetSize();
+		}
+		else if (InternalSizeBox)
+		{
+			TransitionStartPos = FVector2D::ZeroVector;
+			FVector2D DesiredSize = InternalSizeBox->GetDesiredSize();
+			TransitionStartSize = DesiredSize;
+		}
+	}
+
 	DisplayMode = NewMode;
-	UpdateLayout(bAnimateTransition);
+	UpdateLayout(false); // Apply layout immediately (no entrance animation)
+
+	// Start smooth transition from old geometry to new
+	if (bAnimateTransition)
+	{
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+		{
+			TransitionTargetPos = CanvasSlot->GetPosition();
+			TransitionTargetSize = CanvasSlot->GetSize();
+
+			// Reset to start position for animation
+			CanvasSlot->SetPosition(TransitionStartPos);
+			CanvasSlot->SetSize(TransitionStartSize);
+
+			bDisplayModeTransitioning = true;
+			DisplayModeTransitionProgress = 0.0f;
+		}
+	}
+
+	UpdateDisplayModeCycleButton();
 }
 
 void URammsCameraWidget::SetTexture(UTexture* Texture)
@@ -837,8 +1024,15 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 			if (CanvasSlot)
 			{
-				// Set computed size on slot; preserve designer-set anchors/position
+				// Use point anchors (center of canvas) so drag moves position, not offsets
+				CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+				CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 				CanvasSlot->SetSize(SizeInUnits);
+				// Only reset position to center if not currently being dragged
+				if (!bIsDragging)
+				{
+					CanvasSlot->SetPosition(FVector2D::ZeroVector);
+				}
 				CachedExpandedSlotSize = SizeInUnits;
 			}
 			else if (bInLayoutContainer)
@@ -947,7 +1141,72 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				SlideIn(FVector2D(SlideDir, 0));
 			break;
 		}
+
+		case ERammsCameraDisplayMode::Widget:
+		{
+			// Widget mode: no viewport-percentage sizing.
+			// Size is determined by parent layout slot or explicit SizeBox overrides.
+			if (InternalSizeBox)
+			{
+				InternalSizeBox->ClearWidthOverride();
+				InternalSizeBox->ClearHeightOverride();
+			}
+
+			// Apply aspect ratio constraint via ImageAspectRatioBox if available
+			if (ImageAspectRatioBox && bMaintainAspectRatio && AspectRatio > 0.0f)
+			{
+				ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
+				ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
+			}
+
+			// Cache current size for collapse animation
+			if (CanvasSlot)
+			{
+				CachedExpandedSlotSize = CanvasSlot->GetSize();
+			}
+
+			if (bAnimate)
+				ScaleIn();
+			break;
+		}
 	}
+
+	UpdateDisplayModeCycleButton();
+	ApplyZOrder();
+}
+
+void URammsCameraWidget::SetZOrder(int32 NewBaseZOrder)
+{
+	BaseZOrder = NewBaseZOrder;
+	ApplyZOrder();
+}
+
+int32 URammsCameraWidget::GetEffectiveZOrder() const
+{
+	int32 Z = BaseZOrder + FocusZOrderBoost;
+	if (DisplayMode == ERammsCameraDisplayMode::Fullscreen)
+	{
+		Z += FullscreenZOrderBoost;
+	}
+	return Z;
+}
+
+void URammsCameraWidget::ApplyZOrder()
+{
+	int32 EffectiveZ = GetEffectiveZOrder();
+
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+	{
+		CanvasSlot->SetZOrder(EffectiveZ);
+	}
+	else if (IsInViewport() && EffectiveZ != CachedAppliedZOrder)
+	{
+		// Viewport z-order can only be changed by re-adding
+		RemoveFromParent();
+		AddToViewport(EffectiveZ);
+	}
+
+	CachedAppliedZOrder = EffectiveZ;
 }
 
 void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture* Texture, int64 Timestamp)
@@ -1076,7 +1335,19 @@ void URammsCameraWidget::StopStream()
 
 FReply URammsCameraWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bEnableDrag && InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
+	// Focus-on-click: bring windowed widget to front when clicked
+	if (bFocusOnClick && DisplayMode == ERammsCameraDisplayMode::Windowed
+		&& InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
+	{
+		FocusZOrderBoost = ++FocusZOrderCounter;
+		ApplyZOrder();
+	}
+
+	// Only allow drag in Windowed mode (other modes compute position automatically)
+	bool bCanDrag = bEnableDrag
+		&& DisplayMode == ERammsCameraDisplayMode::Windowed;
+
+	if (bCanDrag && InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
 	{
 		bIsDragging = true;
 		DragStartMousePos = InMouseEvent.GetScreenSpacePosition();
@@ -1401,6 +1672,130 @@ void URammsCameraWidget::UpdateOptionButton()
 	else
 	{
 		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mode)
+{
+	switch (Mode)
+	{
+		case ERammsCameraDisplayMode::Fullscreen:
+			return TEXT("\u2922"); // ⤢ (expand arrows)
+		case ERammsCameraDisplayMode::Windowed:
+			return TEXT("\u25A1"); // □ (window)
+		case ERammsCameraDisplayMode::Corner:
+			return TEXT("\u25F0"); // ◰ (corner)
+		case ERammsCameraDisplayMode::Widget:
+			return TEXT("\u25A3"); // ▣ (widget)
+		default:
+			return TEXT("?");
+	}
+}
+
+void URammsCameraWidget::UpdateDisplayModeCycleButton()
+{
+	if (!DisplayModeCycleButton)
+		return;
+
+	bool bVisible = bShowDisplayModeCycleButton && AllowedDisplayModes.Num() > 1;
+	DisplayModeCycleButton->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	if (DisplayModeCycleLabel)
+	{
+		DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
+	}
+}
+
+void URammsCameraWidget::OnDisplayModeCycleClicked()
+{
+	CycleDisplayMode();
+}
+
+void URammsCameraWidget::CycleDisplayMode()
+{
+	if (AllowedDisplayModes.Num() <= 1)
+		return;
+
+	int32 CurrentIdx = AllowedDisplayModes.IndexOfByKey(DisplayMode);
+	if (CurrentIdx == INDEX_NONE)
+		CurrentIdx = 0;
+
+	int32 NextIdx = (CurrentIdx + 1) % AllowedDisplayModes.Num();
+	SetDisplayMode(AllowedDisplayModes[NextIdx], true);
+}
+
+void URammsCameraWidget::UpdateHeaderLayout()
+{
+	if (!TitleBar || !ButtonRow || !CameraLabel)
+		return;
+
+	// Use the actual rendered width, not the desired/ideal width
+	FGeometry TitleGeo = TitleBar->GetCachedGeometry();
+	float	  TitleBarWidth = TitleGeo.GetLocalSize().X;
+	if (TitleBarWidth <= 0.0f)
+	{
+		// Fallback to cached slot size if geometry isn't available yet
+		if (CachedExpandedSlotSize.X > 0.0f)
+		{
+			TitleBarWidth = CachedExpandedSlotSize.X;
+		}
+		else
+		{
+			return; // Can't determine width yet
+		}
+	}
+
+	// Measure the minimum width needed by buttons (all Auto-sized children except the Fill label)
+	float ButtonsMinWidth = 0.0f;
+	if (CollapseButton && CollapseButton->GetVisibility() != ESlateVisibility::Collapsed)
+	{
+		ButtonsMinWidth += CollapseButton->GetDesiredSize().X + 4.0f;
+	}
+	if (ViewModeButton && ViewModeButton->GetVisibility() != ESlateVisibility::Collapsed)
+	{
+		ButtonsMinWidth += ViewModeButton->GetDesiredSize().X + 4.0f;
+	}
+	if (OptionButton && OptionButton->GetVisibility() != ESlateVisibility::Collapsed)
+	{
+		ButtonsMinWidth += OptionButton->GetDesiredSize().X + 4.0f;
+	}
+	if (DisplayModeCycleButton && DisplayModeCycleButton->GetVisibility() != ESlateVisibility::Collapsed)
+	{
+		ButtonsMinWidth += DisplayModeCycleButton->GetDesiredSize().X + 4.0f;
+	}
+
+	// Account for title bar padding (8px each side)
+	float AvailableForLabel = TitleBarWidth - ButtonsMinWidth - 16.0f;
+
+	// Compare against the actual desired width of the label text
+	float LabelDesiredWidth = CameraLabel->GetDesiredSize().X;
+	if (LabelDesiredWidth < 20.0f)
+		LabelDesiredWidth = 20.0f; // Floor to prevent flicker with empty labels
+	bool bShouldBeNarrow = (AvailableForLabel < LabelDesiredWidth);
+
+	if (bShouldBeNarrow != bHeaderNarrowMode)
+	{
+		bHeaderNarrowMode = bShouldBeNarrow;
+
+		if (bHeaderNarrowMode)
+		{
+			// Switch to narrow: hide inline label text but keep it as a Fill spacer
+			// so buttons stay right-justified. Show wrapped label below.
+			CameraLabel->SetVisibility(ESlateVisibility::Hidden);
+			if (CameraLabelWrap)
+			{
+				CameraLabelWrap->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			}
+		}
+		else
+		{
+			// Switch to wide: show inline label, hide wrapped label
+			CameraLabel->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			if (CameraLabelWrap)
+			{
+				CameraLabelWrap->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
 	}
 }
 

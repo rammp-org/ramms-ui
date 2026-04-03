@@ -232,6 +232,7 @@ void URammsStatusPanel::BuildFieldRows()
 		ValueText->SetText(FText::FromString(TEXT("--")));
 		ValueText->SetColorAndOpacity(FSlateColor(
 			Style ? Style->Colors.TextPrimary : FLinearColor::White));
+		ValueText->SetAutoWrapText(Fields[i].bWrapText);
 		if (UHorizontalBoxSlot* ValSlot = Row->AddChildToHorizontalBox(ValueText))
 		{
 			ValSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));

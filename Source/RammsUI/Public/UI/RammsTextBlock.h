@@ -89,7 +89,7 @@ protected:
 
 	// ── Widget references ────────────────────────────────────────
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> InnerText;
 
 public:
@@ -120,8 +120,9 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 
 protected:
-	virtual void BuildWidgetTree() override;
-	virtual void ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return InnerText; }
 
 private:
 	/** Resolve the FSlateFontInfo for the current Variant from the theme */

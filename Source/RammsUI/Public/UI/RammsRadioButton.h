@@ -34,11 +34,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radio")
 	bool bIsChecked = false;
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> RootHBox;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UCheckBox> InnerCheckBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RadioLabel;
 
 	/** Static map of radio groups (for mutual exclusion) */
@@ -88,6 +91,7 @@ protected:
 	void UncheckGroup();
 
 	/** Build widget tree programmatically */
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return RootHBox; }
 };

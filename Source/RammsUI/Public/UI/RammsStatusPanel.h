@@ -94,6 +94,11 @@ struct FRammsStatusField
 	/** Whether threshold-based coloring is enabled for this field */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Status|Thresholds")
 	bool bUseThresholdColors = false;
+
+	/** Enable text wrapping on the value column for this field.
+	 *  Useful for fields that may contain long text (e.g. mode names, messages). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Status")
+	bool bWrapText = false;
 };
 
 // ── Status Panel Widget ────────────────────────────────────────────────────
@@ -146,37 +151,37 @@ protected:
 		meta = (ClampMin = "0.016"))
 	float UpdateFrequency = 0.1f;
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> HeaderBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> ToggleButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ToggleIcon;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> HeaderRow;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> ContentSizeBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentBox;
 
 	/** Per-row: label text block */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UTextBlock>> LabelWidgets;
 
 	/** Per-row: value text block */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UTextBlock>> ValueWidgets;
 
 	// Animation state
@@ -230,8 +235,9 @@ public:
 	void SetCustomFieldValue(FName Key, const FString& Value);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
 
 	/** Build or rebuild the data-driven content rows */
 	void BuildFieldRows();

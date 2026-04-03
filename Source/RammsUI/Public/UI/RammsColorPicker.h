@@ -161,9 +161,10 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 
 protected:
-	virtual void SynchronizeProperties() override;
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 SynchronizeProperties() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ContainerBorder; }
 
 private:
 	// ── Gradient Texture Generation ──
@@ -218,63 +219,63 @@ private:
 	/** Broadcast colour change delegates. */
 	void BroadcastChange();
 
-	// ── Cached Widgets ──
+	// ── Cached Widgets (Transient — rebuilt programmatically) ──
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ContainerBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentVBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> PickerLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HexLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> SwatchImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<class USizeBox> SwatchSizeBoxWidget;
 
 	// Hue row
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> HueOverlay;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> HueGradientImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USlider> HueSlider;
 
 	// Saturation row
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> SatOverlay;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> SatGradientImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USlider> SatSlider;
 
 	// Brightness row
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> BriOverlay;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> BriGradientImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USlider> BriSlider;
 
 	// Cached gradient textures (managed per-instance)
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> HueTexture;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> SatTexture;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> BriTexture;
 };

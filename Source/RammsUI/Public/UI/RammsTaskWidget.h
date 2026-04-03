@@ -50,23 +50,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
 	TObjectPtr<UTexture2D> ConfirmIcon;
 
-	// Widget references
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> StatusLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> ExitButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> CancelButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> ConfirmButton;
 
 public:
@@ -101,8 +101,9 @@ public:
 	void SetConfirmVisible(bool bVisible);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
 
 	UFUNCTION()
 	void OnExitClicked();

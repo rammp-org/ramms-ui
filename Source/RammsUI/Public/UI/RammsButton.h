@@ -67,17 +67,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	FMargin ContentPadding = FMargin(12.0f, 6.0f);
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (built programmatically — Transient prevents stale
+	// serialization when placed inside a parent Widget Blueprint)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ButtonBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> InnerButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ButtonLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> ButtonIcon;
 
 	/** Current button state */
@@ -136,6 +137,7 @@ protected:
 	FLinearColor GetVariantColor() const;
 
 	/** Build widget tree programmatically */
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ButtonBorder; }
 };

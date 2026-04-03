@@ -8,6 +8,7 @@
 
 void URammsImageButton::ResetCachedWidgets()
 {
+	ButtonBorder = nullptr;
 	InnerButton = nullptr;
 	ContentImage = nullptr;
 	Label = nullptr;
@@ -17,12 +18,24 @@ void URammsImageButton::ResetCachedWidgets()
 
 void URammsImageButton::BuildWidgetTree()
 {
-	if (!WidgetTree || InnerButton)
+	if (!WidgetTree || ButtonBorder)
 		return;
 
-	// Root: Button
+	// Root: Border — provides visual background, rounded corners, clipping
+	ButtonBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ButtonBorder"));
+	ButtonBorder->SetClipping(EWidgetClipping::ClipToBounds);
+	WidgetTree->RootWidget = ButtonBorder;
+
+	// Inner: transparent UButton for click/hover/press handling
 	InnerButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("InnerButton"));
-	WidgetTree->RootWidget = InnerButton;
+	ButtonBorder->AddChild(InnerButton);
+
+	FButtonStyle TransparentStyle;
+	TransparentStyle.Normal.DrawAs = ESlateBrushDrawType::NoDrawType;
+	TransparentStyle.Hovered.DrawAs = ESlateBrushDrawType::NoDrawType;
+	TransparentStyle.Pressed.DrawAs = ESlateBrushDrawType::NoDrawType;
+	TransparentStyle.Disabled.DrawAs = ESlateBrushDrawType::NoDrawType;
+	InnerButton->SetStyle(TransparentStyle);
 
 	// VerticalBox for image + label stacking
 	UVerticalBox* VBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentVBox"));
@@ -30,8 +43,8 @@ void URammsImageButton::BuildWidgetTree()
 	if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(VBox->Slot))
 	{
 		ContentSlot->SetPadding(FMargin(ContentPadding));
-		ContentSlot->SetHorizontalAlignment(HAlign_Center);
-		ContentSlot->SetVerticalAlignment(VAlign_Center);
+		ContentSlot->SetHorizontalAlignment(HAlign_Fill);
+		ContentSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 
 	// Overlay wraps the image so we can put an active border on it
@@ -102,11 +115,11 @@ void URammsImageButton::NativeConstruct()
 
 	if (InnerButton)
 	{
-		InnerButton->OnClicked.AddDynamic(this, &URammsImageButton::HandleClicked);
-		InnerButton->OnHovered.AddDynamic(this, &URammsImageButton::HandleHovered);
-		InnerButton->OnUnhovered.AddDynamic(this, &URammsImageButton::HandleUnhovered);
-		InnerButton->OnPressed.AddDynamic(this, &URammsImageButton::HandlePressed);
-		InnerButton->OnReleased.AddDynamic(this, &URammsImageButton::HandleReleased);
+		InnerButton->OnClicked.AddUniqueDynamic(this, &URammsImageButton::HandleClicked);
+		InnerButton->OnHovered.AddUniqueDynamic(this, &URammsImageButton::HandleHovered);
+		InnerButton->OnUnhovered.AddUniqueDynamic(this, &URammsImageButton::HandleUnhovered);
+		InnerButton->OnPressed.AddUniqueDynamic(this, &URammsImageButton::HandlePressed);
+		InnerButton->OnReleased.AddUniqueDynamic(this, &URammsImageButton::HandleReleased);
 	}
 
 	UpdateVisualState();
@@ -216,6 +229,23 @@ void URammsImageButton::SetImageSize(FVector2D NewSize)
 	}
 }
 
+void URammsImageButton::SetShowLabel(bool bShow)
+{
+	bShowLabel = bShow;
+	if (Label)
+	{
+		Label->SetVisibility(bShowLabel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
+void URammsImageButton::SetLabelAutoWrap(bool bAutoWrap)
+{
+	if (Label)
+	{
+		Label->SetAutoWrapText(bAutoWrap);
+	}
+}
+
 void URammsImageButton::HandleClicked()
 {
 	if (!bButtonEnabled)
@@ -258,7 +288,7 @@ void URammsImageButton::HandleReleased()
 
 void URammsImageButton::UpdateVisualState()
 {
-	if (!InnerButton)
+	if (!ButtonBorder)
 		return;
 
 	// Determine colors — use Style properties with fallback defaults
@@ -266,11 +296,6 @@ void URammsImageButton::UpdateVisualState()
 	FLinearColor BorderColor = FLinearColor::Transparent;
 	FLinearColor TextColor = Style ? Style->Colors.TextPrimary : FLinearColor::White;
 	float		 Opacity = 1.0f;
-
-	if (Style)
-	{
-		TextColor = Style->Colors.TextPrimary;
-	}
 
 	if (!bButtonEnabled)
 	{
@@ -294,8 +319,8 @@ void URammsImageButton::UpdateVisualState()
 		BgColor = FLinearColor::LerpUsingHSV(BgColor, ActiveColor, 0.15f);
 	}
 
-	InnerButton->SetBackgroundColor(BgColor);
-	InnerButton->SetRenderOpacity(Opacity);
+	ButtonBorder->SetBrushColor(BgColor);
+	ButtonBorder->SetRenderOpacity(Opacity);
 
 	if (ActiveBorder)
 	{

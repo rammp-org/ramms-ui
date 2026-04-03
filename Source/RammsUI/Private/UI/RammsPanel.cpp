@@ -57,7 +57,9 @@ void URammsPanel::BuildWidgetTree()
 	UVerticalBoxSlot* ContentSlotVB = MainVBox->AddChildToVerticalBox(ContentBorder);
 	if (ContentSlotVB)
 	{
-		ContentSlotVB->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		// Automatic so the panel sizes to its NamedSlot content.
+		// Users control overall panel size via the parent layout slot.
+		ContentSlotVB->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		ContentSlotVB->SetHorizontalAlignment(HAlign_Fill);
 	}
 
@@ -65,7 +67,12 @@ void URammsPanel::BuildWidgetTree()
 	ContentBorder->AddChild(ContentVBox);
 
 	ContentSlot = WidgetTree->ConstructWidget<UNamedSlot>(UNamedSlot::StaticClass(), TEXT("ContentSlot"));
-	ContentVBox->AddChildToVerticalBox(ContentSlot);
+	UVerticalBoxSlot* NamedSlotVB = ContentVBox->AddChildToVerticalBox(ContentSlot);
+	if (NamedSlotVB)
+	{
+		NamedSlotVB->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		NamedSlotVB->SetHorizontalAlignment(HAlign_Fill);
+	}
 
 	UpdateHeaderVisibility();
 }
@@ -163,4 +170,9 @@ void URammsPanel::UpdateHeaderVisibility()
 
 	bool bVisible = bShowHeader && !HeaderText.IsEmpty();
 	HeaderBorder->SetVisibility(bVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+}
+
+void URammsPanel::GetSlotNames(TArray<FName>& SlotNames) const
+{
+	SlotNames.Add(TEXT("ContentSlot"));
 }

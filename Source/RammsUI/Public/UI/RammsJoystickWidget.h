@@ -56,14 +56,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	FLinearColor ThumbActiveColor = FLinearColor(0.5f, 0.8f, 1.0f, 1.0f);
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> JoystickCanvas;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> BackgroundImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> ThumbImage;
 
 	/** Current input value (-1 to 1 per axis) */
@@ -107,10 +107,11 @@ protected:
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
-	void		 SetThumbOffset(FVector2D Offset);
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return JoystickCanvas; }
+	void			 UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos);
+	void			 SetThumbOffset(FVector2D Offset);
 
 	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;
 };

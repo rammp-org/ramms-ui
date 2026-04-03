@@ -63,7 +63,7 @@ void URammsToolbar::BuildWidgetTree()
 		{
 			UHorizontalBoxSlot* SlotEntry = HBox->AddChildToHorizontalBox(ToolbarContentSlot);
 			if (SlotEntry)
-				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		}
 	}
 	else
@@ -73,7 +73,7 @@ void URammsToolbar::BuildWidgetTree()
 		{
 			UVerticalBoxSlot* SlotEntry = VBox->AddChildToVerticalBox(ToolbarContentSlot);
 			if (SlotEntry)
-				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				SlotEntry->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		}
 	}
 
@@ -365,4 +365,9 @@ void URammsToolbar::UpdateButtonVisual(FName ItemID)
 	}
 
 	Btn->SetRenderOpacity(ItemData->bIsEnabled ? 1.0f : 0.5f);
+}
+
+void URammsToolbar::GetSlotNames(TArray<FName>& SlotNames) const
+{
+	SlotNames.Add(TEXT("ToolbarContentSlot"));
 }

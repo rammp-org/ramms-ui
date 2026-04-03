@@ -335,11 +335,11 @@ void URammsLayoutManager::UpdateZOrder()
 		if (!Layout.Widget || !Layout.bVisible)
 			continue;
 
-		// For widgets in a Canvas Panel, z-order is handled by child order (no re-add needed)
+		// For widgets in a Canvas Panel, use slot z-order
 		UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Layout.Widget->Slot);
 		if (CanvasSlot)
 		{
-			// Canvas Panel children are drawn in order; slot manipulation not needed here
+			CanvasSlot->SetZOrder(Layout.ZOrder);
 			continue;
 		}
 

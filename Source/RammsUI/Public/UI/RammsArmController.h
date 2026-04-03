@@ -42,17 +42,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arm|Icons")
 	TObjectPtr<UTexture2D> RetractIcon;
 
-	// Widget references
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> HomeButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> RetractButton;
 
 public:
@@ -75,8 +75,9 @@ public:
 	void SetActionEnabled(ERammsArmAction Action, bool bEnabled);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
 
 	UFUNCTION()
 	void OnHomeClicked();

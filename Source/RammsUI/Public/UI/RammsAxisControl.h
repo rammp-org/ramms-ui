@@ -93,51 +93,52 @@ public:
 	virtual void SynchronizeProperties() override;
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return OuterHBox; }
 
 	UPROPERTY()
 	float CurrentValue = 0.0f;
 
-	// ── Cached Widgets ─────────────────────────────────────────────
+	// ── Cached Widgets (Transient — rebuilt programmatically) ─────
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> OuterHBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> IconSizeBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> IconImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> LabelText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ValueText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> ResetButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ResetLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USlider> InnerSlider;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> ControlRow;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> DecrementButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DecrementLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> IncrementButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> IncrementLabel;
 
 	// ── Internal Helpers ───────────────────────────────────────────

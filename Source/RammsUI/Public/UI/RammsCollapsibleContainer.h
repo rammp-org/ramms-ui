@@ -74,31 +74,32 @@ protected:
 
 	// Widget references — use BindWidgetOptional so a Widget Blueprint can provide these.
 	// If not provided (pure C++), BuildWidgetTree creates them programmatically.
-	UPROPERTY(meta = (BindWidgetOptional))
+	// Transient prevents stale serialized references when placed inside another WBP.
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ContainerBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> HeaderBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> HeaderLabel;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ToggleButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ToggleIcon;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> ContentSizeBox;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> ContentScrollBox;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> ContentBox;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UNamedSlot> ContentSlot;
 
 	/** Animation state tracking */
@@ -126,6 +127,16 @@ public:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void ApplyStyle_Implementation() override;
 	virtual void SynchronizeProperties() override;
+
+	// INamedSlotInterface — expose our NamedSlot to the designer
+	virtual void GetSlotNames(TArray<FName>& SlotNames) const override;
+
+	virtual UNamedSlot* GetNamedSlotWidget(FName SlotName) const override
+	{
+		if (SlotName == TEXT("ContentSlot"))
+			return ContentSlot;
+		return nullptr;
+	}
 
 	/** Get the content box to add child widgets to */
 	UFUNCTION(BlueprintPure, Category = "Collapsible")
@@ -160,15 +171,16 @@ public:
 	void SetMaxContentHeight(float Height);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 EnsureScrollableContent();
-	void		 UpdateToggleIcon();
-	void		 UpdateHeaderCornerRadii();
-	void		 ApplyAnimationState(float Alpha);
-	void		 UpdateParentSlotSize(float Alpha);
-	void		 SetContentSlotFill(bool bFill);
-	float		 GetEffectiveMaxHeight() const;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ContainerBorder; }
+	void			 EnsureScrollableContent();
+	void			 UpdateToggleIcon();
+	void			 UpdateHeaderCornerRadii();
+	void			 ApplyAnimationState(float Alpha);
+	void			 UpdateParentSlotSize(float Alpha);
+	void			 SetContentSlotFill(bool bFill);
+	float			 GetEffectiveMaxHeight() const;
 
 	UFUNCTION()
 	void OnToggleClicked();
