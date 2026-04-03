@@ -16,8 +16,8 @@
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
 
-int32													URammsCameraWidget::FocusZOrderCounter = 0;
-TMap<uint8, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
+int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
+TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
 void URammsCameraWidget::ResetCachedWidgets()
 {
@@ -1309,7 +1309,9 @@ uint8 URammsCameraWidget::MakeCornerKey(EHorizontalAlignment H, EVerticalAlignme
 
 void URammsCameraWidget::RegisterCorner()
 {
-	uint8 Key = MakeCornerKey(CornerHAlign, CornerVAlign);
+	uint8				   CornerKey = MakeCornerKey(CornerHAlign, CornerVAlign);
+	UWidget*			   ParentWidget = GetParent();
+	TPair<UWidget*, uint8> Key(ParentWidget, CornerKey);
 
 	// Already registered in the correct slot
 	if (RegisteredCornerKey == Key)
@@ -1325,7 +1327,7 @@ void URammsCameraWidget::RegisterCorner()
 
 void URammsCameraWidget::UnregisterCorner()
 {
-	if (RegisteredCornerKey == 0xFF)
+	if (RegisteredCornerKey.Value == 0xFF)
 		return;
 
 	if (TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey))
@@ -1338,12 +1340,12 @@ void URammsCameraWidget::UnregisterCorner()
 			CornerRegistry.Remove(RegisteredCornerKey);
 		}
 	}
-	RegisteredCornerKey = 0xFF;
+	RegisteredCornerKey = { nullptr, 0xFF };
 }
 
 int32 URammsCameraWidget::GetCornerStackIndex() const
 {
-	if (RegisteredCornerKey == 0xFF)
+	if (RegisteredCornerKey.Value == 0xFF)
 		return 0;
 
 	const TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey);

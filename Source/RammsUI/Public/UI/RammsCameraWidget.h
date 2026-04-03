@@ -716,12 +716,13 @@ protected:
 	/** Per-instance focus z-order boost (set on click, reset on mode change) */
 	int32 FocusZOrderBoost = 0;
 
-	/** Which corner key this widget is registered under (0xFF = not registered) */
-	uint8 RegisteredCornerKey = 0xFF;
+	/** Composite key this widget is registered under in the corner registry */
+	TPair<UWidget*, uint8> RegisteredCornerKey = { nullptr, 0xFF };
 
 	/** Global counter for focus-on-click ordering across all camera widget instances */
 	static int32 FocusZOrderCounter;
 
-	/** Corner stacking registry: corner key → ordered list of widgets */
-	static TMap<uint8, TArray<TWeakObjectPtr<URammsCameraWidget>>> CornerRegistry;
+	/** Corner stacking registry: (parent, corner alignment) → ordered list of widgets.
+	 *  Scoped per parent so widgets in different layouts don't interfere. */
+	static TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> CornerRegistry;
 };
