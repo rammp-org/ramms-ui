@@ -12,6 +12,7 @@
 #include "RammsTaskSelector.generated.h"
 
 class URammsImageButton;
+class UTexture2D;
 
 /**
  * Maps an enum value to a button icon texture.

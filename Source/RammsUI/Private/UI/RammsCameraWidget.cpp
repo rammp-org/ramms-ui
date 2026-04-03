@@ -16,7 +16,8 @@
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
 
-int32 URammsCameraWidget::FocusZOrderCounter = 0;
+int32													URammsCameraWidget::FocusZOrderCounter = 0;
+TMap<uint8, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
 void URammsCameraWidget::ResetCachedWidgets()
 {
@@ -551,6 +552,7 @@ void URammsCameraWidget::NativeConstruct()
 
 void URammsCameraWidget::NativeDestruct()
 {
+	UnregisterCorner();
 	StopStream();
 
 	// Unsubscribe from all providers' frame delegates
@@ -633,12 +635,14 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		if (DisplayModeTransitionProgress >= 1.0f)
 		{
 			bDisplayModeTransitioning = false;
-			// Ensure exact final values
+			// Restore the target mode's actual anchor/alignment/position/size
 			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
 			{
-				CanvasSlot->SetPosition(TransitionTargetPos);
-				CanvasSlot->SetSize(TransitionTargetSize);
-				CachedExpandedSlotSize = TransitionTargetSize;
+				CanvasSlot->SetAnchors(TransitionTargetAnchors);
+				CanvasSlot->SetAlignment(TransitionTargetAlignment);
+				CanvasSlot->SetPosition(TransitionTargetSlotPos);
+				CanvasSlot->SetSize(TransitionTargetSlotSize);
+				CachedExpandedSlotSize = TransitionTargetSlotSize;
 			}
 		}
 	}
@@ -878,34 +882,39 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 		bIsDragging = false;
 	}
 
-	// Cache current position + size for smooth transition animation
+	FVector2D CanvasSize = GetCanvasSize();
+
+	// Cache current ABSOLUTE position + size for smooth transition
 	if (bAnimateTransition)
 	{
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
 		{
-			TransitionStartPos = CanvasSlot->GetPosition();
-			TransitionStartSize = CanvasSlot->GetSize();
-		}
-		else if (InternalSizeBox)
-		{
-			TransitionStartPos = FVector2D::ZeroVector;
-			FVector2D DesiredSize = InternalSizeBox->GetDesiredSize();
-			TransitionStartSize = DesiredSize;
+			TransitionStartPos = ComputeSlotAbsoluteTopLeft(CanvasSlot, CanvasSize);
+			TransitionStartSize = ComputeSlotAbsoluteSize(CanvasSlot, CanvasSize);
 		}
 	}
 
 	DisplayMode = NewMode;
-	UpdateLayout(false); // Apply layout immediately (no entrance animation)
+	UpdateLayout(false); // Apply layout immediately (sets anchors, alignment, size)
 
-	// Start smooth transition from old geometry to new
+	// Start smooth transition from old geometry to new (in absolute coordinates)
 	if (bAnimateTransition)
 	{
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
 		{
-			TransitionTargetPos = CanvasSlot->GetPosition();
-			TransitionTargetSize = CanvasSlot->GetSize();
+			// Cache the target layout properties so we can restore them after animation
+			TransitionTargetAnchors = CanvasSlot->GetAnchors();
+			TransitionTargetAlignment = CanvasSlot->GetAlignment();
+			TransitionTargetSlotPos = CanvasSlot->GetPosition();
+			TransitionTargetSlotSize = CanvasSlot->GetSize();
 
-			// Reset to start position for animation
+			// Compute target absolute rect
+			TransitionTargetPos = ComputeSlotAbsoluteTopLeft(CanvasSlot, CanvasSize);
+			TransitionTargetSize = ComputeSlotAbsoluteSize(CanvasSlot, CanvasSize);
+
+			// Switch to temporary point anchors at (0,0) for absolute-coordinate animation
+			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+			CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
 			CanvasSlot->SetPosition(TransitionStartPos);
 			CanvasSlot->SetSize(TransitionStartSize);
 
@@ -963,6 +972,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
 		{
+			UnregisterCorner();
 			if (CanvasSlot)
 			{
 				// Stretch anchors fill entire Canvas Panel
@@ -993,6 +1003,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Windowed:
 		{
+			UnregisterCorner();
 			FVector2D MaxBounds;
 			MaxBounds.X = CanvasSize.X * WindowedSize.X;
 			MaxBounds.Y = CanvasSize.Y * WindowedSize.Y;
@@ -1063,6 +1074,8 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Corner:
 		{
+			RegisterCorner();
+
 			FVector2D MaxBounds;
 			MaxBounds.X = CanvasSize.X * CornerSize.X;
 			MaxBounds.Y = CanvasSize.Y * CornerSize.Y;
@@ -1105,6 +1118,24 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				(AnchorX > 0.5f) ? -CornerPadding.X : (AnchorX < 0.5f ? CornerPadding.X : 0.0f),
 				(AnchorY > 0.5f) ? -CornerPadding.Y : (AnchorY < 0.5f ? CornerPadding.Y : 0.0f));
 
+			// Corner stacking: offset widgets that share the same corner
+			int32 StackIndex = GetCornerStackIndex();
+			if (StackIndex > 0)
+			{
+				// Landscape widgets (wider than tall) stack vertically; portrait stack horizontally
+				bool bStackVertically = (AspectRatio >= 1.0f || !bMaintainAspectRatio);
+				if (bStackVertically)
+				{
+					float StackDir = (AnchorY > 0.5f) ? -1.0f : 1.0f;
+					PadOffset.Y += StackDir * StackIndex * (WidgetSize.Y + CornerStackGap);
+				}
+				else
+				{
+					float StackDir = (AnchorX > 0.5f) ? -1.0f : 1.0f;
+					PadOffset.X += StackDir * StackIndex * (WidgetSize.X + CornerStackGap);
+				}
+			}
+
 			if (CanvasSlot)
 			{
 				CanvasSlot->SetAnchors(FAnchors(AnchorX, AnchorY, AnchorX, AnchorY));
@@ -1144,6 +1175,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 		case ERammsCameraDisplayMode::Widget:
 		{
+			UnregisterCorner();
 			// Widget mode: no viewport-percentage sizing.
 			// Size is determined by parent layout slot or explicit SizeBox overrides.
 			if (InternalSizeBox)
@@ -1207,6 +1239,123 @@ void URammsCameraWidget::ApplyZOrder()
 	}
 
 	CachedAppliedZOrder = EffectiveZ;
+}
+
+FVector2D URammsCameraWidget::GetCanvasSize() const
+{
+	FVector2D ViewportSize(1920, 1080);
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	}
+	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
+	if (ViewportScale <= 0.0f)
+		ViewportScale = 1.0f;
+	return ViewportSize / ViewportScale;
+}
+
+FVector2D URammsCameraWidget::ComputeSlotAbsoluteTopLeft(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const
+{
+	if (!CanvasSlot)
+		return FVector2D::ZeroVector;
+
+	FAnchors Anchors = CanvasSlot->GetAnchors();
+	bool	 bStretch = !FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
+		|| !FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y);
+
+	if (bStretch)
+	{
+		FMargin Offsets = CanvasSlot->GetOffsets();
+		return FVector2D(
+			CanvasSize.X * Anchors.Minimum.X + Offsets.Left,
+			CanvasSize.Y * Anchors.Minimum.Y + Offsets.Top);
+	}
+	else
+	{
+		FVector2D Anchor(Anchors.Minimum.X, Anchors.Minimum.Y);
+		FVector2D Pos = CanvasSlot->GetPosition();
+		FVector2D Size = CanvasSlot->GetSize();
+		FVector2D Align = CanvasSlot->GetAlignment();
+		return CanvasSize * Anchor + Pos - Size * Align;
+	}
+}
+
+FVector2D URammsCameraWidget::ComputeSlotAbsoluteSize(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const
+{
+	if (!CanvasSlot)
+		return FVector2D::ZeroVector;
+
+	FAnchors Anchors = CanvasSlot->GetAnchors();
+	bool	 bStretch = !FMath::IsNearlyEqual(Anchors.Minimum.X, Anchors.Maximum.X)
+		|| !FMath::IsNearlyEqual(Anchors.Minimum.Y, Anchors.Maximum.Y);
+
+	if (bStretch)
+	{
+		FMargin Offsets = CanvasSlot->GetOffsets();
+		return FVector2D(
+			CanvasSize.X * (Anchors.Maximum.X - Anchors.Minimum.X) - Offsets.Left - Offsets.Right,
+			CanvasSize.Y * (Anchors.Maximum.Y - Anchors.Minimum.Y) - Offsets.Top - Offsets.Bottom);
+	}
+	else
+	{
+		return CanvasSlot->GetSize();
+	}
+}
+
+uint8 URammsCameraWidget::MakeCornerKey(EHorizontalAlignment H, EVerticalAlignment V)
+{
+	return static_cast<uint8>(H) * 4 + static_cast<uint8>(V);
+}
+
+void URammsCameraWidget::RegisterCorner()
+{
+	uint8 Key = MakeCornerKey(CornerHAlign, CornerVAlign);
+
+	// Already registered in the correct slot
+	if (RegisteredCornerKey == Key)
+		return;
+
+	// Unregister from old slot if any
+	UnregisterCorner();
+
+	TArray<TWeakObjectPtr<URammsCameraWidget>>& Stack = CornerRegistry.FindOrAdd(Key);
+	Stack.Add(this);
+	RegisteredCornerKey = Key;
+}
+
+void URammsCameraWidget::UnregisterCorner()
+{
+	if (RegisteredCornerKey == 0xFF)
+		return;
+
+	if (TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey))
+	{
+		Stack->RemoveAll([this](const TWeakObjectPtr<URammsCameraWidget>& W) {
+			return !W.IsValid() || W.Get() == this;
+		});
+		if (Stack->Num() == 0)
+		{
+			CornerRegistry.Remove(RegisteredCornerKey);
+		}
+	}
+	RegisteredCornerKey = 0xFF;
+}
+
+int32 URammsCameraWidget::GetCornerStackIndex() const
+{
+	if (RegisteredCornerKey == 0xFF)
+		return 0;
+
+	const TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey);
+	if (!Stack)
+		return 0;
+
+	for (int32 i = 0; i < Stack->Num(); ++i)
+	{
+		if ((*Stack)[i].Get() == this)
+			return i;
+	}
+	return 0;
 }
 
 void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture* Texture, int64 Timestamp)

@@ -17,7 +17,10 @@
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Widgets/Layout/Anchors.h"
 #include "RammsCameraWidget.generated.h"
+
+class UCanvasPanelSlot;
 
 /**
  * Display modes for camera widget
@@ -239,6 +242,10 @@ protected:
 	/** Bring widget to front when clicked in Windowed mode (focus-on-click) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
 	bool bFocusOnClick = true;
+
+	/** Gap between stacked corner widgets (pixels) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.0"))
+	float CornerStackGap = 8.0f;
 
 	/** Enable drag-to-move */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -631,6 +638,27 @@ protected:
 	/** Apply z-order based on current display mode */
 	void ApplyZOrder();
 
+	/** Compute absolute top-left position of widget within its canvas panel */
+	FVector2D ComputeSlotAbsoluteTopLeft(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const;
+
+	/** Compute absolute size of widget within its canvas panel */
+	FVector2D ComputeSlotAbsoluteSize(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const;
+
+	/** Get canvas-space size (viewport / DPI scale) */
+	FVector2D GetCanvasSize() const;
+
+	/** Register this widget in the corner stacking registry */
+	void RegisterCorner();
+
+	/** Unregister this widget from the corner stacking registry */
+	void UnregisterCorner();
+
+	/** Get this widget's index in its corner stack (0 = closest to edge) */
+	int32 GetCornerStackIndex() const;
+
+	/** Make a key for the corner registry from alignment enums */
+	static uint8 MakeCornerKey(EHorizontalAlignment H, EVerticalAlignment V);
+
 	/** Check header width and toggle single-line vs two-row layout */
 	void UpdateHeaderLayout();
 
@@ -673,6 +701,12 @@ protected:
 	FVector2D TransitionTargetPos = FVector2D::ZeroVector;
 	FVector2D TransitionTargetSize = FVector2D::ZeroVector;
 
+	/** Target canvas slot properties to restore after transition animation */
+	FAnchors  TransitionTargetAnchors;
+	FVector2D TransitionTargetAlignment = FVector2D::ZeroVector;
+	FVector2D TransitionTargetSlotPos = FVector2D::ZeroVector;
+	FVector2D TransitionTargetSlotSize = FVector2D::ZeroVector;
+
 	/** Whether the header is currently in narrow (two-row) mode */
 	bool bHeaderNarrowMode = false;
 
@@ -682,6 +716,12 @@ protected:
 	/** Per-instance focus z-order boost (set on click, reset on mode change) */
 	int32 FocusZOrderBoost = 0;
 
+	/** Which corner key this widget is registered under (0xFF = not registered) */
+	uint8 RegisteredCornerKey = 0xFF;
+
 	/** Global counter for focus-on-click ordering across all camera widget instances */
 	static int32 FocusZOrderCounter;
+
+	/** Corner stacking registry: corner key → ordered list of widgets */
+	static TMap<uint8, TArray<TWeakObjectPtr<URammsCameraWidget>>> CornerRegistry;
 };

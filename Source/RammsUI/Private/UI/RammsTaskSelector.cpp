@@ -151,9 +151,12 @@ void URammsTaskSelector::RebuildContainer()
 
 	if (ButtonContainer)
 	{
+		ButtonContainer->ClearChildren();
 		ButtonContainer->RemoveFromParent();
+		WidgetTree->RemoveWidget(ButtonContainer);
 		ButtonContainer = nullptr;
 	}
+	ButtonMap.Empty();
 
 	// UniformGridPanel is preferred when uniform sizing is on — it naturally
 	// makes every cell the same size.  When MaxPerRow > 0, it also handles
@@ -250,14 +253,8 @@ void URammsTaskSelector::RebuildButtons()
 	if (!ButtonContainer)
 		return;
 
-	// Remove existing buttons
-	for (auto& Pair : ButtonMap)
-	{
-		if (Pair.Value)
-		{
-			Pair.Value->RemoveFromParent();
-		}
-	}
+	// Clear all children (buttons and any SizeBox wrappers)
+	ButtonContainer->ClearChildren();
 	ButtonMap.Empty();
 
 	const TArray<FRammsTaskDefinition> MergedTasks = BuildMergedTaskList();
