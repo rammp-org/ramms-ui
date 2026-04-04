@@ -1040,10 +1040,11 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
 				CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 				CanvasSlot->SetSize(SizeInUnits);
-				// Only reset position to center if not currently being dragged
+				// Preserve any previously dragged position across layout refreshes.
+				// A default WidgetPosition of ZeroVector still keeps the initial centered behavior.
 				if (!bIsDragging)
 				{
-					CanvasSlot->SetPosition(FVector2D::ZeroVector);
+					CanvasSlot->SetPosition(WidgetPosition);
 				}
 				CachedExpandedSlotSize = SizeInUnits;
 			}
