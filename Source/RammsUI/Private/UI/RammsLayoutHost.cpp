@@ -311,15 +311,28 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 		return;
 	}
 
+	// Already on the requested layout and not mid-transition — no-op
 	if (LayoutName == ActiveLayoutName && !bTransitioning)
 	{
-		return; // already there
+		return;
 	}
 
-	// If currently transitioning, finish immediately
+	// Mid-transition to the same target — just let it finish naturally
+	if (bTransitioning && LayoutName == TransitionToName)
+	{
+		return;
+	}
+
+	// If currently transitioning to a *different* layout, finish immediately
 	if (bTransitioning)
 	{
 		FinishTransition();
+	}
+
+	// After finishing a prior transition, ActiveLayoutName may now match — recheck
+	if (LayoutName == ActiveLayoutName)
+	{
+		return;
 	}
 
 	TransitionFromName = ActiveLayoutName;
