@@ -713,7 +713,7 @@ protected:
 	/** Last applied z-order (to avoid redundant viewport re-adds) */
 	int32 CachedAppliedZOrder = INT32_MIN;
 
-	/** Per-instance focus z-order boost (set on click, reset on mode change) */
+	/** Per-instance focus z-order boost (incremented on click for focus ordering) */
 	int32 FocusZOrderBoost = 0;
 
 	/** Composite key this widget is registered under in the corner registry */
