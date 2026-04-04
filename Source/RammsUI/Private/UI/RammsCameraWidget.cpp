@@ -15,6 +15,7 @@
 #include "EngineUtils.h"
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
+#include "Blueprint/GameViewportSubsystem.h"
 
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
@@ -1233,9 +1234,17 @@ void URammsCameraWidget::ApplyZOrder()
 	}
 	else if (IsInViewport() && EffectiveZ != CachedAppliedZOrder)
 	{
-		// Viewport z-order can only be changed by re-adding
-		RemoveFromParent();
-		AddToViewport(EffectiveZ);
+		// Update viewport z-order via GameViewportSubsystem to avoid
+		// RemoveFromParent/AddToViewport which triggers NativeDestruct/NativeConstruct
+		if (UWorld* World = GetWorld())
+		{
+			if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get(World))
+			{
+				FGameViewportWidgetSlot SlotInfo = Subsystem->GetWidgetSlot(this);
+				SlotInfo.ZOrder = EffectiveZ;
+				Subsystem->SetWidgetSlot(this, SlotInfo);
+			}
+		}
 	}
 
 	CachedAppliedZOrder = EffectiveZ;
@@ -1330,14 +1339,26 @@ void URammsCameraWidget::UnregisterCorner()
 	if (RegisteredCornerKey.Value == 0xFF)
 		return;
 
-	if (TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey))
+	TPair<UWidget*, uint8> OldKey = RegisteredCornerKey;
+
+	if (TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(OldKey))
 	{
 		Stack->RemoveAll([this](const TWeakObjectPtr<URammsCameraWidget>& W) {
 			return !W.IsValid() || W.Get() == this;
 		});
+
+		// Refresh layout for remaining widgets in this corner so they recompute stacking offsets
+		for (const TWeakObjectPtr<URammsCameraWidget>& Sibling : *Stack)
+		{
+			if (Sibling.IsValid() && Sibling.Get() != this)
+			{
+				Sibling->UpdateLayout(false);
+			}
+		}
+
 		if (Stack->Num() == 0)
 		{
-			CornerRegistry.Remove(RegisteredCornerKey);
+			CornerRegistry.Remove(OldKey);
 		}
 	}
 	RegisteredCornerKey = { nullptr, 0xFF };

@@ -23,9 +23,9 @@ struct RAMMSUI_API FRammsTaskIconMapping
 {
 	GENERATED_BODY()
 
-	/** Enum value to map (index into TaskEnum). */
+	/** Enum value to map (underlying value from TaskEnum). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
-	uint8 EnumValue = 0;
+	int64 EnumValue = 0;
 
 	/** Icon texture for the button. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
@@ -40,9 +40,9 @@ struct RAMMSUI_API FRammsTaskDefinition
 {
 	GENERATED_BODY()
 
-	/** Enum value this task maps to (index into the TaskEnum). */
+	/** Enum value this task maps to (underlying value from the TaskEnum). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
-	uint8 EnumValue = 0;
+	int64 EnumValue = 0;
 
 	/** Display label.  If empty and a TaskEnum is set, the enum's display name is used. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
@@ -150,13 +150,13 @@ public:
 
 	// ── State ────────────────────────────────────────────────────
 
-	/** Currently selected enum value.  255 = nothing selected. */
+	/** Currently selected enum value.  INDEX_NONE (-1) = nothing selected. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tasks")
-	uint8 SelectedValue = 255;
+	int64 SelectedValue = INDEX_NONE;
 
 	// ── Delegates ────────────────────────────────────────────────
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTaskSelected, uint8, EnumValue);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTaskSelected, int64, EnumValue);
 
 	/** Fires when a task button is selected. */
 	UPROPERTY(BlueprintAssignable, Category = "Tasks")
@@ -172,7 +172,7 @@ public:
 
 	/** Programmatically select a task by enum value. */
 	UFUNCTION(BlueprintCallable, Category = "Tasks")
-	void SelectTask(uint8 EnumValue);
+	void SelectTask(int64 EnumValue);
 
 	/** Clear the current selection. */
 	UFUNCTION(BlueprintCallable, Category = "Tasks")
@@ -180,7 +180,7 @@ public:
 
 	/** Enable or disable a specific task by enum value. */
 	UFUNCTION(BlueprintCallable, Category = "Tasks")
-	void SetTaskEnabled(uint8 EnumValue, bool bEnabled);
+	void SetTaskEnabled(int64 EnumValue, bool bEnabled);
 
 	/** Rebuild all buttons from the current Tasks array / enum. */
 	UFUNCTION(BlueprintCallable, Category = "Tasks")
@@ -210,7 +210,7 @@ private:
 	void OnButtonClicked();
 
 	/** Resolve the enum value for a clicked button. */
-	uint8 GetEnumValueForButton(URammsImageButton* Button) const;
+	int64 GetEnumValueForButton(URammsImageButton* Button) const;
 
 	// ── Cached widgets (Transient — rebuilt programmatically) ───
 
@@ -222,5 +222,5 @@ private:
 
 	/** Map EnumValue → ImageButton for fast lookup. */
 	UPROPERTY(Transient)
-	TMap<uint8, TObjectPtr<URammsImageButton>> ButtonMap;
+	TMap<int64, TObjectPtr<URammsImageButton>> ButtonMap;
 };

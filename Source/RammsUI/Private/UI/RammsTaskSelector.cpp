@@ -85,7 +85,7 @@ void URammsTaskSelector::ApplyStyle_Implementation()
 
 // ── Public API ─────────────────────────────────────────────────────
 
-void URammsTaskSelector::SelectTask(uint8 EnumValue)
+void URammsTaskSelector::SelectTask(int64 EnumValue)
 {
 	if (SelectedValue == EnumValue)
 		return;
@@ -111,7 +111,7 @@ void URammsTaskSelector::SelectTask(uint8 EnumValue)
 
 void URammsTaskSelector::ClearSelection()
 {
-	if (SelectedValue == 255)
+	if (SelectedValue == INDEX_NONE)
 		return;
 
 	if (TObjectPtr<URammsImageButton>* Prev = ButtonMap.Find(SelectedValue))
@@ -120,11 +120,11 @@ void URammsTaskSelector::ClearSelection()
 			(*Prev)->SetActive(false);
 	}
 
-	SelectedValue = 255;
+	SelectedValue = INDEX_NONE;
 	OnTaskDeselected.Broadcast();
 }
 
-void URammsTaskSelector::SetTaskEnabled(uint8 EnumValue, bool bEnabled)
+void URammsTaskSelector::SetTaskEnabled(int64 EnumValue, bool bEnabled)
 {
 	if (TObjectPtr<URammsImageButton>* Btn = ButtonMap.Find(EnumValue))
 	{
@@ -188,18 +188,19 @@ void URammsTaskSelector::RebuildContainer()
 TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 {
 	TArray<FRammsTaskDefinition> Merged;
+	TSet<int64>					 SeenValues; // track duplicates
 
 	if (bAutoGenerateFromEnum && TaskEnum)
 	{
 		// Full overrides take priority
-		TMap<uint8, const FRammsTaskDefinition*> Overrides;
+		TMap<int64, const FRammsTaskDefinition*> Overrides;
 		for (const FRammsTaskDefinition& Def : Tasks)
 		{
 			Overrides.Add(Def.EnumValue, &Def);
 		}
 
 		// Icon-only overrides for enum values not covered by full overrides
-		TMap<uint8, UTexture2D*> IconMap;
+		TMap<int64, UTexture2D*> IconMap;
 		for (const FRammsTaskIconMapping& Mapping : IconOverrides)
 		{
 			IconMap.Add(Mapping.EnumValue, Mapping.Icon);
@@ -208,7 +209,16 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 		const int32 Count = TaskEnum->NumEnums() - 1; // skip _MAX
 		for (int32 i = 0; i < Count; ++i)
 		{
-			const uint8 Val = static_cast<uint8>(TaskEnum->GetValueByIndex(i));
+			const int64 Val = TaskEnum->GetValueByIndex(i);
+
+			// Skip duplicate underlying values (e.g. enum aliases)
+			if (SeenValues.Contains(Val))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("URammsTaskSelector: Skipping duplicate enum value %lld (index %d) in %s"),
+					Val, i, *TaskEnum->GetName());
+				continue;
+			}
+			SeenValues.Add(Val);
 
 			if (const FRammsTaskDefinition* const* Override = Overrides.Find(Val))
 			{
@@ -242,7 +252,18 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 	}
 	else
 	{
-		Merged = Tasks;
+		// For manual tasks, also skip duplicates
+		for (const FRammsTaskDefinition& Def : Tasks)
+		{
+			if (SeenValues.Contains(Def.EnumValue))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("URammsTaskSelector: Skipping duplicate manual task EnumValue %lld"),
+					Def.EnumValue);
+				continue;
+			}
+			SeenValues.Add(Def.EnumValue);
+			Merged.Add(Def);
+		}
 	}
 
 	return Merged;
@@ -367,7 +388,7 @@ void URammsTaskSelector::OnButtonClicked()
 {
 	// Identify the clicked button: the one currently hovered (mouse/touch)
 	// or keyboard-focused (gamepad/keyboard navigation).
-	uint8 ClickedValue = 255;
+	int64 ClickedValue = INDEX_NONE;
 
 	for (auto& Pair : ButtonMap)
 	{
@@ -378,7 +399,7 @@ void URammsTaskSelector::OnButtonClicked()
 		}
 	}
 
-	if (ClickedValue == 255)
+	if (ClickedValue == INDEX_NONE)
 		return;
 
 	if (ClickedValue == SelectedValue)
@@ -394,12 +415,12 @@ void URammsTaskSelector::OnButtonClicked()
 	}
 }
 
-uint8 URammsTaskSelector::GetEnumValueForButton(URammsImageButton* Button) const
+int64 URammsTaskSelector::GetEnumValueForButton(URammsImageButton* Button) const
 {
 	for (const auto& Pair : ButtonMap)
 	{
 		if (Pair.Value == Button)
 			return Pair.Key;
 	}
-	return 255;
+	return INDEX_NONE;
 }

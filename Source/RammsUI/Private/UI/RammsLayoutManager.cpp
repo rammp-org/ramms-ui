@@ -4,6 +4,7 @@
 #include "UI/RammsLayoutPresetAsset.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Blueprint/GameViewportSubsystem.h"
 #include "TimerManager.h"
 
 URammsLayoutManager::URammsLayoutManager()
@@ -343,11 +344,18 @@ void URammsLayoutManager::UpdateZOrder()
 			continue;
 		}
 
-		// For viewport widgets, re-add with z-order
+		// For viewport widgets, update z-order without removing/re-adding
 		if (Layout.Widget->IsInViewport())
 		{
-			Layout.Widget->RemoveFromParent();
-			Layout.Widget->AddToViewport(Layout.ZOrder);
+			if (UWorld* World = Layout.Widget->GetWorld())
+			{
+				if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get(World))
+				{
+					FGameViewportWidgetSlot SlotInfo = Subsystem->GetWidgetSlot(Layout.Widget);
+					SlotInfo.ZOrder = Layout.ZOrder;
+					Subsystem->SetWidgetSlot(Layout.Widget, SlotInfo);
+				}
+			}
 
 			// Re-apply stored position/size
 			float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(Layout.Widget);
