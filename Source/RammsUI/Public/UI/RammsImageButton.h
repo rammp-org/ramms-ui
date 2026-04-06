@@ -59,20 +59,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	float ActiveBorderWidth = 3.0f;
 
-	// Widget references
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> ButtonBorder;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> InnerButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> ContentImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> Label;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ActiveBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> ImageSizeBox;
 
 	bool bIsHovered = false;
@@ -116,10 +119,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ImageButton")
 	void SetImageSize(FVector2D NewSize);
 
+	/** Show or hide the label below the image */
+	UFUNCTION(BlueprintCallable, Category = "ImageButton")
+	void SetShowLabel(bool bShow);
+
+	/** Enable or disable auto-wrapping on the label text */
+	UFUNCTION(BlueprintCallable, Category = "ImageButton")
+	void SetLabelAutoWrap(bool bAutoWrap);
+
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 UpdateVisualState();
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ButtonBorder; }
+	void			 UpdateVisualState();
 
 	UFUNCTION()
 	void HandleClicked();

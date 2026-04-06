@@ -3,28 +3,30 @@
 #include "UI/RammsRadioButton.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Styling/CoreStyle.h"
 
 // Initialize static radio groups map
 TMap<FName, TArray<TWeakObjectPtr<URammsRadioButton>>> URammsRadioButton::RadioGroups;
 
 void URammsRadioButton::ResetCachedWidgets()
 {
+	RootHBox = nullptr;
 	InnerCheckBox = nullptr;
 	RadioLabel = nullptr;
 }
 
 void URammsRadioButton::BuildWidgetTree()
 {
-	if (!WidgetTree || InnerCheckBox)
+	if (!WidgetTree || RootHBox)
 		return; // Already built or no tree
 
 	// Root: HorizontalBox
-	UHorizontalBox* RootBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RootHBox"));
-	WidgetTree->RootWidget = RootBox;
+	RootHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RootHBox"));
+	WidgetTree->RootWidget = RootHBox;
 
 	// Checkbox
 	InnerCheckBox = WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), TEXT("InnerCheckBox"));
-	UHorizontalBoxSlot* CheckSlot = Cast<UHorizontalBoxSlot>(RootBox->AddChildToHorizontalBox(InnerCheckBox));
+	UHorizontalBoxSlot* CheckSlot = Cast<UHorizontalBoxSlot>(RootHBox->AddChildToHorizontalBox(InnerCheckBox));
 	if (CheckSlot)
 	{
 		CheckSlot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
@@ -34,7 +36,8 @@ void URammsRadioButton::BuildWidgetTree()
 	// Label
 	RadioLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RadioLabel"));
 	RadioLabel->SetText(ButtonText);
-	UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(RootBox->AddChildToHorizontalBox(RadioLabel));
+	RadioLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
+	UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(RootHBox->AddChildToHorizontalBox(RadioLabel));
 	if (LabelSlot)
 	{
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
@@ -57,7 +60,7 @@ void URammsRadioButton::NativeConstruct()
 	if (InnerCheckBox)
 	{
 		InnerCheckBox->SetIsChecked(bIsChecked);
-		InnerCheckBox->OnCheckStateChanged.AddDynamic(this, &URammsRadioButton::OnCheckBoxChanged);
+		InnerCheckBox->OnCheckStateChanged.AddUniqueDynamic(this, &URammsRadioButton::OnCheckBoxChanged);
 	}
 
 	if (RadioLabel)

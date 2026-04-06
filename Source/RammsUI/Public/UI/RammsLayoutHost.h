@@ -246,15 +246,15 @@ protected:
 
 private:
 	/** Root overlay — layouts are direct children, stacked for crossfade */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> RootOverlay;
 
 	/** Registered layouts: name → instance */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<URammsLayoutBase>> LayoutMap;
 
 	/** Ordered list of layout names */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TArray<FName> LayoutOrder;
 
 	/** Name of the active layout */

@@ -20,25 +20,25 @@ class RAMMSUI_API URammsTestWidget : public URammsBaseWidget
 	GENERATED_BODY()
 
 protected:
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> MainBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> StatusText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> FadeInButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> FadeOutButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> SlideInButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> ScaleInButton;
 
 public:
@@ -47,8 +47,9 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return MainBorder; }
 
 private:
 	UButton* CreateTestButton(const FString& Name, const FString& Label);

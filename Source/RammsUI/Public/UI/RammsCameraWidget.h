@@ -11,12 +11,16 @@
 #include "Components/TextBlock.h"
 #include "Components/Overlay.h"
 #include "Components/SizeBox.h"
+#include "Components/HorizontalBox.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Widgets/Layout/Anchors.h"
 #include "RammsCameraWidget.generated.h"
+
+class UCanvasPanelSlot;
 
 /**
  * Display modes for camera widget
@@ -31,7 +35,10 @@ enum class ERammsCameraDisplayMode : uint8
 	Windowed,
 
 	/** Corner widget (small, anchored to corner) */
-	Corner
+	Corner,
+
+	/** Widget mode — size determined by parent layout, no viewport % sizing */
+	Widget
 };
 
 /**
@@ -187,6 +194,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.3", ClampMax = "1.0"))
 	FVector2D WindowedSize = FVector2D(0.8f, 0.8f);
 
+	/** Which display modes are available for cycling (default: all) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	TArray<ERammsCameraDisplayMode> AllowedDisplayModes = {
+		ERammsCameraDisplayMode::Fullscreen,
+		ERammsCameraDisplayMode::Windowed,
+		ERammsCameraDisplayMode::Corner,
+		ERammsCameraDisplayMode::Widget
+	};
+
+	/** Show the display mode cycle button in the header */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	bool bShowDisplayModeCycleButton = true;
+
 	/** Whether to show the label */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
 	bool bShowLabel = true;
@@ -210,6 +230,22 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	TObjectPtr<UMaterialInterface> PassthroughMaterial;
+
+	/** Base Z-order for this widget (higher values draw on top of lower ones) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	int32 BaseZOrder = 0;
+
+	/** Z-order boost added when in Fullscreen mode (so fullscreen covers other widgets) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	int32 FullscreenZOrderBoost = 100;
+
+	/** Bring widget to front when clicked in Windowed mode (focus-on-click) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+	bool bFocusOnClick = true;
+
+	/** Gap between stacked corner widgets (pixels) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.0"))
+	float CornerStackGap = 8.0f;
 
 	/** Enable drag-to-move */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -248,37 +284,45 @@ protected:
 	/** Current widget position in screen pixels (for drag tracking and viewport positioning) */
 	FVector2D WidgetPosition = FVector2D::ZeroVector;
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> CameraBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> CameraImage;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> CameraLabel;
 
-	UPROPERTY()
+	/** Wrapped version of camera label shown below buttons when header is narrow */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> CameraLabelWrap;
+
+	/** HBox containing header buttons (used to measure minimum button width) */
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> ButtonRow;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> TitleBar;
 
 	/** Collapse toggle button in the title bar */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> CollapseButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> CollapseIcon;
 
 	/** SizeBox wrapping camera content for collapse animation */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> CameraSizeBox;
 
 	/** SizeBox wrapping the entire widget tree — used to constrain size when placed
 	 *  in a non-Canvas container (NamedSlot, Overlay, SizeBox). */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> InternalSizeBox;
 
 	/** SizeBox constraining the image area to maintain aspect ratio (created when bMaintainAspectRatio is true) */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> ImageAspectRatioBox;
 
 	/** Current texture being displayed (UTexture2D or UTextureRenderTarget2D) */
@@ -290,22 +334,29 @@ protected:
 	TObjectPtr<UTexture> CurrentDataTexture;
 
 	/** Second image widget for side-by-side data display */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UImage> DataImage;
 
 	/** View-mode toggle button in title bar */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> ViewModeButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ViewModeLabel;
 
 	/** Data stream option cycling button (shown only when DataStreamConfig.Options is non-empty) */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UButton> OptionButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> OptionLabel;
+
+	/** Display mode cycle button */
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> DisplayModeCycleButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
 
 	/** Current index into DataStreamConfig.Options */
 	int32 CurrentOptionIndex = 0;
@@ -373,6 +424,12 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Display")
 	void SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bAnimateTransition = true);
+
+	/**
+	 * Cycle to the next allowed display mode
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Display")
+	void CycleDisplayMode();
 
 	/**
 	 * Get current display mode
@@ -499,6 +556,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Layout")
 	void SetAspectRatio(float NewAspectRatio);
 
+	/**
+	 * Set the base z-order and immediately re-apply.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Display")
+	void SetZOrder(int32 NewBaseZOrder);
+
+	/**
+	 * Get the effective z-order (BaseZOrder + display-mode boost).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Display")
+	int32 GetEffectiveZOrder() const;
+
 protected:
 	// Mouse/Touch interaction overrides
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -507,8 +576,9 @@ protected:
 
 protected:
 	/** Build the widget tree programmatically */
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return InternalSizeBox ? (UWidget*)InternalSizeBox : (UWidget*)CameraBorder; }
 
 	/** Update layout based on current display mode */
 	void UpdateLayout(bool bAnimate);
@@ -555,6 +625,43 @@ protected:
 	UFUNCTION()
 	void OnCollapseClicked();
 
+	/** Display mode cycle callback */
+	UFUNCTION()
+	void OnDisplayModeCycleClicked();
+
+	/** Get abbreviated label for a display mode */
+	static FString GetDisplayModeShortLabel(ERammsCameraDisplayMode Mode);
+
+	/** Update display mode cycle button visibility and label */
+	void UpdateDisplayModeCycleButton();
+
+	/** Apply z-order based on current display mode */
+	void ApplyZOrder();
+
+	/** Compute absolute top-left position of widget within its canvas panel */
+	FVector2D ComputeSlotAbsoluteTopLeft(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const;
+
+	/** Compute absolute size of widget within its canvas panel */
+	FVector2D ComputeSlotAbsoluteSize(UCanvasPanelSlot* CanvasSlot, const FVector2D& CanvasSize) const;
+
+	/** Get canvas-space size (viewport / DPI scale) */
+	FVector2D GetCanvasSize() const;
+
+	/** Register this widget in the corner stacking registry */
+	void RegisterCorner();
+
+	/** Unregister this widget from the corner stacking registry */
+	void UnregisterCorner();
+
+	/** Get this widget's index in its corner stack (0 = closest to edge) */
+	int32 GetCornerStackIndex() const;
+
+	/** Make a key for the corner registry from alignment enums */
+	static uint8 MakeCornerKey(EHorizontalAlignment H, EVerticalAlignment V);
+
+	/** Check header width and toggle single-line vs two-row layout */
+	void UpdateHeaderLayout();
+
 	/** Update collapse icon text */
 	void UpdateCollapseIcon();
 
@@ -585,4 +692,37 @@ protected:
 	float CollapseProgress = 1.0f; // 1 = expanded, 0 = collapsed
 	float CollapseTarget = 1.0f;
 	bool  bCollapseAnimating = false;
+
+	/** Display mode transition animation state */
+	bool	  bDisplayModeTransitioning = false;
+	float	  DisplayModeTransitionProgress = 0.0f;
+	FVector2D TransitionStartPos = FVector2D::ZeroVector;
+	FVector2D TransitionStartSize = FVector2D::ZeroVector;
+	FVector2D TransitionTargetPos = FVector2D::ZeroVector;
+	FVector2D TransitionTargetSize = FVector2D::ZeroVector;
+
+	/** Target canvas slot properties to restore after transition animation */
+	FAnchors  TransitionTargetAnchors;
+	FVector2D TransitionTargetAlignment = FVector2D::ZeroVector;
+	FVector2D TransitionTargetSlotPos = FVector2D::ZeroVector;
+	FVector2D TransitionTargetSlotSize = FVector2D::ZeroVector;
+
+	/** Whether the header is currently in narrow (two-row) mode */
+	bool bHeaderNarrowMode = false;
+
+	/** Last applied z-order (to avoid redundant viewport re-adds) */
+	int32 CachedAppliedZOrder = INT32_MIN;
+
+	/** Per-instance focus z-order boost (incremented on click for focus ordering) */
+	int32 FocusZOrderBoost = 0;
+
+	/** Composite key this widget is registered under in the corner registry */
+	TPair<UWidget*, uint8> RegisteredCornerKey = { nullptr, 0xFF };
+
+	/** Global counter for focus-on-click ordering across all camera widget instances */
+	static int32 FocusZOrderCounter;
+
+	/** Corner stacking registry: (parent, corner alignment) → ordered list of widgets.
+	 *  Scoped per parent so widgets in different layouts don't interfere. */
+	static TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> CornerRegistry;
 };

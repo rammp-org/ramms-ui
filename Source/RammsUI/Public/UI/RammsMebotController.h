@@ -56,23 +56,23 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "MEBot")
 	ERammsMebotMode CurrentMode = ERammsMebotMode::None;
 
-	// Widget references
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UUniformGridPanel> ModeGrid;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> SelfLevelButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> CurbAscentButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> CurbDescentButton;
 
 public:
@@ -103,9 +103,10 @@ public:
 	void SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 UpdateModeButtons();
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
+	void			 UpdateModeButtons();
 
 	UFUNCTION()
 	void OnSelfLevelClicked();

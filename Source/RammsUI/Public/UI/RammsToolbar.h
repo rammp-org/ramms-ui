@@ -85,18 +85,19 @@ protected:
 	float ItemSpacing = 4.0f;
 
 	// Widget references — BindWidgetOptional so a WBP can provide these
-	UPROPERTY(meta = (BindWidgetOptional))
+	// Transient prevents stale serialized references
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ToolbarBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> ItemContainer; // HorizontalBox or VerticalBox
 
 	/** Named slot for additional custom content in the toolbar */
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UNamedSlot> ToolbarContentSlot;
 
 	/** Map of item ID to button widget */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UButton>> ItemButtons;
 
 public:
@@ -114,6 +115,16 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void ApplyStyle_Implementation() override;
 	virtual void SynchronizeProperties() override;
+
+	// INamedSlotInterface — expose our NamedSlot to the designer
+	virtual void GetSlotNames(TArray<FName>& SlotNames) const override;
+
+	virtual UNamedSlot* GetNamedSlotWidget(FName SlotName) const override
+	{
+		if (SlotName == TEXT("ToolbarContentSlot"))
+			return ToolbarContentSlot;
+		return nullptr;
+	}
 
 	/** Get the item container panel to add child widgets */
 	UFUNCTION(BlueprintPure, Category = "Toolbar")
@@ -144,10 +155,11 @@ public:
 	int32 GetItemCount() const { return Items.Num(); }
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 RebuildItems();
-	UButton*	 CreateItemButton(const FRammsToolbarItem& Item);
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ToolbarBorder; }
+	void			 RebuildItems();
+	UButton*		 CreateItemButton(const FRammsToolbarItem& Item);
 
 	UFUNCTION()
 	void OnButtonClicked();

@@ -61,26 +61,26 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Arm Task")
 	ERammsArmTask CurrentTask = ERammsArmTask::None;
 
-	// Widget references
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UUniformGridPanel> TaskGrid;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> OpenDoorButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> OrderDrinkButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> DrinkButton;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsImageButton> StabilizationButton;
 
 public:
@@ -111,9 +111,10 @@ public:
 	void SetTaskIcon(ERammsArmTask Task, UTexture2D* Icon);
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 UpdateTaskButtons();
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
+	void			 UpdateTaskButtons();
 
 	UFUNCTION()
 	void OnOpenDoorClicked();

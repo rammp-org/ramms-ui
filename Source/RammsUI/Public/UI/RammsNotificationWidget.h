@@ -52,17 +52,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Notification")
 	bool bDismissOnClick = true;
 
-	// Widget references (built programmatically)
-	UPROPERTY()
+	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> NotificationBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> AccentBar;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> MessageLabel;
 
 	/** Time remaining before auto-dismiss */
@@ -100,7 +100,8 @@ public:
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	FLinearColor GetAccentColor() const;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return NotificationBorder; }
+	FLinearColor	 GetAccentColor() const;
 };

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UI/RammsUIStyle.h"
+#include "Components/NamedSlot.h"
 #include "RammsBaseWidget.generated.h"
 
 /**
@@ -80,6 +81,24 @@ public:
 	 * Override in derived classes to null out all cached UWidget* members.
 	 */
 	virtual void ResetCachedWidgets() {}
+
+	/**
+	 * Return the root widget pointer for tree validation.
+	 * SynchronizeProperties uses this to detect stale cached widget pointers
+	 * that survived serialization but no longer belong to the current WidgetTree.
+	 * Override in derived classes to return the root border/widget pointer.
+	 */
+	virtual UWidget* GetRootWidgetForValidation() { return nullptr; }
+
+	/**
+	 * Return the UNamedSlot widget for a given slot name.
+	 * Used to bypass WidgetTree->FindWidget (which may find stale deserialized
+	 * widgets with the same name). Override in widgets that own NamedSlots.
+	 */
+	virtual UNamedSlot* GetNamedSlotWidget(FName SlotName) const { return nullptr; }
+
+	// INamedSlotInterface — re-apply content to our programmatic NamedSlots
+	virtual void SetContentForSlot(FName SlotName, UWidget* Content) override;
 
 	/**
 	 * Set the UI style and apply it

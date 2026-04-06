@@ -53,24 +53,24 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Panel|Style")
 	FMargin ContentPadding = FMargin(8.0f);
 
-	// ── Cached Widgets ──
+	// ── Cached Widgets (Transient — rebuilt programmatically) ──
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> HeaderBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> HeaderLabel;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> ContentVBox;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ContentBorder;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UNamedSlot> ContentSlot;
 
 public:
@@ -93,8 +93,19 @@ public:
 	virtual void ApplyStyle_Implementation() override;
 	virtual void SynchronizeProperties() override;
 
+	// INamedSlotInterface — expose our NamedSlot to the designer
+	virtual void GetSlotNames(TArray<FName>& SlotNames) const override;
+
+	virtual UNamedSlot* GetNamedSlotWidget(FName SlotName) const override
+	{
+		if (SlotName == TEXT("ContentSlot"))
+			return ContentSlot;
+		return nullptr;
+	}
+
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
-	void		 UpdateHeaderVisibility();
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
+	void			 UpdateHeaderVisibility();
 };

@@ -51,24 +51,24 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Seat")
 	FRammsSeatState CurrentState;
 
-	// ── Widget References ────────────────────────────────────────
+	// ── Widget References (Transient — rebuilt programmatically) ──
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> HeaderText;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> MainVBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsAxisControl> ElevationControl;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsAxisControl> LateralTiltControl;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<URammsAxisControl> APTiltControl;
 
 public:
@@ -122,8 +122,9 @@ public:
 	void ResetAllAxes();
 
 protected:
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return PanelBorder; }
 
 	/** Get the axis control for a given axis */
 	URammsAxisControl* GetAxisControl(ERammsSeatAxis Axis) const;

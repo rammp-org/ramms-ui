@@ -4,6 +4,7 @@
 #include "UI/RammsLayoutPresetAsset.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Blueprint/GameViewportSubsystem.h"
 #include "TimerManager.h"
 
 URammsLayoutManager::URammsLayoutManager()
@@ -335,19 +336,26 @@ void URammsLayoutManager::UpdateZOrder()
 		if (!Layout.Widget || !Layout.bVisible)
 			continue;
 
-		// For widgets in a Canvas Panel, z-order is handled by child order (no re-add needed)
+		// For widgets in a Canvas Panel, use slot z-order
 		UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Layout.Widget->Slot);
 		if (CanvasSlot)
 		{
-			// Canvas Panel children are drawn in order; slot manipulation not needed here
+			CanvasSlot->SetZOrder(Layout.ZOrder);
 			continue;
 		}
 
-		// For viewport widgets, re-add with z-order
+		// For viewport widgets, update z-order without removing/re-adding
 		if (Layout.Widget->IsInViewport())
 		{
-			Layout.Widget->RemoveFromParent();
-			Layout.Widget->AddToViewport(Layout.ZOrder);
+			if (UWorld* World = Layout.Widget->GetWorld())
+			{
+				if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get(World))
+				{
+					FGameViewportWidgetSlot SlotInfo = Subsystem->GetWidgetSlot(Layout.Widget);
+					SlotInfo.ZOrder = Layout.ZOrder;
+					Subsystem->SetWidgetSlot(Layout.Widget, SlotInfo);
+				}
+			}
 
 			// Re-apply stored position/size
 			float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(Layout.Widget);

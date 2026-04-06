@@ -116,21 +116,21 @@ protected:
 		meta = (EditCondition = "!bUseStyleColors"))
 	FLinearColor ThumbColor = FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-	// ── Cached Widgets ──
+	// ── Cached Widgets (Transient — rebuilt programmatically) ──
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ContainerBorder;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentVBox;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<USlider> InnerSlider;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> SliderLabel;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ValueLabel;
 
 public:
@@ -168,9 +168,10 @@ public:
 	void SetShowPanel(bool bShow);
 
 protected:
-	virtual void SynchronizeProperties() override;
-	virtual void ResetCachedWidgets() override;
-	virtual void BuildWidgetTree() override;
+	virtual void	 SynchronizeProperties() override;
+	virtual void	 ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual UWidget* GetRootWidgetForValidation() override { return ContainerBorder; }
 
 	UFUNCTION()
 	void OnSliderValueChanged(float NewValue);
