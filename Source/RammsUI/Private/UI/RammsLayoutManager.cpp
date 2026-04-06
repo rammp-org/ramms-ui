@@ -11,13 +11,14 @@ URammsLayoutManager::URammsLayoutManager()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+	PrimaryComponentTick.TickInterval = 1.0f; // Only need periodic cleanup, not every frame
 }
 
 void URammsLayoutManager::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Clean up invalid widgets
+	// Periodic cleanup of invalid widgets (runs ~1/sec, not every frame)
 	ManagedWidgets.RemoveAll([](const FRammsWidgetLayout& Layout) {
 		return !Layout.Widget || !IsValid(Layout.Widget);
 	});

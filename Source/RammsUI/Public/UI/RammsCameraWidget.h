@@ -710,6 +710,17 @@ protected:
 	/** Whether the header is currently in narrow (two-row) mode */
 	bool bHeaderNarrowMode = false;
 
+	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
+	float CachedHeaderCheckWidth = -1.0f;
+
+	/** Cached texture pointers to avoid redundant brush/material updates */
+	TWeakObjectPtr<UTexture> LastAppliedRGBTexture;
+	TWeakObjectPtr<UTexture> LastAppliedDataTexture;
+
+	/** Cached image size for material corner param change detection */
+	FVector2D LastMaterialImageSize_RGB = FVector2D::ZeroVector;
+	FVector2D LastMaterialImageSize_Data = FVector2D::ZeroVector;
+
 	/** Last applied z-order (to avoid redundant viewport re-adds) */
 	int32 CachedAppliedZOrder = INT32_MIN;
 
