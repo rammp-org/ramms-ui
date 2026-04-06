@@ -157,28 +157,45 @@ void URammsBaseWidget::SynchronizeProperties()
 	Super::SynchronizeProperties();
 
 	// After Blueprint recompilation or deserialization the WidgetTree root may
-	// be cleared while our cached widget pointers are stale.  Also detect stale
-	// cached pointers that reference widgets not owned by the current WidgetTree
-	// (happens when a C++ UUserWidget is serialized inside a parent WBP and the
-	// cached TObjectPtr was not marked Transient).  In either case, wipe the
-	// cached pointers so BuildWidgetTree can recreate the tree.
+	// be cleared while our cached widget pointers are stale.  Detect this and
+	// reset so BuildWidgetTree can recreate everything cleanly.
 	if (WidgetTree)
 	{
+		UWidget* ExpectedRoot = GetRootWidgetForValidation();
+		bool	 bNeedRebuild = false;
+
 		if (!WidgetTree->RootWidget)
 		{
-			ResetCachedWidgets();
+			// Root was cleared (e.g., recompilation) — reset cached pointers
+			bNeedRebuild = true;
 		}
-		else
+		else if (ExpectedRoot)
 		{
-			// Verify the root widget is actually one of ours.  If a stale pointer
-			// slipped through serialization, the WidgetTree root will differ from
-			// what BuildWidgetTree would have set.
-			UWidget* ExpectedRoot = GetRootWidgetForValidation();
-			if (ExpectedRoot && WidgetTree->RootWidget != ExpectedRoot)
+			// Verify our expected root exists somewhere in the current WidgetTree.
+			// Do NOT require it to be THE root — a WBP may have wrapped our
+			// programmatic root inside an outer container (SizeBox, Overlay, etc.)
+			// where RootWidget legitimately differs from ExpectedRoot.
+			bool bFoundInTree = false;
+			WidgetTree->ForEachWidget([ExpectedRoot, &bFoundInTree](UWidget* W) {
+				if (W == ExpectedRoot)
+					bFoundInTree = true;
+			});
+
+			if (!bFoundInTree)
 			{
-				ResetCachedWidgets();
-				WidgetTree->RootWidget = nullptr;
+				bNeedRebuild = true;
 			}
+		}
+
+		if (bNeedRebuild)
+		{
+			// Remove the old root subtree from the WidgetTree to prevent orphaned
+			// widgets that linger after nulling RootWidget.
+			if (WidgetTree->RootWidget)
+			{
+				WidgetTree->RemoveWidget(WidgetTree->RootWidget);
+			}
+			ResetCachedWidgets();
 		}
 	}
 

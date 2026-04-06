@@ -206,9 +206,21 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 			IconMap.Add(Mapping.EnumValue, Mapping.Icon);
 		}
 
-		const int32 Count = TaskEnum->NumEnums() - 1; // skip _MAX
+		const int32 Count = TaskEnum->NumEnums();
 		for (int32 i = 0; i < Count; ++i)
 		{
+			// Skip auto-generated _MAX sentinel entries (present in both
+			// Blueprint enums and C++ UENUM types)
+			FString EntryName = TaskEnum->GetNameStringByIndex(i);
+			if (EntryName.EndsWith(TEXT("_MAX")))
+				continue;
+
+#if WITH_METADATA
+			// In editor builds, also skip entries explicitly marked Hidden
+			if (TaskEnum->HasMetaData(TEXT("Hidden"), i))
+				continue;
+#endif
+
 			const int64 Val = TaskEnum->GetValueByIndex(i);
 
 			// Skip duplicate underlying values (e.g. enum aliases)
@@ -289,6 +301,9 @@ void URammsTaskSelector::RebuildButtons()
 	{
 		const FRammsTaskDefinition& Def = MergedTasks[i];
 
+		// URammsImageButton is a UUserWidget — must use CreateWidget (not
+		// WidgetTree->ConstructWidget) so it gets its own WidgetTree and
+		// proper Initialize() lifecycle. Cleanup is handled by ClearChildren().
 		APlayerController* PC = GetOwningPlayer();
 		URammsImageButton* Btn = PC
 			? CreateWidget<URammsImageButton>(PC)
