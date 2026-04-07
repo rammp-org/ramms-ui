@@ -794,15 +794,26 @@ void URammsCameraProjectionManager::SetSensorBaseline(float InBaselineY)
 
 void URammsCameraProjectionManager::SetDepthConfig(float InMinDepthCM, float InMaxDepthCM, float InMaxEdgeStretchCM, float InDepthScaleToCM)
 {
-	if (InMinDepthCM >= 0.0f)
-		MinDepthCM = InMinDepthCM;
-	if (InMaxDepthCM >= 0.0f)
-		MaxDepthCM = FMath::Max(0.01f, InMaxDepthCM);
-	if (InMaxEdgeStretchCM >= 0.0f)
-		MaxEdgeStretchCM = InMaxEdgeStretchCM;
-	if (InDepthScaleToCM >= 0.0f)
-		DepthScaleToCM = FMath::Max(0.0001f, InDepthScaleToCM);
+	float NewMinDepthCM = MinDepthCM;
+	float NewMaxDepthCM = MaxDepthCM;
+	float NewMaxEdgeStretchCM = MaxEdgeStretchCM;
+	float NewDepthScaleToCM = DepthScaleToCM;
 
+	if (InMinDepthCM >= 0.0f)
+		NewMinDepthCM = FMath::Max(0.0f, InMinDepthCM);
+	if (InMaxDepthCM >= 0.0f)
+		NewMaxDepthCM = FMath::Max(0.01f, InMaxDepthCM);
+	if (InMaxEdgeStretchCM >= 0.0f)
+		NewMaxEdgeStretchCM = InMaxEdgeStretchCM;
+	if (InDepthScaleToCM >= 0.0f)
+		NewDepthScaleToCM = FMath::Max(0.0001f, InDepthScaleToCM);
+
+	NewMinDepthCM = FMath::Min(NewMinDepthCM, NewMaxDepthCM);
+
+	MinDepthCM = NewMinDepthCM;
+	MaxDepthCM = NewMaxDepthCM;
+	MaxEdgeStretchCM = NewMaxEdgeStretchCM;
+	DepthScaleToCM = NewDepthScaleToCM;
 	for (auto& Pair : Projectors)
 	{
 		if (Pair.Value)
