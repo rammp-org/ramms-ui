@@ -584,6 +584,8 @@ void URammsCameraWidget::SynchronizeProperties()
 		{
 			CameraLabelWrap->SetText(LabelText);
 		}
+		// Label text changed — force header layout re-evaluation
+		CachedHeaderCheckWidth = -1.0f;
 	}
 
 	// Sync view mode label
@@ -613,7 +615,21 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
 	// Check if header needs to switch between single-line and two-row layout
-	UpdateHeaderLayout();
+	// (only when the title bar width actually changes — avoids per-frame GetDesiredSize calls)
+	{
+		float CurrentWidth = 0.0f;
+		if (TitleBar)
+		{
+			CurrentWidth = TitleBar->GetCachedGeometry().GetLocalSize().X;
+			if (CurrentWidth <= 0.0f)
+				CurrentWidth = CachedExpandedSlotSize.X;
+		}
+		if (!FMath::IsNearlyEqual(CurrentWidth, CachedHeaderCheckWidth, 1.0f))
+		{
+			CachedHeaderCheckWidth = CurrentWidth;
+			UpdateHeaderLayout();
+		}
+	}
 
 	// Display mode transition animation (smooth size/position interpolation)
 	if (bDisplayModeTransitioning)
@@ -803,6 +819,8 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 		{
 			CameraLabelWrap->SetText(LabelText);
 		}
+		// Label/visibility changed — force header layout re-evaluation
+		CachedHeaderCheckWidth = -1.0f;
 	}
 }
 
@@ -1693,6 +1711,7 @@ void URammsCameraWidget::UpdateCollapseIcon()
 		return;
 
 	CollapseIcon->SetText(FText::FromString(bCameraCollapsed ? TEXT("\u25B6") : TEXT("\u25BC")));
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 // --- View mode support ---
@@ -1846,6 +1865,8 @@ void URammsCameraWidget::UpdateOptionButton()
 	{
 		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	// Button visibility changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mode)
@@ -1877,6 +1898,8 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	{
 		DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
 	}
+	// Button visibility/text changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 void URammsCameraWidget::OnDisplayModeCycleClicked()
@@ -2045,6 +2068,9 @@ void URammsCameraWidget::ApplyViewModeLayout()
 
 	// Adjust corner radii based on whether side-by-side or single image
 	UpdateImageCornerRadii();
+
+	// Header content changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 void URammsCameraWidget::UpdateImageCornerRadii()
@@ -2089,6 +2115,9 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	// Store for use in UpdateMaterialCornerParams
 	CachedRGBCornerRadii = RGBRadii;
 	CachedDataCornerRadii = DataRadii;
+	// Invalidate material param caches so next UpdateMaterialCornerParams pushes new radii
+	LastMaterialImageSize_RGB = FVector2D::ZeroVector;
+	LastMaterialImageSize_Data = FVector2D::ZeroVector;
 }
 
 void URammsCameraWidget::UpdateHeaderCornerRadii()
@@ -2216,17 +2245,36 @@ void URammsCameraWidget::SetImageBrushFromTexture(UImage* Image, UTexture* Textu
 	{
 		MID->SetTextureParameterValue(TEXT("Texture"), Texture);
 		UpdateMaterialCornerParams(MID, Image);
+
+		// Only rebuild the brush if the resource or image dimensions changed
+		const FSlateBrush& CurrentBrush = Image->GetBrush();
+		float			   TexW = static_cast<float>(Texture->GetSurfaceWidth());
+		float			   TexH = static_cast<float>(Texture->GetSurfaceHeight());
+		if (CurrentBrush.GetResourceObject() == MID
+			&& FMath::IsNearlyEqual(CurrentBrush.ImageSize.X, TexW, 0.5f)
+			&& FMath::IsNearlyEqual(CurrentBrush.ImageSize.Y, TexH, 0.5f))
+		{
+			return; // Brush is already configured — MID texture param update above is sufficient
+		}
+
 		SetImageBrushFromMaterial(Image, MID, Texture, DataRT);
 		return;
 	}
 
 	// Fallback: direct texture binding (no corner masking, may break with post-processing)
-	FSlateBrush Brush = Image->GetBrush();
+	const FSlateBrush& CurrentBrush = Image->GetBrush();
+	float			   TexW = static_cast<float>(Texture->GetSurfaceWidth());
+	float			   TexH = static_cast<float>(Texture->GetSurfaceHeight());
+	if (CurrentBrush.GetResourceObject() == Texture
+		&& FMath::IsNearlyEqual(CurrentBrush.ImageSize.X, TexW, 0.5f)
+		&& FMath::IsNearlyEqual(CurrentBrush.ImageSize.Y, TexH, 0.5f))
+	{
+		return; // Same texture, same dimensions — nothing to rebuild
+	}
+
+	FSlateBrush Brush = CurrentBrush;
 	Brush.DrawAs = ESlateBrushDrawType::Image;
 	Brush.SetResourceObject(Texture);
-
-	float TexW = static_cast<float>(Texture->GetSurfaceWidth());
-	float TexH = static_cast<float>(Texture->GetSurfaceHeight());
 	if (TexW > 0.0f && TexH > 0.0f)
 	{
 		Brush.ImageSize = FVector2D(TexW, TexH);
@@ -2243,18 +2291,27 @@ void URammsCameraWidget::SetImageBrushFromMaterial(UImage* Image, UMaterialInsta
 	// Set corner/size params for shader-based rounded masking
 	UpdateMaterialCornerParams(MID, Image);
 
-	FSlateBrush Brush = Image->GetBrush();
+	// Skip brush rebuild if the resource and image size haven't changed
+	const FSlateBrush& CurrentBrush = Image->GetBrush();
+	float			   TexW = 0.0f, TexH = 0.0f;
+	if (SizeSource)
+	{
+		TexW = static_cast<float>(SizeSource->GetSurfaceWidth());
+		TexH = static_cast<float>(SizeSource->GetSurfaceHeight());
+	}
+	if (CurrentBrush.GetResourceObject() == MID
+		&& (TexW <= 0.0f || (FMath::IsNearlyEqual(CurrentBrush.ImageSize.X, TexW, 0.5f) && FMath::IsNearlyEqual(CurrentBrush.ImageSize.Y, TexH, 0.5f))))
+	{
+		return; // Brush already configured with same MID and dimensions
+	}
+
+	FSlateBrush Brush = CurrentBrush;
 	Brush.DrawAs = ESlateBrushDrawType::Image;
 	Brush.SetResourceObject(MID);
 
-	if (SizeSource)
+	if (TexW > 0.0f && TexH > 0.0f)
 	{
-		float TexW = static_cast<float>(SizeSource->GetSurfaceWidth());
-		float TexH = static_cast<float>(SizeSource->GetSurfaceHeight());
-		if (TexW > 0.0f && TexH > 0.0f)
-		{
-			Brush.ImageSize = FVector2D(TexW, TexH);
-		}
+		Brush.ImageSize = FVector2D(TexW, TexH);
 	}
 
 	Image->SetBrush(Brush);
@@ -2267,6 +2324,26 @@ void URammsCameraWidget::UpdateMaterialCornerParams(UMaterialInstanceDynamic* MI
 
 	// Select per-corner radii based on which image widget this is
 	FVector4 Radii = (Image == DataImage) ? CachedDataCornerRadii : CachedRGBCornerRadii;
+
+	// Get current widget pixel size for UV-to-pixel mapping
+	FVector2D Size = FVector2D::ZeroVector;
+	if (Image)
+	{
+		Size = Image->GetCachedGeometry().GetLocalSize();
+	}
+
+	// Check if anything actually changed — skip redundant material param sets
+	FVector2D&								  LastSize = (Image == DataImage) ? LastMaterialImageSize_Data : LastMaterialImageSize_RGB;
+	TWeakObjectPtr<UMaterialInstanceDynamic>& LastMID = (Image == DataImage) ? LastCornerMID_Data : LastCornerMID_RGB;
+	// Bypass cache when MID changed (e.g., switching between PassthroughMID_RGB and DataMID)
+	bool bMIDChanged = (LastMID.Get() != MID);
+	if (!bMIDChanged && Size.X > 0.0f && Size.Y > 0.0f && FMath::IsNearlyEqual(Size.X, LastSize.X, 0.5f) && FMath::IsNearlyEqual(Size.Y, LastSize.Y, 0.5f))
+	{
+		return; // Same MID, same size — nothing changed
+	}
+	LastSize = Size;
+	LastMID = MID;
+
 	MID->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(Radii.X, Radii.Y, Radii.Z, Radii.W));
 
 	// Individual scalar params (works with any Custom node input setup)
@@ -2280,13 +2357,9 @@ void URammsCameraWidget::UpdateMaterialCornerParams(UMaterialInstanceDynamic* MI
 	MID->SetScalarParameterValue(TEXT("CornerRadius"), MaxR);
 
 	// Pass widget pixel size so the shader can compute UV-to-pixel mapping
-	if (Image)
+	if (Size.X > 0.0f && Size.Y > 0.0f)
 	{
-		FVector2D Size = Image->GetCachedGeometry().GetLocalSize();
-		if (Size.X > 0.0f && Size.Y > 0.0f)
-		{
-			MID->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(Size.X, Size.Y, 0.0f, 0.0f));
-		}
+		MID->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(Size.X, Size.Y, 0.0f, 0.0f));
 	}
 }
 
