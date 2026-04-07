@@ -18,9 +18,11 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Widgets/Layout/Anchors.h"
+#include "RammsDetectionTypes.h"
 #include "RammsCameraWidget.generated.h"
 
 class UCanvasPanelSlot;
+class URammsBoundingBoxOverlay;
 
 /**
  * Display modes for camera widget
@@ -255,6 +257,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	bool bCollapsible = false;
 
+	/** Automatically show bounding box overlay on construct */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	bool bShowDetectionOverlay = false;
+
+	/**
+	 * Source tag to subscribe to for subsystem detection broadcasts.
+	 * If empty, defaults to the camera StreamID (e.g. "camera/wrist/color").
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (EditCondition = "bShowDetectionOverlay"))
+	FName DetectionSourceTag;
+
+	/**
+	 * Auto-clear detections after this many seconds of no new data. 0 = never auto-clear.
+	 * Forwarded to the bounding box overlay's DetectionLifetime.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection",
+		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "60.0"))
+	float DetectionLifetime = 0.0f;
+
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	bool bMaintainAspectRatio = true;
@@ -287,6 +308,9 @@ protected:
 	// Widget references (Transient — rebuilt programmatically)
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> CameraBorder;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlay> CameraRootOverlay;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> CameraImage;
@@ -336,6 +360,10 @@ protected:
 	/** Second image widget for side-by-side data display */
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> DataImage;
+
+	/** Bounding box overlay (created on demand) */
+	UPROPERTY(Transient)
+	TObjectPtr<URammsBoundingBoxOverlay> BBoxOverlay;
 
 	/** View-mode toggle button in title bar */
 	UPROPERTY(Transient)
@@ -567,6 +595,35 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Display")
 	int32 GetEffectiveZOrder() const;
+
+	// ── Bounding Box Overlay ────────────────────────────────────
+
+	/**
+	 * Show bounding box overlay. Creates the overlay widget if needed.
+	 * @param SourceTag - If set, auto-subscribes to subsystem detections from this source
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	void ShowBoundingBoxOverlay(FName SourceTag = NAME_None);
+
+	/** Hide and destroy the bounding box overlay */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	void HideBoundingBoxOverlay();
+
+	/** Set detections directly on the overlay (creates overlay if needed) */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	void SetDetections(const TArray<FRammsBoundingBox>& InBoxes);
+
+	/** Clear all detections from the overlay */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	void ClearDetections();
+
+	/** Whether the bounding box overlay is currently visible */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	bool IsBoundingBoxOverlayVisible() const;
+
+	/** Get the bounding box overlay widget (may be null if not shown) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	URammsBoundingBoxOverlay* GetBoundingBoxOverlay() const { return BBoxOverlay; }
 
 protected:
 	// Mouse/Touch interaction overrides

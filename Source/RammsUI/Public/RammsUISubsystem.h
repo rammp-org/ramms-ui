@@ -6,6 +6,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "Interfaces/IRammsRobotController.h"
 #include "RammsUIEventTypes.h"
+#include "RammsDetectionTypes.h"
 #include "UI/RammsUIStyle.h"
 #include "RammsUISubsystem.generated.h"
 
@@ -323,6 +324,33 @@ public:
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLayoutTransitionRequest, FName, LayoutName, bool, bAnimated);
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Layout")
 	FOnLayoutTransitionRequest OnLayoutTransitionRequested;
+
+	// ── UI Event Bus: Detection / Bounding Boxes ────────────────
+
+	/**
+	 * Broadcast a set of 2D detections (bounding boxes) from a named source.
+	 * Any URammsBoundingBoxOverlay widgets subscribed to this source will update.
+	 * @param SourceTag - Identifies the detection source (e.g., camera name, detector name)
+	 * @param Boxes - Array of bounding boxes in normalized 0-1 image coordinates
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Detection")
+	void BroadcastDetections(FName SourceTag, const TArray<FRammsBoundingBox>& Boxes);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDetectionsReceived, FName, SourceTag, const TArray<FRammsBoundingBox>&, Boxes);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Detection")
+	FOnDetectionsReceived OnDetectionsReceived;
+
+	/**
+	 * Broadcast a clear signal for all detections from a named source.
+	 * Subscribed overlays matching this source will clear their boxes.
+	 * @param SourceTag - Source to clear (NAME_None clears all sources)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Detection")
+	void ClearDetections(FName SourceTag);
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDetectionsCleared, FName, SourceTag);
+	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Detection")
+	FOnDetectionsCleared OnDetectionsCleared;
 
 	// ── UI Event Bus: Custom Events (Blueprint-extensible) ───────
 

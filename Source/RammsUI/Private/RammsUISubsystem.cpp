@@ -199,6 +199,16 @@ void URammsUISubsystem::BroadcastLayoutTransitionRequest(FName LayoutName, bool 
 	OnLayoutTransitionRequested.Broadcast(LayoutName, bAnimated);
 }
 
+void URammsUISubsystem::BroadcastDetections(FName SourceTag, const TArray<FRammsBoundingBox>& Boxes)
+{
+	OnDetectionsReceived.Broadcast(SourceTag, Boxes);
+}
+
+void URammsUISubsystem::ClearDetections(FName SourceTag)
+{
+	OnDetectionsCleared.Broadcast(SourceTag);
+}
+
 // ── Robot State ───────────────────────────────────────────────────
 
 void URammsUISubsystem::BroadcastRobotStateChanged(const FRammsRobotState& State)

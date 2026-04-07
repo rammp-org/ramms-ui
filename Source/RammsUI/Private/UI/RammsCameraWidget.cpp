@@ -16,6 +16,7 @@
 #include "Styling/CoreStyle.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Blueprint/GameViewportSubsystem.h"
+#include "UI/RammsBoundingBoxOverlay.h"
 
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
@@ -23,6 +24,7 @@ TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsC
 void URammsCameraWidget::ResetCachedWidgets()
 {
 	CameraBorder = nullptr;
+	CameraRootOverlay = nullptr;
 	CameraImage = nullptr;
 	CameraLabel = nullptr;
 	CameraLabelWrap = nullptr;
@@ -33,6 +35,7 @@ void URammsCameraWidget::ResetCachedWidgets()
 	CameraSizeBox = nullptr;
 	InternalSizeBox = nullptr;
 	DataImage = nullptr;
+	BBoxOverlay = nullptr;
 	ViewModeButton = nullptr;
 	ViewModeLabel = nullptr;
 	OptionButton = nullptr;
@@ -54,7 +57,7 @@ void URammsCameraWidget::BuildWidgetTree()
 	InternalSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("InternalSizeBox"));
 	WidgetTree->RootWidget = InternalSizeBox;
 
-	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
+	CameraRootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RootOverlay"));
 
 	if (bMaintainAspectRatio && !bCollapsible)
 	{
@@ -63,18 +66,18 @@ void URammsCameraWidget::BuildWidgetTree()
 		ImageAspectRatioBox->SetMinAspectRatio(AspectRatio);
 		ImageAspectRatioBox->SetMaxAspectRatio(AspectRatio);
 		InternalSizeBox->AddChild(ImageAspectRatioBox);
-		ImageAspectRatioBox->AddChild(RootOverlay);
+		ImageAspectRatioBox->AddChild(CameraRootOverlay);
 	}
 	else
 	{
-		InternalSizeBox->AddChild(RootOverlay);
+		InternalSizeBox->AddChild(CameraRootOverlay);
 	}
 
 	if (bCollapsible)
 	{
 		// VBox layout: TitleBar (header for collapse) + CameraSizeBox
 		UVerticalBox* MainVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MainVBox"));
-		UOverlaySlot* VBoxSlot = RootOverlay->AddChildToOverlay(MainVBox);
+		UOverlaySlot* VBoxSlot = CameraRootOverlay->AddChildToOverlay(MainVBox);
 		if (VBoxSlot)
 		{
 			VBoxSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -266,7 +269,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 4.0f);
 		CameraBorder->SetPadding(FMargin(BorderThickness));
 		CameraBorder->SetClipping(EWidgetClipping::ClipToBounds);
-		UOverlaySlot* BorderSlot = RootOverlay->AddChildToOverlay(CameraBorder);
+		UOverlaySlot* BorderSlot = CameraRootOverlay->AddChildToOverlay(CameraBorder);
 		if (BorderSlot)
 		{
 			BorderSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -308,7 +311,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			TitleBar->Background = URammsUIStyle::MakeRoundedBoxBrushEx(
 				FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), FVector4(InnerR, InnerR, 0.0f, 0.0f));
 			TitleBar->SetPadding(FMargin(8.0f, 4.0f));
-			UOverlaySlot* TitleSlot = RootOverlay->AddChildToOverlay(TitleBar);
+			UOverlaySlot* TitleSlot = CameraRootOverlay->AddChildToOverlay(TitleBar);
 			if (TitleSlot)
 			{
 				TitleSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -545,6 +548,17 @@ void URammsCameraWidget::NativeConstruct()
 	if (CameraProvider.GetInterface() && !StreamID.IsEmpty())
 	{
 		StartStream();
+	}
+
+	// Auto-show bounding box overlay if configured
+	if (bShowDetectionOverlay)
+	{
+		FName EffectiveTag = DetectionSourceTag;
+		if (EffectiveTag.IsNone() && !StreamID.IsEmpty())
+		{
+			EffectiveTag = FName(*StreamID);
+		}
+		ShowBoundingBoxOverlay(EffectiveTag);
 	}
 
 	// Update initial layout
@@ -1243,6 +1257,82 @@ int32 URammsCameraWidget::GetEffectiveZOrder() const
 	return Z;
 }
 
+// ── Bounding Box Overlay ─────────────────────────────────────────
+
+void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
+{
+	if (!BBoxOverlay && CameraRootOverlay)
+	{
+		BBoxOverlay = CreateWidget<URammsBoundingBoxOverlay>(this);
+		if (BBoxOverlay)
+		{
+			// Configure before adding to tree (NativeConstruct reads these)
+			if (!SourceTag.IsNone())
+			{
+				BBoxOverlay->SourceTagFilter = SourceTag;
+				BBoxOverlay->bAutoSubscribe = true;
+			}
+
+			// Forward lifetime setting
+			BBoxOverlay->DetectionLifetime = DetectionLifetime;
+
+			// Propagate style
+			if (Style)
+			{
+				BBoxOverlay->SetStyle(Style);
+			}
+
+			// Insert into the overlay stack above the camera image
+			UOverlaySlot* OverlaySlot = CameraRootOverlay->AddChildToOverlay(BBoxOverlay);
+			if (OverlaySlot)
+			{
+				OverlaySlot->SetHorizontalAlignment(HAlign_Fill);
+				OverlaySlot->SetVerticalAlignment(VAlign_Fill);
+			}
+		}
+	}
+
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+}
+
+void URammsCameraWidget::HideBoundingBoxOverlay()
+{
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->ClearDetections();
+		BBoxOverlay->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void URammsCameraWidget::SetDetections(const TArray<FRammsBoundingBox>& InBoxes)
+{
+	if (!BBoxOverlay)
+	{
+		ShowBoundingBoxOverlay();
+	}
+
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetDetections(InBoxes);
+	}
+}
+
+void URammsCameraWidget::ClearDetections()
+{
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->ClearDetections();
+	}
+}
+
+bool URammsCameraWidget::IsBoundingBoxOverlayVisible() const
+{
+	return BBoxOverlay && BBoxOverlay->GetVisibility() != ESlateVisibility::Collapsed;
+}
+
 void URammsCameraWidget::ApplyZOrder()
 {
 	int32 EffectiveZ = GetEffectiveZOrder();
@@ -1675,6 +1765,12 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 
 	UpdateCollapseIcon();
 	UpdateHeaderCornerRadii();
+
+	// Hide bounding box overlay while collapsed, restore when expanding
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 
 	// When collapsing: clear aspect ratio constraint immediately so the header
 	// isn't forced to an image-sized AR.
