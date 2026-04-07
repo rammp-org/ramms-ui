@@ -12,7 +12,7 @@
 
 void URammsBoundingBoxOverlay::BuildWidgetTree()
 {
-	if (!WidgetTree)
+	if (!WidgetTree || WidgetTree->RootWidget)
 	{
 		return;
 	}
@@ -26,6 +26,9 @@ void URammsBoundingBoxOverlay::BuildWidgetTree()
 void URammsBoundingBoxOverlay::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Overlay should not intercept input by default
+	SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	if (bAutoSubscribe)
 	{
@@ -220,22 +223,40 @@ int32 URammsBoundingBoxOverlay::NativePaint(const FPaintArgs& Args,
 	// Draw all boxes on a layer above the base
 	const int32 BoxLayerId = LayerId + 1;
 
-	for (int32 i = 0; i < Boxes.Num(); ++i)
-	{
-		const FRammsBoundingBox& Box = Boxes[i];
+	const int32		EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
+	const FVector2D FullSize = AllottedGeometry.GetLocalSize();
 
-		switch (Box.Shape)
+	for (int32 Pane = 0; Pane < EffectivePanes; ++Pane)
+	{
+		// Compute pane geometry: each pane is an equal-width region
+		FGeometry PaneGeom = AllottedGeometry;
+		if (EffectivePanes > 1)
 		{
-			case ERammsDetectionShape::RotatedRect:
-				DrawRotatedRectBox(Box, i, AllottedGeometry, OutDrawElements, BoxLayerId);
-				break;
-			case ERammsDetectionShape::Polygon:
-				DrawPolygonBox(Box, i, AllottedGeometry, OutDrawElements, BoxLayerId);
-				break;
-			case ERammsDetectionShape::Rect:
-			default:
-				DrawRectBox(Box, i, AllottedGeometry, OutDrawElements, BoxLayerId);
-				break;
+			const float TotalGap = PaneGap * (EffectivePanes - 1);
+			const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
+			const float PaneOffset = Pane * (PaneWidth + PaneGap);
+			PaneGeom = AllottedGeometry.MakeChild(
+				FVector2D(PaneWidth, FullSize.Y),
+				FSlateLayoutTransform(FVector2D(PaneOffset, 0.0f)));
+		}
+
+		for (int32 i = 0; i < Boxes.Num(); ++i)
+		{
+			const FRammsBoundingBox& Box = Boxes[i];
+
+			switch (Box.Shape)
+			{
+				case ERammsDetectionShape::RotatedRect:
+					DrawRotatedRectBox(Box, i, PaneGeom, OutDrawElements, BoxLayerId);
+					break;
+				case ERammsDetectionShape::Polygon:
+					DrawPolygonBox(Box, i, PaneGeom, OutDrawElements, BoxLayerId);
+					break;
+				case ERammsDetectionShape::Rect:
+				default:
+					DrawRectBox(Box, i, PaneGeom, OutDrawElements, BoxLayerId);
+					break;
+			}
 		}
 	}
 
@@ -305,14 +326,14 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 	};
 
 	TArray<FVector2D> Points;
-	Points.Reserve(5);
+	Points.SetNum(5);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float RX = Offsets[i].X * CosA - Offsets[i].Y * SinA;
 		const float RY = Offsets[i].X * SinA + Offsets[i].Y * CosA;
-		Points.Add(Center + FVector2D(RX, RY));
+		Points[i] = Center + FVector2D(RX, RY);
 	}
-	Points.Add(Points[0]); // Close
+	Points[4] = Points[0]; // Close
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
 		Points, ESlateDrawEffect::None, BoxColor, true, LineThickness);
@@ -351,7 +372,11 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 		MinPt.X = FMath::Min(MinPt.X, PixelPt.X);
 		MinPt.Y = FMath::Min(MinPt.Y, PixelPt.Y);
 	}
-	Points.Add(Points[0]); // Close
+	if (Points.Num() > 0)
+	{
+		const FVector2D ClosePt = Points[0];
+		Points.Add(ClosePt); // Close
+	}
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
 		Points, ESlateDrawEffect::None, BoxColor, true, LineThickness);

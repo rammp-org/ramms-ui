@@ -103,6 +103,22 @@ public:
 		meta = (ClampMin = "0.0", ClampMax = "60.0"))
 	float DetectionLifetime = 0.0f;
 
+	// ── Split View ──────────────────────────────────────────────
+
+	/**
+	 * Number of equal-width panes to duplicate detections across (1 = normal,
+	 * 2 = side-by-side). Boxes are drawn identically in each pane with
+	 * coordinates mapped to the pane's local space.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Layout",
+		meta = (ClampMin = "1", ClampMax = "4"))
+	int32 PaneCount = 1;
+
+	/** Gap in pixels between panes when PaneCount > 1 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Layout",
+		meta = (ClampMin = "0.0", ClampMax = "20.0"))
+	float PaneGap = 2.0f;
+
 	// ── API ─────────────────────────────────────────────────────
 
 	/**
@@ -132,6 +148,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Bounding Box|Events")
 	FOnBoxClicked OnBoxClicked;
 
+	/** Subscribe to subsystem detection events */
+	void SubscribeToSubsystem();
+
+	/** Unsubscribe from subsystem detection events */
+	void UnsubscribeFromSubsystem();
+
 protected:
 	virtual void BuildWidgetTree() override;
 	virtual void NativeConstruct() override;
@@ -160,10 +182,6 @@ private:
 	/** Subsystem clear handler */
 	UFUNCTION()
 	void HandleDetectionsCleared(FName SourceTag);
-
-	/** Subscribe/unsubscribe from subsystem */
-	void SubscribeToSubsystem();
-	void UnsubscribeFromSubsystem();
 
 	/** Resolve the display color for a box */
 	FLinearColor ResolveBoxColor(const FRammsBoundingBox& Box, int32 Index) const;

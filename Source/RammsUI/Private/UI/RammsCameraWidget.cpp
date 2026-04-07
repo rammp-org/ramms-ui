@@ -37,6 +37,7 @@ void URammsCameraWidget::ResetCachedWidgets()
 	InternalSizeBox = nullptr;
 	DataImage = nullptr;
 	BBoxOverlay = nullptr;
+	bBBoxOverlayEnabled = false;
 	ViewModeButton = nullptr;
 	ViewModeLabel = nullptr;
 	OptionButton = nullptr;
@@ -1310,6 +1311,25 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			}
 		}
 	}
+	else if (BBoxOverlay)
+	{
+		// Overlay already exists — update source tag and ensure subscription
+		if (!SourceTag.IsNone())
+		{
+			const bool bTagChanged = BBoxOverlay->SourceTagFilter != SourceTag;
+			BBoxOverlay->SourceTagFilter = SourceTag;
+			BBoxOverlay->bAutoSubscribe = true;
+			if (bTagChanged)
+			{
+				BBoxOverlay->UnsubscribeFromSubsystem();
+			}
+		}
+		// Re-subscribe (safe if already subscribed — uses AddUniqueDynamic)
+		if (BBoxOverlay->bAutoSubscribe)
+		{
+			BBoxOverlay->SubscribeToSubsystem();
+		}
+	}
 
 	bBBoxOverlayEnabled = true;
 	if (BBoxOverlay)
@@ -1324,6 +1344,7 @@ void URammsCameraWidget::HideBoundingBoxOverlay()
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->ClearDetections();
+		BBoxOverlay->UnsubscribeFromSubsystem();
 		BBoxOverlay->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
@@ -2188,6 +2209,12 @@ void URammsCameraWidget::ApplyViewModeLayout()
 		DataImage->SetVisibility(ViewMode == ERammsCameraViewMode::SideBySide
 				? ESlateVisibility::SelfHitTestInvisible
 				: ESlateVisibility::Collapsed);
+	}
+
+	// Update bbox overlay pane count for split view
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
 	}
 
 	// Adjust corner radii based on whether side-by-side or single image
