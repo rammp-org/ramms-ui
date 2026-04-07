@@ -159,6 +159,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
 	void SetGPUAccelerated(bool bGPU);
 
+	/** Set minimum valid depth (cm). Propagates to all projectors. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetMinDepth(float InMinDepthCM);
+
+	/** Set maximum valid depth (cm). Propagates to all projectors. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetMaxDepth(float InMaxDepthCM);
+
+	/** Set maximum edge stretch (cm). Propagates to all projectors. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetMaxEdgeStretch(float InMaxEdgeStretchCM);
+
+	/** Set depth scale to cm multiplier. Propagates to all projectors. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetDepthScale(float InDepthScaleToCM);
+
+	/** Set decimation factor. Propagates to all projectors and rebuilds PGM grids. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetDecimation(int32 InDecimation);
+
+	/** Set sensor baseline Y offset (cm). Propagates to all projectors. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetSensorBaseline(float InBaselineY);
+
+	/** Bulk-update depth configuration on all projectors (single material refresh).
+	 *  Pass negative values to leave a parameter unchanged. */
+	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
+	void SetDepthConfig(float InMinDepthCM, float InMaxDepthCM, float InMaxEdgeStretchCM, float InDepthScaleToCM = -1.0f);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
