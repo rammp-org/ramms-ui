@@ -1711,6 +1711,7 @@ void URammsCameraWidget::UpdateCollapseIcon()
 		return;
 
 	CollapseIcon->SetText(FText::FromString(bCameraCollapsed ? TEXT("\u25B6") : TEXT("\u25BC")));
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 // --- View mode support ---
@@ -2067,6 +2068,9 @@ void URammsCameraWidget::ApplyViewModeLayout()
 
 	// Adjust corner radii based on whether side-by-side or single image
 	UpdateImageCornerRadii();
+
+	// Header content changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 void URammsCameraWidget::UpdateImageCornerRadii()
