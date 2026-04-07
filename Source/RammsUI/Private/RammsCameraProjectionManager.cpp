@@ -708,6 +708,125 @@ void URammsCameraProjectionManager::SetGPUAccelerated(bool bGPU)
 	UpdateRawDataRequest();
 }
 
+void URammsCameraProjectionManager::SetMinDepth(float InMinDepthCM)
+{
+	MinDepthCM = FMath::Max(0.0f, InMinDepthCM);
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->MinDepthCM = MinDepthCM;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetMaxDepth(float InMaxDepthCM)
+{
+	MaxDepthCM = FMath::Max(0.01f, InMaxDepthCM);
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->MaxDepthCM = MaxDepthCM;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetMaxEdgeStretch(float InMaxEdgeStretchCM)
+{
+	MaxEdgeStretchCM = FMath::Max(0.0f, InMaxEdgeStretchCM);
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->MaxEdgeStretchCM = MaxEdgeStretchCM;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetDepthScale(float InDepthScaleToCM)
+{
+	DepthScaleToCM = FMath::Max(0.0001f, InDepthScaleToCM);
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->DepthScaleToCM = DepthScaleToCM;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetDecimation(int32 InDecimation)
+{
+	Decimation = FMath::Max(1, InDecimation);
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->Decimation = Decimation;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetSensorBaseline(float InBaselineY)
+{
+	SensorBaselineY = InBaselineY;
+
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->SensorBaselineY = SensorBaselineY;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
+void URammsCameraProjectionManager::SetDepthConfig(float InMinDepthCM, float InMaxDepthCM, float InMaxEdgeStretchCM, float InDepthScaleToCM)
+{
+	float NewMinDepthCM = MinDepthCM;
+	float NewMaxDepthCM = MaxDepthCM;
+	float NewMaxEdgeStretchCM = MaxEdgeStretchCM;
+	float NewDepthScaleToCM = DepthScaleToCM;
+
+	if (InMinDepthCM >= 0.0f)
+		NewMinDepthCM = FMath::Max(0.0f, InMinDepthCM);
+	if (InMaxDepthCM >= 0.0f)
+		NewMaxDepthCM = FMath::Max(0.01f, InMaxDepthCM);
+	if (InMaxEdgeStretchCM >= 0.0f)
+		NewMaxEdgeStretchCM = InMaxEdgeStretchCM;
+	if (InDepthScaleToCM >= 0.0f)
+		NewDepthScaleToCM = FMath::Max(0.0001f, InDepthScaleToCM);
+
+	NewMinDepthCM = FMath::Min(NewMinDepthCM, NewMaxDepthCM);
+
+	MinDepthCM = NewMinDepthCM;
+	MaxDepthCM = NewMaxDepthCM;
+	MaxEdgeStretchCM = NewMaxEdgeStretchCM;
+	DepthScaleToCM = NewDepthScaleToCM;
+	for (auto& Pair : Projectors)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->MinDepthCM = MinDepthCM;
+			Pair.Value->MaxDepthCM = MaxDepthCM;
+			Pair.Value->MaxEdgeStretchCM = MaxEdgeStretchCM;
+			Pair.Value->DepthScaleToCM = DepthScaleToCM;
+			Pair.Value->RefreshMaterialParameters();
+		}
+	}
+}
+
 void URammsCameraProjectionManager::UpdateRawDataRequest()
 {
 	const bool bNeedRawData = bEnablePGM && !bGPUAccelerated;
