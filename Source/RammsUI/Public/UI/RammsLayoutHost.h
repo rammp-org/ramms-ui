@@ -56,6 +56,21 @@ struct RAMMSUI_API FRammsPoolEntry
 };
 
 /**
+ * A name → class pair for batch layout registration (ordered).
+ */
+USTRUCT(BlueprintType)
+struct RAMMSUI_API FRammsLayoutEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	FName LayoutName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	TSubclassOf<URammsLayoutBase> LayoutClass;
+};
+
+/**
  * Root host widget that manages layout transitions using an Overlay.
  *
  * ## Architecture
@@ -118,14 +133,14 @@ public:
 	void AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutName);
 
 	/**
-	 * Register multiple layouts by class in a single call.
+	 * Register multiple layouts by class in a single call, in the specified order.
 	 * After all layouts are registered, runs orientation correction to ensure
 	 * the correct variant is active from the start.
-	 * @param Layouts - Map of LayoutName → LayoutClass pairs to register
-	 * @param InitialLayout - Name of the layout to activate (empty = first registered)
+	 * @param Layouts - Ordered array of (LayoutName, LayoutClass) pairs
+	 * @param InitialLayout - Name of the layout to activate (empty = first in array)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Layout Host")
-	void AddLayouts(const TMap<FName, TSubclassOf<URammsLayoutBase>>& Layouts, FName InitialLayout = NAME_None);
+	void AddLayouts(const TArray<FRammsLayoutEntry>& Layouts, FName InitialLayout = NAME_None);
 
 	/**
 	 * Get a registered layout by name.
@@ -343,6 +358,10 @@ private:
 	/** Cached render transform pivots (restored after transition) */
 	FVector2D CachedIncomingPivot = FVector2D(0.0f, 0.0f);
 	FVector2D CachedOutgoingPivot = FVector2D(0.0f, 0.0f);
+
+	/** Cached render transforms (restored after transition) */
+	FWidgetTransform CachedIncomingTransform;
+	FWidgetTransform CachedOutgoingTransform;
 
 	/** Perform the actual reparenting of pool widgets into the target layout */
 	void InjectPoolWidgets(URammsLayoutBase* Layout);

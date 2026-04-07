@@ -13,7 +13,7 @@ enum class ERammsTransitionStyle : uint8
 {
 	/** Crossfade opacity only */
 	Crossfade,
-	/** Slide incoming/outgoing layouts left or right */
+	/** Slide incoming/outgoing layouts left or right (with opacity fade) */
 	Slide,
 	/** Scale down outgoing, scale up incoming (with fade) */
 	Scale,

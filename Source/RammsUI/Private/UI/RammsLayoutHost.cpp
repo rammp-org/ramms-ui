@@ -247,11 +247,11 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 		*LayoutName.ToString(), LayoutOrder.Num() - 1, Layout->GetLayoutSlotNames().Num());
 }
 
-void URammsLayoutHost::AddLayouts(const TMap<FName, TSubclassOf<URammsLayoutBase>>& Layouts, FName InitialLayout)
+void URammsLayoutHost::AddLayouts(const TArray<FRammsLayoutEntry>& Layouts, FName InitialLayout)
 {
-	for (const auto& Pair : Layouts)
+	for (const FRammsLayoutEntry& Entry : Layouts)
 	{
-		AddLayout(Pair.Value, Pair.Key);
+		AddLayout(Entry.LayoutClass, Entry.LayoutName);
 	}
 
 	// Switch to the requested initial layout (if different from the first registered)
@@ -488,9 +488,10 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 
 		if (Incoming)
 		{
+			CachedIncomingTransform = Incoming->GetRenderTransform();
+			CachedIncomingPivot = Incoming->GetRenderTransformPivot();
 			Incoming->SetRenderOpacity(0.0f);
 			Incoming->SetRenderTransform(FWidgetTransform());
-			CachedIncomingPivot = Incoming->GetRenderTransformPivot();
 			Incoming->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			// Block input on the incoming layout during the fade
 			Incoming->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -499,9 +500,10 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 		// Keep the outgoing layout visible so it can fade out
 		if (Outgoing)
 		{
+			CachedOutgoingTransform = Outgoing->GetRenderTransform();
+			CachedOutgoingPivot = Outgoing->GetRenderTransformPivot();
 			Outgoing->SetRenderOpacity(1.0f);
 			Outgoing->SetRenderTransform(FWidgetTransform());
-			CachedOutgoingPivot = Outgoing->GetRenderTransformPivot();
 			Outgoing->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			Outgoing->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
@@ -591,22 +593,22 @@ void URammsLayoutHost::FinishTransition()
 
 	ActiveLayoutName = TransitionToName;
 
-	// Incoming layout: fully opaque, interactive, reset transform and pivot
+	// Incoming layout: fully opaque, interactive, restore original transform and pivot
 	if (URammsLayoutBase* Incoming = GetLayout(TransitionToName))
 	{
 		Incoming->SetRenderOpacity(1.0f);
-		Incoming->SetRenderTransform(FWidgetTransform());
+		Incoming->SetRenderTransform(CachedIncomingTransform);
 		Incoming->SetRenderTransformPivot(CachedIncomingPivot);
 		Incoming->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Incoming->InvalidateLayoutAndVolatility();
 	}
 
-	// Outgoing layout: collapsed, reset transform and pivot
+	// Outgoing layout: collapsed, restore original transform and pivot
 	if (URammsLayoutBase* Outgoing = GetLayout(TransitionFromName))
 	{
 		Outgoing->SetVisibility(ESlateVisibility::Collapsed);
 		Outgoing->SetRenderOpacity(0.0f);
-		Outgoing->SetRenderTransform(FWidgetTransform());
+		Outgoing->SetRenderTransform(CachedOutgoingTransform);
 		Outgoing->SetRenderTransformPivot(CachedOutgoingPivot);
 	}
 
