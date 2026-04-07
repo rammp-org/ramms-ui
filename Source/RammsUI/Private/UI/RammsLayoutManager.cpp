@@ -11,13 +11,14 @@ URammsLayoutManager::URammsLayoutManager()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+	PrimaryComponentTick.TickInterval = 1.0f; // Only need periodic cleanup, not every frame
 }
 
 void URammsLayoutManager::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Clean up invalid widgets
+	// Periodic cleanup of invalid widgets (runs ~1/sec, not every frame)
 	ManagedWidgets.RemoveAll([](const FRammsWidgetLayout& Layout) {
 		return !Layout.Widget || !IsValid(Layout.Widget);
 	});
@@ -216,7 +217,10 @@ void URammsLayoutManager::ApplyFullscreenLayout(bool bAnimated)
 		else
 		{
 			Layout.bVisible = false;
-			Layout.Widget->SetVisibility(ESlateVisibility::Collapsed);
+			if (IsValid(Layout.Widget))
+			{
+				Layout.Widget->SetVisibility(ESlateVisibility::Collapsed);
+			}
 		}
 	}
 }
@@ -250,7 +254,10 @@ void URammsLayoutManager::ApplyGridLayout(bool bAnimated)
 	for (int32 i = Index; i < Count; ++i)
 	{
 		ManagedWidgets[i].bVisible = false;
-		ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		if (IsValid(ManagedWidgets[i].Widget))
+		{
+			ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 }
 
@@ -287,7 +294,10 @@ void URammsLayoutManager::ApplyPIPLayout(bool bAnimated)
 	for (int32 i = 5; i < ManagedWidgets.Num(); ++i)
 	{
 		ManagedWidgets[i].bVisible = false;
-		ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		if (IsValid(ManagedWidgets[i].Widget))
+		{
+			ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 }
 
@@ -313,7 +323,10 @@ void URammsLayoutManager::ApplySideBySideLayout(bool bAnimated)
 	for (int32 i = Count; i < ManagedWidgets.Num(); ++i)
 	{
 		ManagedWidgets[i].bVisible = false;
-		ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		if (IsValid(ManagedWidgets[i].Widget))
+		{
+			ManagedWidgets[i].Widget->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 }
 
@@ -333,7 +346,7 @@ void URammsLayoutManager::UpdateZOrder()
 	// Re-add widgets with correct z-order and re-apply positions
 	for (FRammsWidgetLayout& Layout : ManagedWidgets)
 	{
-		if (!Layout.Widget || !Layout.bVisible)
+		if (!Layout.Widget || !IsValid(Layout.Widget) || !Layout.bVisible)
 			continue;
 
 		// For widgets in a Canvas Panel, use slot z-order
@@ -478,7 +491,7 @@ void URammsLayoutManager::TransitionToPreset(URammsLayoutPresetAsset* PresetAsse
 	// Hide widgets not referenced by the preset
 	for (FRammsWidgetLayout& Layout : ManagedWidgets)
 	{
-		if (Layout.Widget && !ReferencedWidgets.Contains(Layout.Widget))
+		if (Layout.Widget && IsValid(Layout.Widget) && !ReferencedWidgets.Contains(Layout.Widget))
 		{
 			Layout.bVisible = false;
 			if (bAnimated)
