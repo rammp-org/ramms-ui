@@ -183,7 +183,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
 	void SetSensorBaseline(float InBaselineY);
 
-	/** Bulk-update depth configuration on all projectors (single material refresh).
+	/** Bulk-update depth configuration on all projectors, with one material refresh per projector.
 	 *  Pass negative values to leave a parameter unchanged. */
 	UFUNCTION(BlueprintCallable, Category = "Projection|PGM")
 	void SetDepthConfig(float InMinDepthCM, float InMaxDepthCM, float InMaxEdgeStretchCM, float InDepthScaleToCM = -1.0f);
