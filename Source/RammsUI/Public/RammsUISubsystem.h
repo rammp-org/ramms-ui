@@ -7,7 +7,7 @@
 #include "Interfaces/IRammsRobotController.h"
 #include "RammsUIEventTypes.h"
 #include "UI/RammsUIStyle.h"
-#include "UI/RammsLayoutHost.h"
+#include "RammsUITransitionTypes.h"
 #include "RammsUISubsystem.generated.h"
 
 /**
