@@ -457,6 +457,7 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 		{
 			Incoming->SetRenderOpacity(0.0f);
 			Incoming->SetRenderTransform(FWidgetTransform());
+			CachedIncomingPivot = Incoming->GetRenderTransformPivot();
 			Incoming->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			// Block input on the incoming layout during the fade
 			Incoming->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -467,6 +468,7 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 		{
 			Outgoing->SetRenderOpacity(1.0f);
 			Outgoing->SetRenderTransform(FWidgetTransform());
+			CachedOutgoingPivot = Outgoing->GetRenderTransformPivot();
 			Outgoing->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			Outgoing->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
@@ -556,21 +558,23 @@ void URammsLayoutHost::FinishTransition()
 
 	ActiveLayoutName = TransitionToName;
 
-	// Incoming layout: fully opaque, interactive, reset transform
+	// Incoming layout: fully opaque, interactive, reset transform and pivot
 	if (URammsLayoutBase* Incoming = GetLayout(TransitionToName))
 	{
 		Incoming->SetRenderOpacity(1.0f);
 		Incoming->SetRenderTransform(FWidgetTransform());
+		Incoming->SetRenderTransformPivot(CachedIncomingPivot);
 		Incoming->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Incoming->InvalidateLayoutAndVolatility();
 	}
 
-	// Outgoing layout: collapsed, reset transform
+	// Outgoing layout: collapsed, reset transform and pivot
 	if (URammsLayoutBase* Outgoing = GetLayout(TransitionFromName))
 	{
 		Outgoing->SetVisibility(ESlateVisibility::Collapsed);
 		Outgoing->SetRenderOpacity(0.0f);
 		Outgoing->SetRenderTransform(FWidgetTransform());
+		Outgoing->SetRenderTransformPivot(CachedOutgoingPivot);
 	}
 
 	OnLayoutTransitionCompleted.Broadcast(TransitionToName, TransitionFromName);
@@ -620,19 +624,21 @@ ERammsOrientation URammsLayoutHost::ComputeEffectiveOrientation() const
 
 void URammsLayoutHost::UpdateOrientationCheck()
 {
-	// Early-out if viewport size hasn't changed
+	// Early-out if viewport size hasn't changed AND override hasn't changed
 	if (bOrientationInitialized)
 	{
-		FVector2D CurrentVP(1920, 1080);
+		const bool bOverrideChanged = (OrientationOverride != LastAppliedOrientationOverride);
+		FVector2D  CurrentVP(1920, 1080);
 		if (GEngine && GEngine->GameViewport)
 		{
 			GEngine->GameViewport->GetViewportSize(CurrentVP);
 		}
-		if (CurrentVP.Equals(CachedViewportSize, 0.5f))
+		if (!bOverrideChanged && CurrentVP.Equals(CachedViewportSize, 0.5f))
 		{
 			return;
 		}
 		CachedViewportSize = CurrentVP;
+		LastAppliedOrientationOverride = OrientationOverride;
 	}
 
 	ERammsOrientation NewOrientation = ComputeEffectiveOrientation();
@@ -645,6 +651,7 @@ void URammsLayoutHost::UpdateOrientationCheck()
 		{
 			GEngine->GameViewport->GetViewportSize(CachedViewportSize);
 		}
+		LastAppliedOrientationOverride = OrientationOverride;
 		bOrientationInitialized = true;
 
 		// If starting in non-default orientation, immediately transition
@@ -697,7 +704,8 @@ void URammsLayoutHost::UpdateOrientationCheck()
 void URammsLayoutHost::SetOrientationOverride(ERammsOrientationOverride Override)
 {
 	OrientationOverride = Override;
-	// Force immediate re-evaluation
+	// Invalidate viewport cache so UpdateOrientationCheck re-evaluates
+	CachedViewportSize = FVector2D(-1.0f, -1.0f);
 	UpdateOrientationCheck();
 }
 

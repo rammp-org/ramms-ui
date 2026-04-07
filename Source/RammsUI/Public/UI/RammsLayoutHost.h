@@ -7,6 +7,7 @@
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsLayoutBase.h"
 #include "UI/RammsUIStyle.h"
+#include "RammsUITransitionTypes.h"
 #include "RammsLayoutHost.generated.h"
 
 class UOverlay;
@@ -33,36 +34,6 @@ enum class ERammsOrientationOverride : uint8
 	ForceLandscape,
 	/** Always treat as portrait */
 	ForcePortrait
-};
-
-/**
- * Transition animation style for layout switches.
- */
-UENUM(BlueprintType)
-enum class ERammsTransitionStyle : uint8
-{
-	/** Crossfade opacity only */
-	Crossfade,
-	/** Slide incoming/outgoing layouts left or right */
-	Slide,
-	/** Scale down outgoing, scale up incoming (with fade) */
-	Scale,
-	/** Slide with a slight scale for depth (recommended) */
-	SlideAndScale
-};
-
-/**
- * Slide direction hint for layout transitions.
- */
-UENUM(BlueprintType)
-enum class ERammsSlideDirection : uint8
-{
-	/** Determine automatically from layout order (higher index = slide left) */
-	Auto,
-	/** New layout slides in from the right, old slides out left */
-	Left,
-	/** New layout slides in from the left, old slides out right */
-	Right
 };
 
 /**
@@ -113,12 +84,13 @@ struct RAMMSUI_API FRammsPoolEntry
  *
  * ## Transition Animation
  *
- * True crossfade: the outgoing layout fades out (opacity 1→0) while the
- * incoming layout fades in (opacity 0→1). Both are visible simultaneously
- * in the Overlay during the transition. Pool widgets are reparented into the
- * incoming layout at the start of the transition. Hit-testing on both
- * layouts is disabled during the crossfade and restored on the incoming
- * layout when the transition completes.
+ * Supports multiple animation styles (crossfade, slide, scale, slide+scale)
+ * configurable via TransitionStyle. Both layouts are visible simultaneously
+ * during animated transitions. Pool widgets are reparented into the incoming
+ * layout at the start of the transition. Hit-testing on both layouts is
+ * disabled during the animation and restored on the incoming layout when
+ * the transition completes. Slide direction can be specified per-transition
+ * or auto-determined from layout registration order.
  */
 UCLASS(Blueprintable, meta = (DisplayName = "Ramms Layout Host"))
 class RAMMSUI_API URammsLayoutHost : public UUserWidget
@@ -199,7 +171,8 @@ public:
 	// ── Transitions ──────────────────────────────────────────────
 
 	/**
-	 * Transition to a layout by name with optional crossfade animation.
+	 * Transition to a layout by name with the configured animation style.
+	 * Supports crossfade, slide, scale, and slide+scale transitions.
 	 * @param LayoutName - Must match a name passed to AddLayout()
 	 * @param bAnimated - Whether to animate (true) or instant-switch (false)
 	 * @param SlideDirection - Slide direction hint (only used with Slide/SlideAndScale styles)
@@ -214,7 +187,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Layout Host")
 	void TransitionToLayoutIndex(int32 Index, bool bAnimated = true);
 
-	/** Crossfade duration in seconds */
+	/** Transition animation duration in seconds (applies to all transition styles) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition", meta = (ClampMin = "0.0"))
 	float CrossfadeDuration = 0.3f;
 
@@ -357,6 +330,10 @@ private:
 	float				  ActiveTransitionScaleAmount = 0.92f;
 	float				  ActiveSlideDistanceFraction = 0.25f;
 
+	/** Cached render transform pivots (restored after transition) */
+	FVector2D CachedIncomingPivot = FVector2D(0.0f, 0.0f);
+	FVector2D CachedOutgoingPivot = FVector2D(0.0f, 0.0f);
+
 	/** Perform the actual reparenting of pool widgets into the target layout */
 	void InjectPoolWidgets(URammsLayoutBase* Layout);
 
@@ -377,6 +354,9 @@ private:
 
 	ERammsOrientation CurrentOrientation = ERammsOrientation::Landscape;
 	bool			  bOrientationInitialized = false;
+
+	/** Last applied orientation override (used to detect override changes) */
+	ERammsOrientationOverride LastAppliedOrientationOverride = ERammsOrientationOverride::Auto;
 
 	/** Cached viewport size for orientation change detection */
 	FVector2D CachedViewportSize = FVector2D(1920, 1080);
