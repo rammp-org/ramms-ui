@@ -5,6 +5,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Overlay.h"
 #include "Fonts/SlateFontInfo.h"
+#include "Styling/CoreStyle.h"
 #include "Rendering/SlateRenderer.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"

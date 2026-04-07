@@ -25,6 +25,7 @@ void URammsCameraWidget::ResetCachedWidgets()
 {
 	CameraBorder = nullptr;
 	CameraRootOverlay = nullptr;
+	ImageContainerOverlay = nullptr;
 	CameraImage = nullptr;
 	CameraLabel = nullptr;
 	CameraLabelWrap = nullptr;
@@ -217,9 +218,18 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		CameraSizeBox->AddChild(CameraBorder);
 
+		// Overlay wrapping the image area — bbox overlay is hosted here
+		ImageContainerOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ImageContainerOverlay"));
+		CameraBorder->AddChild(ImageContainerOverlay);
+
 		// HBox to hold RGB image and optional data image side-by-side
 		UHorizontalBox* ImageHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageHBox"));
-		CameraBorder->AddChild(ImageHBox);
+		UOverlaySlot*	ImageHBoxSlot = ImageContainerOverlay->AddChildToOverlay(ImageHBox);
+		if (ImageHBoxSlot)
+		{
+			ImageHBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+			ImageHBoxSlot->SetVerticalAlignment(VAlign_Fill);
+		}
 
 		CameraImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CameraImage"));
 		CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
@@ -279,9 +289,18 @@ void URammsCameraWidget::BuildWidgetTree()
 		CameraImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CameraImage"));
 		CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 
+		// Overlay wrapping the image area — bbox overlay is hosted here
+		ImageContainerOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ImageContainerOverlay"));
+		CameraBorder->AddChild(ImageContainerOverlay);
+
 		// HBox for side-by-side support
 		UHorizontalBox* ImageHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ImageHBox"));
-		CameraBorder->AddChild(ImageHBox);
+		UOverlaySlot*	ImageHBoxSlot = ImageContainerOverlay->AddChildToOverlay(ImageHBox);
+		if (ImageHBoxSlot)
+		{
+			ImageHBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+			ImageHBoxSlot->SetVerticalAlignment(VAlign_Fill);
+		}
 
 		UHorizontalBoxSlot* RGBSlot = ImageHBox->AddChildToHorizontalBox(CameraImage);
 		if (RGBSlot)
@@ -1261,7 +1280,7 @@ int32 URammsCameraWidget::GetEffectiveZOrder() const
 
 void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
-	if (!BBoxOverlay && CameraRootOverlay)
+	if (!BBoxOverlay && ImageContainerOverlay)
 	{
 		BBoxOverlay = CreateWidget<URammsBoundingBoxOverlay>(this);
 		if (BBoxOverlay)
@@ -1282,8 +1301,8 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 				BBoxOverlay->SetStyle(Style);
 			}
 
-			// Insert into the overlay stack above the camera image
-			UOverlaySlot* OverlaySlot = CameraRootOverlay->AddChildToOverlay(BBoxOverlay);
+			// Insert into the image container overlay (covers only image area, not header)
+			UOverlaySlot* OverlaySlot = ImageContainerOverlay->AddChildToOverlay(BBoxOverlay);
 			if (OverlaySlot)
 			{
 				OverlaySlot->SetHorizontalAlignment(HAlign_Fill);
@@ -1292,6 +1311,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 		}
 	}
 
+	bBBoxOverlayEnabled = true;
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -1300,6 +1320,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 
 void URammsCameraWidget::HideBoundingBoxOverlay()
 {
+	bBBoxOverlayEnabled = false;
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->ClearDetections();
@@ -1766,10 +1787,17 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 	UpdateCollapseIcon();
 	UpdateHeaderCornerRadii();
 
-	// Hide bounding box overlay while collapsed, restore when expanding
+	// Hide bounding box overlay while collapsed, restore only if intentionally enabled
 	if (BBoxOverlay)
 	{
-		BBoxOverlay->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		if (bCollapsed)
+		{
+			BBoxOverlay->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (bBBoxOverlayEnabled)
+		{
+			BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
 	}
 
 	// When collapsing: clear aspect ratio constraint immediately so the header

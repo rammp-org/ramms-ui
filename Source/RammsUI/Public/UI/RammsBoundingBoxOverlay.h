@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "RammsDetectionTypes.h"
+#include "Fonts/SlateFontInfo.h"
 #include "RammsBoundingBoxOverlay.generated.h"
 
 /**

@@ -312,6 +312,10 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> CameraRootOverlay;
 
+	/** Overlay wrapping the image area — bbox overlay is hosted here (not over the header) */
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlay> ImageContainerOverlay;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> CameraImage;
 
@@ -364,6 +368,9 @@ protected:
 	/** Bounding box overlay (created on demand) */
 	UPROPERTY(Transient)
 	TObjectPtr<URammsBoundingBoxOverlay> BBoxOverlay;
+
+	/** Whether the bbox overlay is intentionally enabled (tracks Show/Hide state) */
+	bool bBBoxOverlayEnabled = false;
 
 	/** View-mode toggle button in title bar */
 	UPROPERTY(Transient)
@@ -605,7 +612,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
 	void ShowBoundingBoxOverlay(FName SourceTag = NAME_None);
 
-	/** Hide and destroy the bounding box overlay */
+	/** Hide the bounding box overlay and clear its detections (widget remains cached for re-show) */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
 	void HideBoundingBoxOverlay();
 
