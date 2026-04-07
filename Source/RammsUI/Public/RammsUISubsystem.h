@@ -7,6 +7,7 @@
 #include "Interfaces/IRammsRobotController.h"
 #include "RammsUIEventTypes.h"
 #include "UI/RammsUIStyle.h"
+#include "RammsUITransitionTypes.h"
 #include "RammsUISubsystem.generated.h"
 
 /**
@@ -318,9 +319,10 @@ public:
 	 * The LayoutHost subscribes and performs the actual transition.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Events|Layout")
-	void BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated = true);
+	void BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated = true,
+		ERammsSlideDirection SlideDirection = ERammsSlideDirection::Auto);
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLayoutTransitionRequest, FName, LayoutName, bool, bAnimated);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnLayoutTransitionRequest, FName, LayoutName, bool, bAnimated, ERammsSlideDirection, SlideDirection);
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Events|Layout")
 	FOnLayoutTransitionRequest OnLayoutTransitionRequested;
 
