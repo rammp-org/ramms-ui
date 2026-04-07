@@ -7,6 +7,7 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Engine/GameViewportClient.h"
+#include "Slate/WidgetTransform.h"
 
 URammsLayoutHost::URammsLayoutHost(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -78,7 +79,7 @@ void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	}
 
 	// Advance crossfade
-	TransitionAlpha += InDeltaTime / FMath::Max(CrossfadeDuration, 0.01f);
+	TransitionAlpha += InDeltaTime / FMath::Max(ActiveTransitionDuration, 0.01f);
 
 	if (TransitionAlpha >= 1.0f)
 	{
@@ -87,17 +88,56 @@ void URammsLayoutHost::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		return;
 	}
 
-	// Smooth crossfade: ease in/out
-	float T = FMath::InterpEaseInOut(0.0f, 1.0f, TransitionAlpha, 2.0f);
+	// Smooth easing
+	const float T = FMath::InterpEaseInOut(0.0f, 1.0f, TransitionAlpha, 2.0f);
 
-	// Incoming fades in, outgoing fades out
-	if (URammsLayoutBase* Incoming = GetLayout(TransitionToName))
+	URammsLayoutBase* Incoming = GetLayout(TransitionToName);
+	URammsLayoutBase* Outgoing = GetLayout(TransitionFromName);
+
+	const bool bUseScale = (ActiveTransitionStyle == ERammsTransitionStyle::Scale
+		|| ActiveTransitionStyle == ERammsTransitionStyle::SlideAndScale);
+	const bool bUseSlide = (ActiveTransitionStyle == ERammsTransitionStyle::Slide
+		|| ActiveTransitionStyle == ERammsTransitionStyle::SlideAndScale);
+
+	const float SlideDistance = bUseSlide ? (TransitionViewportWidth * ActiveSlideDistanceFraction) : 0.0f;
+	const float ScaleMin = ActiveTransitionScaleAmount;
+
+	// Compute and apply full transform for incoming layout
+	if (Incoming)
 	{
 		Incoming->SetRenderOpacity(T);
+
+		FVector2D Trans(0.0f, 0.0f);
+		FVector2D Scl(1.0f, 1.0f);
+		if (bUseSlide)
+		{
+			Trans.X = FMath::Lerp(SlideDistance * TransitionSlideSign, 0.0f, T);
+		}
+		if (bUseScale)
+		{
+			const float S = FMath::Lerp(ScaleMin, 1.0f, T);
+			Scl = FVector2D(S, S);
+		}
+		Incoming->SetRenderTransform(FWidgetTransform(Trans, Scl, FVector2D::ZeroVector, 0.0f));
 	}
-	if (URammsLayoutBase* Outgoing = GetLayout(TransitionFromName))
+
+	// Compute and apply full transform for outgoing layout
+	if (Outgoing)
 	{
 		Outgoing->SetRenderOpacity(1.0f - T);
+
+		FVector2D Trans(0.0f, 0.0f);
+		FVector2D Scl(1.0f, 1.0f);
+		if (bUseSlide)
+		{
+			Trans.X = FMath::Lerp(0.0f, -SlideDistance * TransitionSlideSign, T);
+		}
+		if (bUseScale)
+		{
+			const float S = FMath::Lerp(1.0f, ScaleMin, T);
+			Scl = FVector2D(S, S);
+		}
+		Outgoing->SetRenderTransform(FWidgetTransform(Trans, Scl, FVector2D::ZeroVector, 0.0f));
 	}
 }
 
@@ -192,6 +232,10 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 		Layout->SetRenderOpacity(1.0f);
 		Layout->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		InjectPoolWidgets(Layout);
+
+		// Correct for orientation if already initialized
+		// (handles case where host ticked before any layouts were registered)
+		ApplyInitialOrientationCorrection();
 	}
 	else
 	{
@@ -201,6 +245,23 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 
 	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Registered layout '%s' (index %d, %d slots)"),
 		*LayoutName.ToString(), LayoutOrder.Num() - 1, Layout->GetLayoutSlotNames().Num());
+}
+
+void URammsLayoutHost::AddLayouts(const TArray<FRammsLayoutEntry>& Layouts, FName InitialLayout)
+{
+	for (const FRammsLayoutEntry& Entry : Layouts)
+	{
+		AddLayout(Entry.LayoutClass, Entry.LayoutName);
+	}
+
+	// Switch to the requested initial layout (if different from the first registered)
+	if (!InitialLayout.IsNone() && InitialLayout != ActiveLayoutName && LayoutMap.Contains(InitialLayout))
+	{
+		TransitionToLayout(InitialLayout, false);
+	}
+
+	// Run orientation correction after all layouts are available
+	ApplyInitialOrientationCorrection();
 }
 
 URammsLayoutBase* URammsLayoutHost::GetLayout(FName LayoutName) const
@@ -303,8 +364,25 @@ URammsBaseWidget* URammsLayoutHost::GetPoolWidget(FName WidgetTag) const
 
 // ── Transitions ───────────────────────────────────────────────────
 
-void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
+void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
+	ERammsSlideDirection SlideDirection)
 {
+	// Capture and reset orientation flag (set by UpdateOrientationCheck before calling)
+	const bool bIsOrientationTriggered = bOrientationTransition;
+	bOrientationTransition = false;
+
+	// Resolve to the orientation-appropriate variant if available
+	// (e.g., "Arm" → "Arm_Portrait" when in portrait mode)
+	if (!bIsOrientationTriggered && bOrientationInitialized)
+	{
+		FName BaseName = GetBaseLayoutName(LayoutName);
+		FName OrientedName = ResolveLayoutForOrientation(BaseName, CurrentOrientation);
+		if (OrientedName != LayoutName && LayoutMap.Contains(OrientedName))
+		{
+			LayoutName = OrientedName;
+		}
+	}
+
 	if (LayoutName.IsNone() || !LayoutMap.Contains(LayoutName))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("URammsLayoutHost::TransitionToLayout: Unknown layout '%s'"), *LayoutName.ToString());
@@ -353,16 +431,68 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 		InjectPoolWidgets(Incoming);
 	}
 
-	if (bAnimated && CrossfadeDuration > 0.0f)
+	if (bAnimated)
+	{
+		// Resolve effective transition parameters
+		if (bIsOrientationTriggered && bOverrideOrientationTransitionStyle)
+		{
+			ActiveTransitionStyle = OrientationTransitionStyle;
+			ActiveTransitionDuration = OrientationTransitionDuration;
+			ActiveTransitionScaleAmount = OrientationTransitionScaleAmount;
+			ActiveSlideDistanceFraction = OrientationSlideDistanceFraction;
+		}
+		else
+		{
+			ActiveTransitionStyle = TransitionStyle;
+			ActiveTransitionDuration = TransitionDuration;
+			ActiveTransitionScaleAmount = TransitionScaleAmount;
+			ActiveSlideDistanceFraction = SlideDistanceFraction;
+		}
+
+		if (ActiveTransitionDuration <= 0.0f)
+		{
+			// Duration zero means instant even if animated was requested
+			bAnimated = false;
+		}
+	}
+
+	if (bAnimated)
 	{
 		// Real crossfade: both layouts visible in the overlay,
 		// incoming fades in while outgoing fades out.
 		bTransitioning = true;
 		TransitionAlpha = 0.0f;
 
+		// Cache viewport width for slide distance
+		TransitionViewportWidth = 1920.0f;
+		if (GEngine && GEngine->GameViewport)
+		{
+			FVector2D VP;
+			GEngine->GameViewport->GetViewportSize(VP);
+			if (VP.X > 0.0f)
+				TransitionViewportWidth = VP.X;
+		}
+
+		// Resolve slide direction
+		if (SlideDirection == ERammsSlideDirection::Auto)
+		{
+			// Higher index = slide left (new content comes from right)
+			const int32 FromIdx = LayoutOrder.IndexOfByKey(TransitionFromName);
+			const int32 ToIdx = LayoutOrder.IndexOfByKey(TransitionToName);
+			TransitionSlideSign = (ToIdx >= FromIdx) ? 1.0f : -1.0f;
+		}
+		else
+		{
+			TransitionSlideSign = (SlideDirection == ERammsSlideDirection::Left) ? 1.0f : -1.0f;
+		}
+
 		if (Incoming)
 		{
+			CachedIncomingTransform = Incoming->GetRenderTransform();
+			CachedIncomingPivot = Incoming->GetRenderTransformPivot();
 			Incoming->SetRenderOpacity(0.0f);
+			Incoming->SetRenderTransform(FWidgetTransform());
+			Incoming->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			// Block input on the incoming layout during the fade
 			Incoming->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
@@ -370,7 +500,11 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated)
 		// Keep the outgoing layout visible so it can fade out
 		if (Outgoing)
 		{
+			CachedOutgoingTransform = Outgoing->GetRenderTransform();
+			CachedOutgoingPivot = Outgoing->GetRenderTransformPivot();
 			Outgoing->SetRenderOpacity(1.0f);
+			Outgoing->SetRenderTransform(FWidgetTransform());
+			Outgoing->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 			Outgoing->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 
@@ -459,32 +593,36 @@ void URammsLayoutHost::FinishTransition()
 
 	ActiveLayoutName = TransitionToName;
 
-	// Incoming layout: fully opaque and interactive
+	// Incoming layout: fully opaque, interactive, restore original transform and pivot
 	if (URammsLayoutBase* Incoming = GetLayout(TransitionToName))
 	{
 		Incoming->SetRenderOpacity(1.0f);
+		Incoming->SetRenderTransform(CachedIncomingTransform);
+		Incoming->SetRenderTransformPivot(CachedIncomingPivot);
 		Incoming->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Incoming->InvalidateLayoutAndVolatility();
 	}
 
-	// Outgoing layout: collapsed and non-interactive
+	// Outgoing layout: collapsed, restore original transform and pivot
 	if (URammsLayoutBase* Outgoing = GetLayout(TransitionFromName))
 	{
 		Outgoing->SetVisibility(ESlateVisibility::Collapsed);
 		Outgoing->SetRenderOpacity(0.0f);
+		Outgoing->SetRenderTransform(CachedOutgoingTransform);
+		Outgoing->SetRenderTransformPivot(CachedOutgoingPivot);
 	}
 
 	OnLayoutTransitionCompleted.Broadcast(TransitionToName, TransitionFromName);
 
-	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Transition complete → '%s'"), *ActiveLayoutName.ToString());
+	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Transition complete -> '%s'"), *ActiveLayoutName.ToString());
 
 	TransitionFromName = NAME_None;
 	TransitionToName = NAME_None;
 }
 
-void URammsLayoutHost::HandleLayoutTransitionRequest(FName LayoutName, bool bAnimated)
+void URammsLayoutHost::HandleLayoutTransitionRequest(FName LayoutName, bool bAnimated, ERammsSlideDirection SlideDirection)
 {
-	TransitionToLayout(LayoutName, bAnimated);
+	TransitionToLayout(LayoutName, bAnimated, SlideDirection);
 }
 
 // ── Orientation ───────────────────────────────────────────────────
@@ -521,12 +659,50 @@ ERammsOrientation URammsLayoutHost::ComputeEffectiveOrientation() const
 
 void URammsLayoutHost::UpdateOrientationCheck()
 {
+	// Early-out if viewport size hasn't changed AND override hasn't changed
+	if (bOrientationInitialized)
+	{
+		const bool bOverrideChanged = (OrientationOverride != LastAppliedOrientationOverride);
+		FVector2D  CurrentVP(1920, 1080);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CurrentVP);
+		}
+		if (!bOverrideChanged && CurrentVP.Equals(CachedViewportSize, 0.5f))
+		{
+			return;
+		}
+		CachedViewportSize = CurrentVP;
+		LastAppliedOrientationOverride = OrientationOverride;
+	}
+
 	ERammsOrientation NewOrientation = ComputeEffectiveOrientation();
 
 	if (!bOrientationInitialized)
 	{
 		CurrentOrientation = NewOrientation;
+		CachedViewportSize = FVector2D(1920, 1080);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CachedViewportSize);
+		}
+		LastAppliedOrientationOverride = OrientationOverride;
 		bOrientationInitialized = true;
+
+		// If starting in non-default orientation, immediately transition
+		if (!ActiveLayoutName.IsNone() && !bTransitioning)
+		{
+			FName BaseName = GetBaseLayoutName(ActiveLayoutName);
+			FName TargetName = ResolveLayoutForOrientation(BaseName, NewOrientation);
+
+			if (TargetName != ActiveLayoutName && LayoutMap.Contains(TargetName))
+			{
+				UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Initial orientation '%s' - switching to '%s'"),
+					NewOrientation == ERammsOrientation::Landscape ? TEXT("Landscape") : TEXT("Portrait"),
+					*TargetName.ToString());
+				TransitionToLayout(TargetName, false); // instant on first frame
+			}
+		}
 		return;
 	}
 
@@ -538,7 +714,7 @@ void URammsLayoutHost::UpdateOrientationCheck()
 	ERammsOrientation OldOrientation = CurrentOrientation;
 	CurrentOrientation = NewOrientation;
 
-	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation changed %s → %s"),
+	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation changed %s -> %s"),
 		OldOrientation == ERammsOrientation::Landscape ? TEXT("Landscape") : TEXT("Portrait"),
 		NewOrientation == ERammsOrientation::Landscape ? TEXT("Landscape") : TEXT("Portrait"));
 
@@ -552,17 +728,49 @@ void URammsLayoutHost::UpdateOrientationCheck()
 
 		if (TargetName != ActiveLayoutName && LayoutMap.Contains(TargetName))
 		{
-			UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation auto-transition '%s' → '%s'"),
+			UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Orientation auto-transition '%s' -> '%s'"),
 				*ActiveLayoutName.ToString(), *TargetName.ToString());
+			bOrientationTransition = true;
 			TransitionToLayout(TargetName, bAnimateOrientationTransition);
 		}
+	}
+}
+
+void URammsLayoutHost::ApplyInitialOrientationCorrection()
+{
+	if (ActiveLayoutName.IsNone() || bTransitioning)
+	{
+		return;
+	}
+
+	// Compute current orientation (initializes if needed)
+	if (!bOrientationInitialized)
+	{
+		CurrentOrientation = ComputeEffectiveOrientation();
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CachedViewportSize);
+		}
+		LastAppliedOrientationOverride = OrientationOverride;
+		bOrientationInitialized = true;
+	}
+
+	FName BaseName = GetBaseLayoutName(ActiveLayoutName);
+	FName TargetName = ResolveLayoutForOrientation(BaseName, CurrentOrientation);
+
+	if (TargetName != ActiveLayoutName && LayoutMap.Contains(TargetName))
+	{
+		UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Initial orientation correction '%s' -> '%s'"),
+			*ActiveLayoutName.ToString(), *TargetName.ToString());
+		TransitionToLayout(TargetName, false); // instant
 	}
 }
 
 void URammsLayoutHost::SetOrientationOverride(ERammsOrientationOverride Override)
 {
 	OrientationOverride = Override;
-	// Force immediate re-evaluation
+	// Invalidate viewport cache so UpdateOrientationCheck re-evaluates
+	CachedViewportSize = FVector2D(-1.0f, -1.0f);
 	UpdateOrientationCheck();
 }
 
