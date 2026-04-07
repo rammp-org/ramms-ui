@@ -232,6 +232,10 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 		Layout->SetRenderOpacity(1.0f);
 		Layout->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		InjectPoolWidgets(Layout);
+
+		// Correct for orientation if already initialized
+		// (handles case where host ticked before any layouts were registered)
+		ApplyInitialOrientationCorrection();
 	}
 	else
 	{
@@ -241,6 +245,23 @@ void URammsLayoutHost::AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutN
 
 	UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Registered layout '%s' (index %d, %d slots)"),
 		*LayoutName.ToString(), LayoutOrder.Num() - 1, Layout->GetLayoutSlotNames().Num());
+}
+
+void URammsLayoutHost::AddLayouts(const TMap<FName, TSubclassOf<URammsLayoutBase>>& Layouts, FName InitialLayout)
+{
+	for (const auto& Pair : Layouts)
+	{
+		AddLayout(Pair.Value, Pair.Key);
+	}
+
+	// Switch to the requested initial layout (if different from the first registered)
+	if (!InitialLayout.IsNone() && InitialLayout != ActiveLayoutName && LayoutMap.Contains(InitialLayout))
+	{
+		TransitionToLayout(InitialLayout, false);
+	}
+
+	// Run orientation correction after all layouts are available
+	ApplyInitialOrientationCorrection();
 }
 
 URammsLayoutBase* URammsLayoutHost::GetLayout(FName LayoutName) const
@@ -350,6 +371,18 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 	const bool bIsOrientationTriggered = bOrientationTransition;
 	bOrientationTransition = false;
 
+	// Resolve to the orientation-appropriate variant if available
+	// (e.g., "Arm" → "Arm_Portrait" when in portrait mode)
+	if (!bIsOrientationTriggered && bOrientationInitialized)
+	{
+		FName BaseName = GetBaseLayoutName(LayoutName);
+		FName OrientedName = ResolveLayoutForOrientation(BaseName, CurrentOrientation);
+		if (OrientedName != LayoutName && LayoutMap.Contains(OrientedName))
+		{
+			LayoutName = OrientedName;
+		}
+	}
+
 	if (LayoutName.IsNone() || !LayoutMap.Contains(LayoutName))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("URammsLayoutHost::TransitionToLayout: Unknown layout '%s'"), *LayoutName.ToString());
@@ -411,7 +444,7 @@ void URammsLayoutHost::TransitionToLayout(FName LayoutName, bool bAnimated,
 		else
 		{
 			ActiveTransitionStyle = TransitionStyle;
-			ActiveTransitionDuration = CrossfadeDuration;
+			ActiveTransitionDuration = TransitionDuration;
 			ActiveTransitionScaleAmount = TransitionScaleAmount;
 			ActiveSlideDistanceFraction = SlideDistanceFraction;
 		}
@@ -698,6 +731,36 @@ void URammsLayoutHost::UpdateOrientationCheck()
 			bOrientationTransition = true;
 			TransitionToLayout(TargetName, bAnimateOrientationTransition);
 		}
+	}
+}
+
+void URammsLayoutHost::ApplyInitialOrientationCorrection()
+{
+	if (ActiveLayoutName.IsNone() || bTransitioning)
+	{
+		return;
+	}
+
+	// Compute current orientation (initializes if needed)
+	if (!bOrientationInitialized)
+	{
+		CurrentOrientation = ComputeEffectiveOrientation();
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CachedViewportSize);
+		}
+		LastAppliedOrientationOverride = OrientationOverride;
+		bOrientationInitialized = true;
+	}
+
+	FName BaseName = GetBaseLayoutName(ActiveLayoutName);
+	FName TargetName = ResolveLayoutForOrientation(BaseName, CurrentOrientation);
+
+	if (TargetName != ActiveLayoutName && LayoutMap.Contains(TargetName))
+	{
+		UE_LOG(LogTemp, Log, TEXT("URammsLayoutHost: Initial orientation correction '%s' -> '%s'"),
+			*ActiveLayoutName.ToString(), *TargetName.ToString());
+		TransitionToLayout(TargetName, false); // instant
 	}
 }
 

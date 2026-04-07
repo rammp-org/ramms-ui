@@ -118,6 +118,16 @@ public:
 	void AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutName);
 
 	/**
+	 * Register multiple layouts by class in a single call.
+	 * After all layouts are registered, runs orientation correction to ensure
+	 * the correct variant is active from the start.
+	 * @param Layouts - Map of LayoutName → LayoutClass pairs to register
+	 * @param InitialLayout - Name of the layout to activate (empty = first registered)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout Host")
+	void AddLayouts(const TMap<FName, TSubclassOf<URammsLayoutBase>>& Layouts, FName InitialLayout = NAME_None);
+
+	/**
 	 * Get a registered layout by name.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Layout Host")
@@ -189,7 +199,7 @@ public:
 
 	/** Transition animation duration in seconds (applies to all transition styles) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition", meta = (ClampMin = "0.0"))
-	float CrossfadeDuration = 0.3f;
+	float TransitionDuration = 0.3f;
 
 	/** Transition animation style */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition")
@@ -366,6 +376,12 @@ private:
 
 	/** Check viewport and handle orientation change if needed */
 	void UpdateOrientationCheck();
+
+	/**
+	 * If orientation is already known, ensure the active layout matches.
+	 * Called when the first layout is registered or after batch registration.
+	 */
+	void ApplyInitialOrientationCorrection();
 
 	/**
 	 * Resolve the layout name to use for the given orientation.
