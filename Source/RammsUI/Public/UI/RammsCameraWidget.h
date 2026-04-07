@@ -713,9 +713,9 @@ protected:
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;
 
-	/** Cached texture pointers to avoid redundant brush/material updates */
-	TWeakObjectPtr<UTexture> LastAppliedRGBTexture;
-	TWeakObjectPtr<UTexture> LastAppliedDataTexture;
+	/** Cached MID pointers for material corner param change detection */
+	TWeakObjectPtr<UMaterialInstanceDynamic> LastCornerMID_RGB;
+	TWeakObjectPtr<UMaterialInstanceDynamic> LastCornerMID_Data;
 
 	/** Cached image size for material corner param change detection */
 	FVector2D LastMaterialImageSize_RGB = FVector2D::ZeroVector;

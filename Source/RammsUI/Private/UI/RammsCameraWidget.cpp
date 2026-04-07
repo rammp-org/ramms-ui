@@ -584,6 +584,8 @@ void URammsCameraWidget::SynchronizeProperties()
 		{
 			CameraLabelWrap->SetText(LabelText);
 		}
+		// Label text changed — force header layout re-evaluation
+		CachedHeaderCheckWidth = -1.0f;
 	}
 
 	// Sync view mode label
@@ -817,6 +819,8 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 		{
 			CameraLabelWrap->SetText(LabelText);
 		}
+		// Label/visibility changed — force header layout re-evaluation
+		CachedHeaderCheckWidth = -1.0f;
 	}
 }
 
@@ -1860,6 +1864,8 @@ void URammsCameraWidget::UpdateOptionButton()
 	{
 		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	// Button visibility changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mode)
@@ -1891,6 +1897,8 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	{
 		DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
 	}
+	// Button visibility/text changed — force header layout re-evaluation
+	CachedHeaderCheckWidth = -1.0f;
 }
 
 void URammsCameraWidget::OnDisplayModeCycleClicked()
@@ -2321,14 +2329,16 @@ void URammsCameraWidget::UpdateMaterialCornerParams(UMaterialInstanceDynamic* MI
 	}
 
 	// Check if anything actually changed — skip redundant material param sets
-	FVector2D& LastSize = (Image == DataImage) ? LastMaterialImageSize_Data : LastMaterialImageSize_RGB;
-	// Radii are already cached and only change in ApplyStyle — no per-frame check needed.
-	// Size changes when widget resizes, which is infrequent.
-	if (Size.X > 0.0f && Size.Y > 0.0f && FMath::IsNearlyEqual(Size.X, LastSize.X, 0.5f) && FMath::IsNearlyEqual(Size.Y, LastSize.Y, 0.5f))
+	FVector2D&								  LastSize = (Image == DataImage) ? LastMaterialImageSize_Data : LastMaterialImageSize_RGB;
+	TWeakObjectPtr<UMaterialInstanceDynamic>& LastMID = (Image == DataImage) ? LastCornerMID_Data : LastCornerMID_RGB;
+	// Bypass cache when MID changed (e.g., switching between PassthroughMID_RGB and DataMID)
+	bool bMIDChanged = (LastMID.Get() != MID);
+	if (!bMIDChanged && Size.X > 0.0f && Size.Y > 0.0f && FMath::IsNearlyEqual(Size.X, LastSize.X, 0.5f) && FMath::IsNearlyEqual(Size.Y, LastSize.Y, 0.5f))
 	{
-		return; // Neither radii nor size changed
+		return; // Same MID, same size — nothing changed
 	}
 	LastSize = Size;
+	LastMID = MID;
 
 	MID->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(Radii.X, Radii.Y, Radii.Z, Radii.W));
 
