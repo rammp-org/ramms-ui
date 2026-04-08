@@ -2226,7 +2226,12 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	// Update bbox overlay pane count for split view
 	if (BBoxOverlay)
 	{
-		BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
+		const int32 NewPaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
+		if (BBoxOverlay->PaneCount != NewPaneCount)
+		{
+			BBoxOverlay->PaneCount = NewPaneCount;
+			BBoxOverlay->InvalidateLayoutAndVolatility();
+		}
 	}
 
 	// Adjust corner radii based on whether side-by-side or single image
