@@ -80,11 +80,6 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	if (Boxes.Num() > 0)
 	{
 		LastDetectionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		ForceVolatile(true);
-	}
-	else
-	{
-		ForceVolatile(false);
 	}
 	InvalidateLayoutAndVolatility();
 }
@@ -94,7 +89,6 @@ void URammsBoundingBoxOverlay::ClearDetections()
 	if (Boxes.Num() > 0)
 	{
 		Boxes.Empty();
-		ForceVolatile(false);
 		InvalidateLayoutAndVolatility();
 	}
 }
@@ -150,13 +144,20 @@ void URammsBoundingBoxOverlay::HandleDetectionsReceived(FName SourceTag, const T
 
 void URammsBoundingBoxOverlay::HandleDetectionsCleared(FName SourceTag)
 {
-	// NAME_None clears all, otherwise match source tag
-	if (!SourceTag.IsNone() && !SourceTagFilter.IsNone() && SourceTag != SourceTagFilter)
+	// NAME_None = clear all overlays unconditionally
+	if (SourceTag.IsNone())
 	{
+		ClearDetections();
 		return;
 	}
 
-	ClearDetections();
+	// Specific source tag: only clear if our filter matches
+	if (!SourceTagFilter.IsNone() && SourceTag == SourceTagFilter)
+	{
+		ClearDetections();
+	}
+	// Unfiltered overlays (SourceTagFilter is None) are NOT cleared by
+	// source-specific clears — only by NAME_None broadcasts.
 }
 
 // ── Color Resolution ─────────────────────────────────────────────
@@ -289,16 +290,15 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 	const float Y1 = (Box.Position.Y + Box.Size.Y) * GeomSize.Y;
 
 	// Draw 4 lines forming the rectangle
-	TArray<FVector2D> RectPoints;
-	RectPoints.SetNumUninitialized(5);
-	RectPoints[0] = FVector2D(X0, Y0);
-	RectPoints[1] = FVector2D(X1, Y0);
-	RectPoints[2] = FVector2D(X1, Y1);
-	RectPoints[3] = FVector2D(X0, Y1);
-	RectPoints[4] = FVector2D(X0, Y0);
+	ScratchPoints.SetNumUninitialized(5);
+	ScratchPoints[0] = FVector2D(X0, Y0);
+	ScratchPoints[1] = FVector2D(X1, Y0);
+	ScratchPoints[2] = FVector2D(X1, Y1);
+	ScratchPoints[3] = FVector2D(X0, Y1);
+	ScratchPoints[4] = FVector2D(X0, Y0);
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		RectPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
 
 	// Label
 	if (bShowLabels && !Box.Label.IsEmpty())
@@ -336,23 +336,22 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 		FVector2D(-HalfSize.X, +HalfSize.Y)
 	};
 
-	TArray<FVector2D> Points;
-	Points.SetNumUninitialized(5);
+	ScratchPoints.SetNumUninitialized(5);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float RX = Offsets[i].X * CosA - Offsets[i].Y * SinA;
 		const float RY = Offsets[i].X * SinA + Offsets[i].Y * CosA;
-		Points[i] = Center + FVector2D(RX, RY);
+		ScratchPoints[i] = Center + FVector2D(RX, RY);
 	}
-	Points[4] = Points[0]; // Close
+	ScratchPoints[4] = ScratchPoints[0]; // Close
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		Points, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
 
 	// Label at top-left corner
 	if (bShowLabels && !Box.Label.IsEmpty())
 	{
-		DrawLabel(Box, BoxColor, Points[0], Geom, OutDrawElements, LayerId + 1);
+		DrawLabel(Box, BoxColor, ScratchPoints[0], Geom, OutDrawElements, LayerId + 1);
 	}
 
 	if (bShowCentroid)
@@ -372,25 +371,24 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 	const FLinearColor BoxColor = ResolveBoxColor(Box, Index);
 	const FVector2D	   GeomSize = Geom.GetLocalSize();
 
-	TArray<FVector2D> Points;
-	Points.Reserve(Box.PolygonPoints.Num() + 1);
+	ScratchPoints.Reset(Box.PolygonPoints.Num() + 1);
 	FVector2D MinPt(FLT_MAX, FLT_MAX);
 
 	for (const FVector2D& Pt : Box.PolygonPoints)
 	{
 		const FVector2D PixelPt(Pt.X * GeomSize.X, Pt.Y * GeomSize.Y);
-		Points.Add(PixelPt);
+		ScratchPoints.Add(PixelPt);
 		MinPt.X = FMath::Min(MinPt.X, PixelPt.X);
 		MinPt.Y = FMath::Min(MinPt.Y, PixelPt.Y);
 	}
-	if (Points.Num() > 0)
+	if (ScratchPoints.Num() > 0)
 	{
-		const FVector2D ClosePt = Points[0];
-		Points.Add(ClosePt); // Close
+		const FVector2D ClosePt = ScratchPoints[0];
+		ScratchPoints.Add(ClosePt); // Close
 	}
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		Points, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
 
 	if (bShowLabels && !Box.Label.IsEmpty())
 	{

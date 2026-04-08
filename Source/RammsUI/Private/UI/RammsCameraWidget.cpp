@@ -1328,6 +1328,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			if (bTagChanged)
 			{
 				BBoxOverlay->UnsubscribeFromSubsystem();
+				BBoxOverlay->ClearDetections();
 			}
 		}
 		// Re-subscribe (safe if already subscribed — uses AddUniqueDynamic)
@@ -1819,10 +1820,15 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 	{
 		if (bCollapsed)
 		{
+			BBoxOverlay->UnsubscribeFromSubsystem();
 			BBoxOverlay->SetVisibility(ESlateVisibility::Collapsed);
 		}
 		else if (bBBoxOverlayEnabled)
 		{
+			if (BBoxOverlay->bAutoSubscribe)
+			{
+				BBoxOverlay->SubscribeToSubsystem();
+			}
 			BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 	}

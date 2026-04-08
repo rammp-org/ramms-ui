@@ -218,6 +218,9 @@ private:
 	mutable FSlateFontInfo CachedLabelFont;
 	mutable int32		   CachedFontSize = 0;
 
+	/** Reusable point buffer to avoid per-frame heap allocation in draw methods */
+	mutable TArray<FVector2D> ScratchPoints;
+
 	/** Ensure CachedLabelFont is up to date */
 	void EnsureLabelFont() const;
 };

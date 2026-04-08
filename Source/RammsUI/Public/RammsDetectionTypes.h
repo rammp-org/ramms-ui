@@ -70,9 +70,14 @@ struct RAMMSUI_API FRammsBoundingBox
 		meta = (EditCondition = "Shape == ERammsDetectionShape::Polygon"))
 	TArray<FVector2D> PolygonPoints;
 
-	/** Centroid override in normalized coords. If zero, computed from rect center. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	/** Centroid override in normalized coords. Only used when bHasCentroidOverride is true. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection",
+		meta = (EditCondition = "bHasCentroidOverride"))
 	FVector2D Centroid = FVector2D::ZeroVector;
+
+	/** Whether Centroid contains an explicit override value */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	bool bHasCentroidOverride = false;
 
 	// ── Appearance ──────────────────────────────────────────────
 
@@ -82,10 +87,10 @@ struct RAMMSUI_API FRammsBoundingBox
 
 	// ── Helpers ─────────────────────────────────────────────────
 
-	/** Get effective center point (uses Centroid if set, otherwise rect center) */
+	/** Get effective center point (uses Centroid if override set, otherwise rect center) */
 	FVector2D GetCenter() const
 	{
-		if (!Centroid.IsZero())
+		if (bHasCentroidOverride)
 		{
 			return Centroid;
 		}
