@@ -1283,7 +1283,10 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
 	if (!BBoxOverlay && ImageContainerOverlay)
 	{
-		BBoxOverlay = CreateWidget<URammsBoundingBoxOverlay>(this);
+		APlayerController* PC = GetOwningPlayer();
+		BBoxOverlay = PC
+			? CreateWidget<URammsBoundingBoxOverlay>(PC)
+			: CreateWidget<URammsBoundingBoxOverlay>(this);
 		if (BBoxOverlay)
 		{
 			// Configure before adding to tree (NativeConstruct reads these)
@@ -1295,6 +1298,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 
 			// Forward lifetime setting
 			BBoxOverlay->DetectionLifetime = DetectionLifetime;
+
+			// Set pane count based on current view mode
+			BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
 
 			// Propagate style
 			if (Style)

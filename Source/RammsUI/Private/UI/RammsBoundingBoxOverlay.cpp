@@ -80,12 +80,23 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	if (Boxes.Num() > 0)
 	{
 		LastDetectionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		ForceVolatile(true);
 	}
+	else
+	{
+		ForceVolatile(false);
+	}
+	InvalidateLayoutAndVolatility();
 }
 
 void URammsBoundingBoxOverlay::ClearDetections()
 {
-	Boxes.Empty();
+	if (Boxes.Num() > 0)
+	{
+		Boxes.Empty();
+		ForceVolatile(false);
+		InvalidateLayoutAndVolatility();
+	}
 }
 
 // ── Subsystem ────────────────────────────────────────────────────
@@ -279,12 +290,12 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 
 	// Draw 4 lines forming the rectangle
 	TArray<FVector2D> RectPoints;
-	RectPoints.Reserve(5);
-	RectPoints.Add(FVector2D(X0, Y0));
-	RectPoints.Add(FVector2D(X1, Y0));
-	RectPoints.Add(FVector2D(X1, Y1));
-	RectPoints.Add(FVector2D(X0, Y1));
-	RectPoints.Add(FVector2D(X0, Y0)); // Close the rect
+	RectPoints.SetNumUninitialized(5);
+	RectPoints[0] = FVector2D(X0, Y0);
+	RectPoints[1] = FVector2D(X1, Y0);
+	RectPoints[2] = FVector2D(X1, Y1);
+	RectPoints[3] = FVector2D(X0, Y1);
+	RectPoints[4] = FVector2D(X0, Y0);
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
 		RectPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
@@ -326,7 +337,7 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 	};
 
 	TArray<FVector2D> Points;
-	Points.SetNum(5);
+	Points.SetNumUninitialized(5);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float RX = Offsets[i].X * CosA - Offsets[i].Y * SinA;
