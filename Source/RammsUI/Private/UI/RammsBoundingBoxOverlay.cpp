@@ -416,9 +416,20 @@ void URammsBoundingBoxOverlay::DrawLabel(const FRammsBoundingBox& Box, const FLi
 		LabelStr += FString::Printf(TEXT(" %.0f%%"), Box.Confidence * 100.0f);
 	}
 
+	// Slate may be unavailable in headless contexts or during shutdown.
+	if (!FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	const TSharedPtr<FSlateRenderer> Renderer = FSlateApplication::Get().GetRenderer();
+	if (!Renderer.IsValid())
+	{
+		return;
+	}
+
 	// Measure text
-	const TSharedRef<FSlateFontMeasure> FontMeasure =
-		FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	const TSharedRef<FSlateFontMeasure> FontMeasure = Renderer->GetFontMeasureService();
 	const FVector2D TextSize = FontMeasure->Measure(LabelStr, CachedLabelFont);
 
 	const float LabelPad = 3.0f;
