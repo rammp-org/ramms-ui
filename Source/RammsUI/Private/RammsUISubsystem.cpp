@@ -194,9 +194,20 @@ void URammsUISubsystem::BroadcastCustomUIEventWithProperties(FName EventName, co
 	OnCustomUIEvent.Broadcast(Event);
 }
 
-void URammsUISubsystem::BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated)
+void URammsUISubsystem::BroadcastLayoutTransitionRequest(FName LayoutName, bool bAnimated,
+	ERammsSlideDirection SlideDirection)
 {
-	OnLayoutTransitionRequested.Broadcast(LayoutName, bAnimated);
+	OnLayoutTransitionRequested.Broadcast(LayoutName, bAnimated, SlideDirection);
+}
+
+void URammsUISubsystem::BroadcastDetections(FName SourceTag, const TArray<FRammsBoundingBox>& Boxes)
+{
+	OnDetectionsReceived.Broadcast(SourceTag, Boxes);
+}
+
+void URammsUISubsystem::ClearDetections(FName SourceTag)
+{
+	OnDetectionsCleared.Broadcast(SourceTag);
 }
 
 // ── Robot State ───────────────────────────────────────────────────

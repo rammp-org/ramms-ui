@@ -7,6 +7,7 @@
 #include "UI/RammsBaseWidget.h"
 #include "UI/RammsLayoutBase.h"
 #include "UI/RammsUIStyle.h"
+#include "RammsUITransitionTypes.h"
 #include "RammsLayoutHost.generated.h"
 
 class UOverlay;
@@ -55,6 +56,21 @@ struct RAMMSUI_API FRammsPoolEntry
 };
 
 /**
+ * A name → class pair for batch layout registration (ordered).
+ */
+USTRUCT(BlueprintType)
+struct RAMMSUI_API FRammsLayoutEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	FName LayoutName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	TSubclassOf<URammsLayoutBase> LayoutClass;
+};
+
+/**
  * Root host widget that manages layout transitions using an Overlay.
  *
  * ## Architecture
@@ -83,12 +99,13 @@ struct RAMMSUI_API FRammsPoolEntry
  *
  * ## Transition Animation
  *
- * True crossfade: the outgoing layout fades out (opacity 1→0) while the
- * incoming layout fades in (opacity 0→1). Both are visible simultaneously
- * in the Overlay during the transition. Pool widgets are reparented into the
- * incoming layout at the start of the transition. Hit-testing on both
- * layouts is disabled during the crossfade and restored on the incoming
- * layout when the transition completes.
+ * Supports multiple animation styles (crossfade, slide, scale, slide+scale)
+ * configurable via TransitionStyle. Both layouts are visible simultaneously
+ * during animated transitions. Pool widgets are reparented into the incoming
+ * layout at the start of the transition. Hit-testing on both layouts is
+ * disabled during the animation and restored on the incoming layout when
+ * the transition completes. Slide direction can be specified per-transition
+ * or auto-determined from layout registration order.
  */
 UCLASS(Blueprintable, meta = (DisplayName = "Ramms Layout Host"))
 class RAMMSUI_API URammsLayoutHost : public UUserWidget
@@ -114,6 +131,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Layout Host")
 	void AddLayoutInstance(URammsLayoutBase* Layout, FName LayoutName);
+
+	/**
+	 * Register multiple layouts by class in a single call, in the specified order.
+	 * After all layouts are registered, runs orientation correction to ensure
+	 * the correct variant is active from the start.
+	 * @param Layouts - Ordered array of (LayoutName, LayoutClass) pairs
+	 * @param InitialLayout - Name of the layout to activate (empty = first in array)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Layout Host")
+	void AddLayouts(const TArray<FRammsLayoutEntry>& Layouts, FName InitialLayout = NAME_None);
 
 	/**
 	 * Get a registered layout by name.
@@ -169,12 +196,15 @@ public:
 	// ── Transitions ──────────────────────────────────────────────
 
 	/**
-	 * Transition to a layout by name with optional crossfade animation.
+	 * Transition to a layout by name with the configured animation style.
+	 * Supports crossfade, slide, scale, and slide+scale transitions.
 	 * @param LayoutName - Must match a name passed to AddLayout()
-	 * @param bAnimated - Whether to crossfade (true) or instant-switch (false)
+	 * @param bAnimated - Whether to animate (true) or instant-switch (false)
+	 * @param SlideDirection - Slide direction hint (only used with Slide/SlideAndScale styles)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Layout Host")
-	void TransitionToLayout(FName LayoutName, bool bAnimated = true);
+	void TransitionToLayout(FName LayoutName, bool bAnimated = true,
+		ERammsSlideDirection SlideDirection = ERammsSlideDirection::Auto);
 
 	/**
 	 * Transition to a layout by index in registration order.
@@ -182,9 +212,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Layout Host")
 	void TransitionToLayoutIndex(int32 Index, bool bAnimated = true);
 
-	/** Crossfade duration in seconds */
+	/** Transition animation duration in seconds (applies to all transition styles) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition", meta = (ClampMin = "0.0"))
-	float CrossfadeDuration = 0.3f;
+	float TransitionDuration = 0.3f;
+
+	/** Transition animation style */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition")
+	ERammsTransitionStyle TransitionStyle = ERammsTransitionStyle::SlideAndScale;
+
+	/** Scale factor for the outgoing layout at transition end (1.0 = no scale, 0.85 = slight shrink) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition",
+		meta = (ClampMin = "0.5", ClampMax = "1.0", EditCondition = "TransitionStyle == ERammsTransitionStyle::Scale || TransitionStyle == ERammsTransitionStyle::SlideAndScale"))
+	float TransitionScaleAmount = 0.92f;
+
+	/** Fraction of viewport width the slide travels (0.3 = 30% of width) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Transition",
+		meta = (ClampMin = "0.05", ClampMax = "1.0", EditCondition = "TransitionStyle == ERammsTransitionStyle::Slide || TransitionStyle == ERammsTransitionStyle::SlideAndScale"))
+	float SlideDistanceFraction = 0.25f;
 
 	/** Style to propagate to all layouts and pool widgets */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Style")
@@ -226,6 +270,31 @@ public:
 	/** Whether to animate orientation-triggered transitions (default: true) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation")
 	bool bAnimateOrientationTransition = true;
+
+	/** Use separate transition settings for orientation changes instead of the page-transition defaults */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation",
+		meta = (EditCondition = "bAnimateOrientationTransition"))
+	bool bOverrideOrientationTransitionStyle = false;
+
+	/** Transition style for orientation changes (used when bOverrideOrientationTransitionStyle is true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation",
+		meta = (EditCondition = "bAnimateOrientationTransition && bOverrideOrientationTransitionStyle"))
+	ERammsTransitionStyle OrientationTransitionStyle = ERammsTransitionStyle::Scale;
+
+	/** Duration for orientation transitions (used when bOverrideOrientationTransitionStyle is true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation",
+		meta = (ClampMin = "0.0", EditCondition = "bAnimateOrientationTransition && bOverrideOrientationTransitionStyle"))
+	float OrientationTransitionDuration = 0.4f;
+
+	/** Scale amount for orientation transitions */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation",
+		meta = (ClampMin = "0.5", ClampMax = "1.0", EditCondition = "bAnimateOrientationTransition && bOverrideOrientationTransitionStyle"))
+	float OrientationTransitionScaleAmount = 0.85f;
+
+	/** Slide distance fraction for orientation transitions */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout Host|Orientation",
+		meta = (ClampMin = "0.05", ClampMax = "1.0", EditCondition = "bAnimateOrientationTransition && bOverrideOrientationTransitionStyle"))
+	float OrientationSlideDistanceFraction = 0.3f;
 
 	/** Set orientation override at runtime */
 	UFUNCTION(BlueprintCallable, Category = "Layout Host|Orientation")
@@ -271,6 +340,29 @@ private:
 	FName TransitionFromName;
 	FName TransitionToName;
 
+	/** Resolved slide direction for current transition (+1 = left, -1 = right) */
+	float TransitionSlideSign = 1.0f;
+
+	/** Viewport width cached at transition start for slide distance calc */
+	float TransitionViewportWidth = 1920.0f;
+
+	/** Whether the active transition was triggered by an orientation change */
+	bool bOrientationTransition = false;
+
+	// Effective transition params (resolved at transition start)
+	ERammsTransitionStyle ActiveTransitionStyle = ERammsTransitionStyle::SlideAndScale;
+	float				  ActiveTransitionDuration = 0.3f;
+	float				  ActiveTransitionScaleAmount = 0.92f;
+	float				  ActiveSlideDistanceFraction = 0.25f;
+
+	/** Cached render transform pivots (restored after transition) */
+	FVector2D CachedIncomingPivot = FVector2D(0.0f, 0.0f);
+	FVector2D CachedOutgoingPivot = FVector2D(0.0f, 0.0f);
+
+	/** Cached render transforms (restored after transition) */
+	FWidgetTransform CachedIncomingTransform;
+	FWidgetTransform CachedOutgoingTransform;
+
 	/** Perform the actual reparenting of pool widgets into the target layout */
 	void InjectPoolWidgets(URammsLayoutBase* Layout);
 
@@ -282,7 +374,7 @@ private:
 
 	/** Handler for UISubsystem layout transition requests */
 	UFUNCTION()
-	void HandleLayoutTransitionRequest(FName LayoutName, bool bAnimated);
+	void HandleLayoutTransitionRequest(FName LayoutName, bool bAnimated, ERammsSlideDirection SlideDirection);
 
 	/** Whether we are subscribed to the subsystem event */
 	bool bSubscribedToTransitionRequests = false;
@@ -292,11 +384,23 @@ private:
 	ERammsOrientation CurrentOrientation = ERammsOrientation::Landscape;
 	bool			  bOrientationInitialized = false;
 
+	/** Last applied orientation override (used to detect override changes) */
+	ERammsOrientationOverride LastAppliedOrientationOverride = ERammsOrientationOverride::Auto;
+
+	/** Cached viewport size for orientation change detection */
+	FVector2D CachedViewportSize = FVector2D(1920, 1080);
+
 	/** Resolve the effective orientation considering the override */
 	ERammsOrientation ComputeEffectiveOrientation() const;
 
 	/** Check viewport and handle orientation change if needed */
 	void UpdateOrientationCheck();
+
+	/**
+	 * If orientation is already known, ensure the active layout matches.
+	 * Called when the first layout is registered or after batch registration.
+	 */
+	void ApplyInitialOrientationCorrection();
 
 	/**
 	 * Resolve the layout name to use for the given orientation.
