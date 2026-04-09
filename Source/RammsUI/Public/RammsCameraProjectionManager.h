@@ -52,6 +52,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0"))
 	float DefaultMaxDistance = 5000.0f;
 
+	/**
+	 * Multiplier applied to each projector's decal size for frustum culling bounds.
+	 * Increase if decals disappear at oblique camera angles (e.g. on ARM64/Vulkan).
+	 * The projection material masks to the correct frustum, so oversized bounds
+	 * only affect culling conservatism.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "10.0"))
+	float DefaultDecalBoundsInflation = 1.5f;
+
 	/** Auto-create projectors when streams become available */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	bool bAutoCreateProjectors = true;

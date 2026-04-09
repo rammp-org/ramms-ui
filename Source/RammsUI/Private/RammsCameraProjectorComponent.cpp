@@ -64,6 +64,12 @@ void URammsCameraProjectorComponent::EnsureDecalCreated()
 
 	UpdateDecalSize();
 	UpdateMaterialParameters();
+
+	UE_LOG(LogRammsPGM, Log,
+		TEXT("Decal created: Size=%s Loc=%s Inflate=%.1f"),
+		*DecalComponent->DecalSize.ToString(),
+		*DecalComponent->GetRelativeLocation().ToString(),
+		DecalBoundsInflation);
 }
 
 void URammsCameraProjectorComponent::UpdateDecalSize()
@@ -79,11 +85,19 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float HalfHeight = MaxProjectionDistance * (float)ImageHeight / (2.0f * Fy);
 	const float HalfDepth = MaxProjectionDistance * 0.5f;
 
+	// Inflate decal volume for culling robustness. The projection material
+	// handles the actual frustum masking, so oversized bounds are safe.
+	const float Inflate = FMath::Max(DecalBoundsInflation, 1.0f);
+
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
-	DecalComponent->DecalSize = FVector(HalfDepth, HalfWidth, HalfHeight);
+	DecalComponent->DecalSize = FVector(HalfDepth * Inflate, HalfWidth * Inflate, HalfHeight * Inflate);
 
 	// Offset the decal so the near face starts at the camera position
 	DecalComponent->SetRelativeLocation(FVector(HalfDepth, 0.0f, 0.0f));
+
+	// DecalSize is a raw member — manually dirty the render state so the
+	// render proxy and culling bounds are recalculated.
+	DecalComponent->MarkRenderStateDirty();
 }
 
 void URammsCameraProjectorComponent::UpdateMaterialParameters()

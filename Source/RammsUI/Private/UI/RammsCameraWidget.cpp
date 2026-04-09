@@ -18,6 +18,8 @@
 #include "Blueprint/GameViewportSubsystem.h"
 #include "UI/RammsBoundingBoxOverlay.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
+
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
@@ -54,6 +56,9 @@ void URammsCameraWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || CameraBorder)
 		return;
+
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] BuildWidgetTree: StreamID='%s' DisplayMode=%d Collapsible=%d MaintainAR=%d AR=%.3f"),
+		*GetName(), *StreamID, (int32)DisplayMode, bCollapsible, bMaintainAspectRatio, AspectRatio);
 
 	// Root: InternalSizeBox wraps everything for non-Canvas layout sizing
 	InternalSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("InternalSizeBox"));
@@ -439,6 +444,13 @@ void URammsCameraWidget::NativeConstruct()
 {
 	SetIsFocusable(true);
 
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeConstruct: StreamID='%s' Provider=%s Slot=%s Parent=%s Visibility=%d"),
+		*GetName(), *StreamID,
+		CameraProvider.GetObject() ? *CameraProvider.GetObject()->GetName() : TEXT("null"),
+		Slot ? *Slot->GetClass()->GetName() : TEXT("no-slot"),
+		GetParent() ? *GetParent()->GetName() : TEXT("no-parent"),
+		(int32)GetVisibility());
+
 	Super::NativeConstruct();
 
 	// SBox with aspect ratio constraint centers child vertically when VAlign=Fill.
@@ -548,8 +560,8 @@ void URammsCameraWidget::NativeConstruct()
 				ProviderSubscriptions.Add(Sub);
 			}
 
-			UE_LOG(LogTemp, Log, TEXT("RammsCameraWidget: Found %d providers, subscribed to all. StreamID='%s'"),
-				ProviderIfaces.Num(), *StreamID);
+			UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] AutoFind: Found %d providers, subscribed to all. StreamID='%s'"),
+				*GetName(), ProviderIfaces.Num(), *StreamID);
 		}
 	}
 
@@ -569,6 +581,13 @@ void URammsCameraWidget::NativeConstruct()
 	{
 		StartStream();
 	}
+	else
+	{
+		UE_LOG(LogRammsCameraWidget, Warning, TEXT("[%s] NativeConstruct: NOT starting stream — Provider=%s StreamID='%s'"),
+			*GetName(),
+			CameraProvider.GetInterface() ? TEXT("set") : TEXT("null"),
+			*StreamID);
+	}
 
 	// Auto-show bounding box overlay if configured
 	if (bShowDetectionOverlay)
@@ -587,6 +606,9 @@ void URammsCameraWidget::NativeConstruct()
 
 void URammsCameraWidget::NativeDestruct()
 {
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeDestruct: StreamID='%s' Subscriptions=%d"),
+		*GetName(), *StreamID, ProviderSubscriptions.Num());
+
 	UnregisterCorner();
 	StopStream();
 
@@ -929,6 +951,9 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 	if (DisplayMode == NewMode)
 		return;
 
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] SetDisplayMode: %d -> %d (animate=%d)"),
+		*GetName(), (int32)DisplayMode, (int32)NewMode, bAnimateTransition);
+
 	// Cancel any active drag
 	if (bIsDragging)
 	{
@@ -1006,6 +1031,13 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
+
+	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateLayout: Mode=%d ViewportSize=%.0fx%.0f Scale=%.2f CanvasSize=%.0fx%.0f Slot=%s IsInViewport=%d"),
+		*GetName(), (int32)DisplayMode,
+		ViewportSize.X, ViewportSize.Y, ViewportScale,
+		CanvasSize.X, CanvasSize.Y,
+		Slot ? *Slot->GetClass()->GetName() : TEXT("null"),
+		IsInViewport());
 
 	// Title bar height to reserve when collapsible (header sits above image)
 	float TitleH = 0.0f;
@@ -1543,6 +1575,15 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 {
 	if (InStreamID == StreamID)
 	{
+		if (!CurrentTexture && Texture)
+		{
+			UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] First RGB frame: StreamID='%s' Texture=%s %ux%u Visibility=%d CameraImage=%s"),
+				*GetName(), *InStreamID,
+				*Texture->GetName(),
+				(uint32)Texture->GetSurfaceWidth(), (uint32)Texture->GetSurfaceHeight(),
+				(int32)GetVisibility(),
+				CameraImage ? TEXT("valid") : TEXT("null"));
+		}
 		CurrentTexture = Texture;
 
 		// Auto-detect aspect ratio from incoming RGB texture
@@ -1627,8 +1668,9 @@ void URammsCameraWidget::StartStream()
 				}
 			}
 		}
-		UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: StartStream('%s') %s"), *StreamID,
-			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"));
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] StartStream('%s') %s — %d subscriptions"), *GetName(), *StreamID,
+			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"),
+			ProviderSubscriptions.Num());
 	}
 
 	// Start data stream if configured
@@ -2031,11 +2073,11 @@ FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mod
 	switch (Mode)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
-			return TEXT("\u2922"); // ⤢ (expand arrows)
+			return TEXT("\u25A0"); // ■ (fullscreen)
 		case ERammsCameraDisplayMode::Windowed:
 			return TEXT("\u25A1"); // □ (window)
 		case ERammsCameraDisplayMode::Corner:
-			return TEXT("\u25F0"); // ◰ (corner)
+			return TEXT("\u250C"); // ┌ (corner)
 		case ERammsCameraDisplayMode::Widget:
 			return TEXT("\u25A3"); // ▣ (widget)
 		default:
@@ -2402,7 +2444,11 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 void URammsCameraWidget::SetImageBrushFromTexture(UImage* Image, UTexture* Texture)
 {
 	if (!Image || !Texture)
+	{
+		UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] SetImageBrushFromTexture: skipped — Image=%s Texture=%s"),
+			*GetName(), Image ? TEXT("valid") : TEXT("null"), Texture ? TEXT("valid") : TEXT("null"));
 		return;
+	}
 
 	EnsureDataMaterials();
 

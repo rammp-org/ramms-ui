@@ -370,6 +370,7 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 	Projector->ProjectionMaterial = ProjectionMaterial;
 	Projector->FadeWidth = DefaultFadeWidth;
 	Projector->MaxProjectionDistance = DefaultMaxDistance;
+	Projector->DecalBoundsInflation = DefaultDecalBoundsInflation;
 	Projector->TargetStencilValue = DefaultTargetStencil;
 
 	// Copy PGM settings

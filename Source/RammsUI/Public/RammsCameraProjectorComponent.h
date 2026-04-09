@@ -79,6 +79,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0"))
 	float MaxProjectionDistance = 5000.0f;
 
+	/**
+	 * Multiplier applied to the decal's internal size for frustum culling bounds.
+	 * Increase if the decal disappears at oblique camera angles. The projection
+	 * material masks to the correct frustum, so oversized bounds only affect
+	 * culling conservatism.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "10.0"))
+	float DecalBoundsInflation = 1.5f;
+
 	/** Stencil value that target surfaces must have (set 0 to disable filtering) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	int32 TargetStencilValue = 200;
