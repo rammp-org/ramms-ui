@@ -25,6 +25,7 @@ void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent
 		P->FadeWidth = DefaultFadeWidth;
 		P->MaxProjectionDistance = DefaultMaxDistance;
 		P->TargetStencilValue = DefaultTargetStencil;
+		P->bAutoDisableStencilOnVulkan = bAutoDisableStencilOnVulkan;
 
 		P->bEnablePGM = bEnablePGM;
 		P->bGPUAccelerated = bGPUAccelerated;
@@ -372,6 +373,7 @@ URammsCameraProjectorComponent* URammsCameraProjectionManager::AddProjector(cons
 	Projector->MaxProjectionDistance = DefaultMaxDistance;
 	Projector->DecalBoundsInflation = DefaultDecalBoundsInflation;
 	Projector->TargetStencilValue = DefaultTargetStencil;
+	Projector->bAutoDisableStencilOnVulkan = bAutoDisableStencilOnVulkan;
 
 	// Copy PGM settings
 	Projector->bEnablePGM = bEnablePGM;

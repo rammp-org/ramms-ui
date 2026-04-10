@@ -44,6 +44,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	int32 DefaultTargetStencil = 200;
 
+	/**
+	 * When true, automatically disables the stencil mask on Vulkan RHI.
+	 * SceneTexture:CustomStencil reads in deferred decal materials are broken
+	 * on Vulkan (UE-227727).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
+	bool bAutoDisableStencilOnVulkan = true;
+
 	/** Default edge fade width */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "0.0", ClampMax = "0.5"))
 	float DefaultFadeWidth = 0.05f;

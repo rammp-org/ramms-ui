@@ -92,6 +92,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
 	int32 TargetStencilValue = 200;
 
+	/**
+	 * When true, automatically disables the stencil mask on Vulkan RHI.
+	 * SceneTexture:CustomStencil reads in deferred decal materials are broken
+	 * on Vulkan (UE-227727). The projection material's intrinsics-based frustum
+	 * masking still constrains the decal correctly; only per-mesh stencil
+	 * filtering is lost.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
+	bool bAutoDisableStencilOnVulkan = true;
+
 	// ── PGM Configuration ──────────────────────────────
 
 	/** Enable/disable Projective Grid Mesh (3D Point Cloud/Mesh) */
@@ -232,6 +242,9 @@ private:
 	void UpdateDecalSize();
 	void UpdateMaterialParameters();
 	void UpdateCameraTransformParameters();
+
+	/** Returns TargetStencilValue, or 0 if stencil is auto-disabled on the current RHI. */
+	int32 GetEffectiveStencilValue() const;
 
 	// CPU PGM path (legacy fallback)
 	void UpdatePGM_CPU();

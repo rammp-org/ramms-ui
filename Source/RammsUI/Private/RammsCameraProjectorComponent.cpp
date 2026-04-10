@@ -6,8 +6,23 @@
 #include "ProceduralMeshComponent.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "RHI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsPGM, Log, All);
+
+static bool IsVulkanRHI()
+{
+	return GDynamicRHI && FCString::Stristr(GDynamicRHI->GetName(), TEXT("Vulkan")) != nullptr;
+}
+
+int32 URammsCameraProjectorComponent::GetEffectiveStencilValue() const
+{
+	if (bAutoDisableStencilOnVulkan && IsVulkanRHI())
+	{
+		return 0; // disable stencil mask — UE-227727
+	}
+	return TargetStencilValue;
+}
 
 URammsCameraProjectorComponent::URammsCameraProjectorComponent()
 {
@@ -65,11 +80,26 @@ void URammsCameraProjectorComponent::EnsureDecalCreated()
 	UpdateDecalSize();
 	UpdateMaterialParameters();
 
+	const FString RHIName = GDynamicRHI ? GDynamicRHI->GetName() : TEXT("Unknown");
+	const int32	  EffectiveStencil = GetEffectiveStencilValue();
+
 	UE_LOG(LogRammsPGM, Log,
-		TEXT("Decal created: Size=%s Loc=%s Inflate=%.1f"),
+		TEXT("Decal created: Size=%s Loc=%s Inflate=%.1f RHI=%s StencilCfg=%d Effective=%d AutoDisableVulkan=%d"),
 		*DecalComponent->DecalSize.ToString(),
 		*DecalComponent->GetRelativeLocation().ToString(),
-		DecalBoundsInflation);
+		DecalBoundsInflation,
+		*RHIName,
+		TargetStencilValue,
+		EffectiveStencil,
+		bAutoDisableStencilOnVulkan ? 1 : 0);
+
+	if (EffectiveStencil != TargetStencilValue)
+	{
+		UE_LOG(LogRammsPGM, Warning,
+			TEXT("Stencil mask auto-disabled on %s (UE-227727: SceneTexture:CustomStencil broken in decal materials on Vulkan). "
+				 "Projection frustum masking still active. Set bAutoDisableStencilOnVulkan=false to force stencil test."),
+			*RHIName);
+	}
 }
 
 void URammsCameraProjectorComponent::UpdateDecalSize()
@@ -114,7 +144,7 @@ void URammsCameraProjectorComponent::UpdateMaterialParameters()
 		FLinearColor((float)ImageWidth, (float)ImageHeight, 0.0f, 0.0f));
 
 	MaterialInstance->SetScalarParameterValue(FName("FadeWidth"), FadeWidth);
-	MaterialInstance->SetScalarParameterValue(FName("TargetStencil"), (float)TargetStencilValue);
+	MaterialInstance->SetScalarParameterValue(FName("TargetStencil"), (float)GetEffectiveStencilValue());
 
 	UpdateCameraTransformParameters();
 }
