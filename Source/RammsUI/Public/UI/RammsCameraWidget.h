@@ -432,6 +432,9 @@ protected:
 	/** Cached depth format from the data stream provider (auto-detected on first frame) */
 	ERammsDepthFormat CachedDataDepthFormat = ERammsDepthFormat::Unknown;
 
+	/** One-shot flag: true once we've logged overlay material diagnostics */
+	bool bOverlayDiagLogged = false;
+
 public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;

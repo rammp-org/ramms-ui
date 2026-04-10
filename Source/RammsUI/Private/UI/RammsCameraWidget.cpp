@@ -1627,6 +1627,8 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 					if (Sub.Interface->GetStreamInfo(DataStreamID, Info) && Info.DepthFormat != ERammsDepthFormat::Unknown)
 					{
 						CachedDataDepthFormat = Info.DepthFormat;
+						UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
+							*GetName(), static_cast<int32>(Info.DepthFormat), *Info.PixelFormat, *DataStreamID);
 						UpdateDataMaterialParams();
 						break;
 					}
@@ -1975,6 +1977,7 @@ void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
 	DataStreamID = NewDataStreamID;
 	CurrentDataTexture = nullptr;
 	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+	bOverlayDiagLogged = false;
 
 	// Start new data stream
 	if (!DataStreamID.IsEmpty())
@@ -2382,6 +2385,8 @@ void URammsCameraWidget::EnsureDataMaterials()
 	if (DataStreamConfig.VisualizationMaterial && !DataMID)
 	{
 		DataMID = UMaterialInstanceDynamic::Create(DataStreamConfig.VisualizationMaterial, this);
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Created DataMID from '%s', DepthFormat=%d"),
+			*GetName(), *DataStreamConfig.VisualizationMaterial->GetName(), static_cast<int32>(CachedDataDepthFormat));
 		UpdateDataMaterialParams();
 	}
 
@@ -2389,6 +2394,10 @@ void URammsCameraWidget::EnsureDataMaterials()
 	if (DataStreamConfig.OverlayMaterial && !OverlayMID)
 	{
 		OverlayMID = UMaterialInstanceDynamic::Create(DataStreamConfig.OverlayMaterial, this);
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Created OverlayMID from '%s', DepthFormat=%d, RGBParam='%s' DataParam='%s' BlendParam='%s'"),
+			*GetName(), *DataStreamConfig.OverlayMaterial->GetName(), static_cast<int32>(CachedDataDepthFormat),
+			*DataStreamConfig.RGBTextureParam.ToString(), *DataStreamConfig.DataTextureParam.ToString(),
+			*DataStreamConfig.BlendAlphaParam.ToString());
 		UpdateDataMaterialParams();
 	}
 }
@@ -2403,6 +2412,11 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 		DepthUnnormalize = 65535.0f; // G16 texture is GPU-normalized to [0,1]
 		DepthScaleToCM = 0.1f;		 // mm → cm
 	}
+
+	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateDataMaterialParams: DepthFormat=%d Unnorm=%.1f ScaleToCM=%.3f DataTex=%s RGBTex=%s"),
+		*GetName(), static_cast<int32>(CachedDataDepthFormat), DepthUnnormalize, DepthScaleToCM,
+		CurrentDataTexture ? *CurrentDataTexture->GetName() : TEXT("null"),
+		CurrentTexture ? *CurrentTexture->GetName() : TEXT("null"));
 
 	// Apply all scalar params from config, then depth format params, to both materials
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
@@ -2644,6 +2658,25 @@ void URammsCameraWidget::UpdateDisplayedImages()
 			{
 				if (OverlayMID && CurrentDataTexture)
 				{
+					// One-time diagnostic for overlay material debugging (Vulkan depth issues)
+					if (!bOverlayDiagLogged)
+					{
+						bOverlayDiagLogged = true;
+						UTexture2D* DataTex2D = Cast<UTexture2D>(CurrentDataTexture);
+						UTexture2D* RGBTex2D = Cast<UTexture2D>(CurrentTexture);
+						UE_LOG(LogRammsCameraWidget, Log,
+							TEXT("[%s] Overlay first render: DepthFormat=%d RGBTex=%s(%dx%d PF=%d) DataTex=%s(%dx%d PF=%d) BlendAlpha=%.2f Material='%s'"),
+							*GetName(), static_cast<int32>(CachedDataDepthFormat),
+							CurrentTexture ? *CurrentTexture->GetName() : TEXT("null"),
+							RGBTex2D ? RGBTex2D->GetSizeX() : 0, RGBTex2D ? RGBTex2D->GetSizeY() : 0,
+							RGBTex2D ? static_cast<int32>(RGBTex2D->GetPixelFormat()) : -1,
+							CurrentDataTexture ? *CurrentDataTexture->GetName() : TEXT("null"),
+							DataTex2D ? DataTex2D->GetSizeX() : 0, DataTex2D ? DataTex2D->GetSizeY() : 0,
+							DataTex2D ? static_cast<int32>(DataTex2D->GetPixelFormat()) : -1,
+							OverlayBlendAlpha,
+							*DataStreamConfig.OverlayMaterial->GetName());
+					}
+
 					OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
 					OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 					OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);
