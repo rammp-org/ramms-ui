@@ -2,12 +2,14 @@
 
 #include "UI/RammsImageButton.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/SizeBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/OverlaySlot.h"
 #include "Components/ButtonSlot.h"
 
 void URammsImageButton::ResetCachedWidgets()
 {
+	RootSizeBox = nullptr;
 	ButtonBorder = nullptr;
 	InnerButton = nullptr;
 	ContentImage = nullptr;
@@ -18,13 +20,17 @@ void URammsImageButton::ResetCachedWidgets()
 
 void URammsImageButton::BuildWidgetTree()
 {
-	if (!WidgetTree || ButtonBorder)
+	if (!WidgetTree || RootSizeBox)
 		return;
 
-	// Root: Border — provides visual background, rounded corners, clipping
+	// Root: SizeBox — allows optional fixed sizing
+	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RootSizeBox"));
+	WidgetTree->RootWidget = RootSizeBox;
+
+	// Border — provides visual background, rounded corners, clipping
 	ButtonBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ButtonBorder"));
 	ButtonBorder->SetClipping(EWidgetClipping::ClipToBounds);
-	WidgetTree->RootWidget = ButtonBorder;
+	RootSizeBox->AddChild(ButtonBorder);
 
 	// Inner: transparent UButton for click/hover/press handling
 	InnerButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("InnerButton"));
@@ -90,6 +96,7 @@ void URammsImageButton::BuildWidgetTree()
 	Label->SetText(LabelText);
 	Label->SetJustification(ETextJustify::Center);
 	Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	Label->SetAutoWrapText(bAutoWrapLabel);
 	UVerticalBoxSlot* LabelSlot = VBox->AddChildToVerticalBox(Label);
 	if (LabelSlot)
 	{
@@ -101,6 +108,8 @@ void URammsImageButton::BuildWidgetTree()
 	{
 		Label->SetVisibility(ESlateVisibility::Collapsed);
 	}
+
+	ApplySizeOverrides();
 }
 
 void URammsImageButton::NativeOnInitialized()
@@ -145,6 +154,7 @@ void URammsImageButton::SynchronizeProperties()
 	if (Label)
 	{
 		Label->SetText(LabelText);
+		Label->SetAutoWrapText(bAutoWrapLabel);
 		Label->SetVisibility(bShowLabel ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 
@@ -173,6 +183,7 @@ void URammsImageButton::SynchronizeProperties()
 		InnerButton->SetIsEnabled(bButtonEnabled);
 	}
 
+	ApplySizeOverrides();
 	UpdateVisualState();
 }
 
@@ -240,9 +251,40 @@ void URammsImageButton::SetShowLabel(bool bShow)
 
 void URammsImageButton::SetLabelAutoWrap(bool bAutoWrap)
 {
+	bAutoWrapLabel = bAutoWrap;
 	if (Label)
 	{
 		Label->SetAutoWrapText(bAutoWrap);
+	}
+}
+
+void URammsImageButton::SetUseCustomSize(bool bUseCustom)
+{
+	bUseCustomSize = bUseCustom;
+	ApplySizeOverrides();
+}
+
+void URammsImageButton::SetCustomSize(FVector2D NewSize)
+{
+	bUseCustomSize = true;
+	CustomSize = NewSize;
+	ApplySizeOverrides();
+}
+
+void URammsImageButton::ApplySizeOverrides()
+{
+	if (!RootSizeBox)
+		return;
+
+	if (bUseCustomSize)
+	{
+		RootSizeBox->SetWidthOverride(CustomSize.X);
+		RootSizeBox->SetHeightOverride(CustomSize.Y);
+	}
+	else
+	{
+		RootSizeBox->ClearWidthOverride();
+		RootSizeBox->ClearHeightOverride();
 	}
 }
 
