@@ -182,14 +182,19 @@ void URammsTaskWidget::ApplyStyle_Implementation()
 	if (ConfirmButton)
 		ConfirmButton->SetStyle(Style);
 
-	// Apply style-driven image button size when the per-instance size matches the old default
-	const FVector2D StyleImgSz = Style->Interaction.ImageButtonSize;
-	if (ExitButton)
-		ExitButton->SetImageSize(StyleImgSz);
-	if (CancelButton)
-		CancelButton->SetImageSize(StyleImgSz);
-	if (ConfirmButton)
-		ConfirmButton->SetImageSize(StyleImgSz);
+	// Apply style-driven image button size only when the per-instance size
+	// matches the legacy default (48×48), preserving explicit overrides.
+	static const FVector2D LegacyDefault(48.0f, 48.0f);
+	if (ButtonImageSize.Equals(LegacyDefault, 0.1f))
+	{
+		const FVector2D StyleImgSz = Style->Interaction.ImageButtonSize;
+		if (ExitButton)
+			ExitButton->SetImageSize(StyleImgSz);
+		if (CancelButton)
+			CancelButton->SetImageSize(StyleImgSz);
+		if (ConfirmButton)
+			ConfirmButton->SetImageSize(StyleImgSz);
+	}
 }
 
 void URammsTaskWidget::SynchronizeProperties()

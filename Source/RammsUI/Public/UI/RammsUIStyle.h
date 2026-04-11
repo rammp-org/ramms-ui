@@ -445,13 +445,13 @@ struct FRammsInteractionStyle
 	FSlateFontInfo ActionButtonLabelFont;
 
 	/** Helper: return HeaderButtonFont if configured (Size > 0), else the provided fallback. */
-	const FSlateFontInfo& GetHeaderButtonFont(const FSlateFontInfo& Fallback) const
+	FSlateFontInfo GetHeaderButtonFont(const FSlateFontInfo& Fallback) const
 	{
 		return (HeaderButtonFont.Size > 0) ? HeaderButtonFont : Fallback;
 	}
 
 	/** Helper: return ActionButtonLabelFont if configured (Size > 0), else the provided fallback. */
-	const FSlateFontInfo& GetActionButtonFont(const FSlateFontInfo& Fallback) const
+	FSlateFontInfo GetActionButtonFont(const FSlateFontInfo& Fallback) const
 	{
 		return (ActionButtonLabelFont.Size > 0) ? ActionButtonLabelFont : Fallback;
 	}

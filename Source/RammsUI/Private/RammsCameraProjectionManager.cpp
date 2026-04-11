@@ -26,6 +26,7 @@ void URammsCameraProjectionManager::PostEditChangeProperty(FPropertyChangedEvent
 		P->MaxProjectionDistance = DefaultMaxDistance;
 		P->TargetStencilValue = DefaultTargetStencil;
 		P->bAutoDisableStencilOnVulkan = bAutoDisableStencilOnVulkan;
+		P->DecalBoundsInflation = DefaultDecalBoundsInflation;
 
 		P->bEnablePGM = bEnablePGM;
 		P->bGPUAccelerated = bGPUAccelerated;
