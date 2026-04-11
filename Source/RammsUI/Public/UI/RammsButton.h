@@ -9,6 +9,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
+#include "Components/SizeBox.h"
 #include "RammsButton.generated.h"
 
 /**
@@ -63,12 +64,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Button")
 	TObjectPtr<UTexture2D> IconTexture;
 
+	/** Allow text to wrap to multiple lines */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Button")
+	bool bAutoWrapText = false;
+
+	/** When true, the button uses CustomSize instead of auto-sizing to content */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	bool bUseCustomSize = false;
+
+	/** Fixed button size in pixels (only used when bUseCustomSize is true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (EditCondition = "bUseCustomSize"))
+	FVector2D CustomSize = FVector2D(120.0f, 40.0f);
+
 	/** Content padding inside the button */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	FMargin ContentPadding = FMargin(12.0f, 6.0f);
 
 	// Widget references (built programmatically — Transient prevents stale
 	// serialization when placed inside a parent Widget Blueprint)
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> RootSizeBox;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ButtonBorder;
 
@@ -103,6 +119,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Button")
 	void SetEnabled(bool bEnabled);
+
+	/** Enable or disable text wrapping */
+	UFUNCTION(BlueprintCallable, Category = "Button")
+	void SetAutoWrapText(bool bWrap);
+
+	/** Enable or disable custom sizing */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetUseCustomSize(bool bUseCustom);
+
+	/** Set the custom size (also enables custom sizing) */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetCustomSize(FVector2D NewSize);
 
 	/** Set the color variant at runtime */
 	UFUNCTION(BlueprintCallable, Category = "Style")
@@ -139,5 +167,8 @@ protected:
 	/** Build widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;
-	virtual UWidget* GetRootWidgetForValidation() override { return ButtonBorder; }
+	virtual UWidget* GetRootWidgetForValidation() override { return RootSizeBox ? (UWidget*)RootSizeBox : (UWidget*)ButtonBorder; }
+
+	/** Apply size overrides to the root SizeBox based on bUseCustomSize */
+	void ApplySizeOverrides();
 };

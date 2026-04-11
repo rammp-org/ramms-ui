@@ -18,6 +18,8 @@
 #include "Blueprint/GameViewportSubsystem.h"
 #include "UI/RammsBoundingBoxOverlay.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
+
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
@@ -54,6 +56,9 @@ void URammsCameraWidget::BuildWidgetTree()
 {
 	if (!WidgetTree || CameraBorder)
 		return;
+
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] BuildWidgetTree: StreamID='%s' DisplayMode=%d Collapsible=%d MaintainAR=%d AR=%.3f"),
+		*GetName(), *StreamID, (int32)DisplayMode, bCollapsible, bMaintainAspectRatio, AspectRatio);
 
 	// Root: InternalSizeBox wraps everything for non-Canvas layout sizing
 	InternalSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("InternalSizeBox"));
@@ -110,10 +115,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			BtnRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 
-		// Collapse button (leftmost, before label)
+		// Collapse button (leftmost, before label) — wrapped in SizeBox for touch target
+		CollapseBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CollapseBtnSizeBox"));
+		CollapseBtnSizeBox->SetMinDesiredWidth(32.0f);
+		CollapseBtnSizeBox->SetMinDesiredHeight(32.0f);
 		CollapseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CollapseButton"));
 		CollapseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseButton);
+		CollapseBtnSizeBox->AddChild(CollapseButton);
+		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseBtnSizeBox);
 		if (CollapseBtnSlot)
 		{
 			CollapseBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -138,10 +147,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			LabelSlot->SetVerticalAlignment(VAlign_Center);
 		}
 
-		// View mode toggle button
+		// View mode toggle button — wrapped in SizeBox for touch target
+		ViewModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ViewModeBtnSizeBox"));
+		ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+		ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 		ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
+		ViewModeBtnSizeBox->AddChild(ViewModeButton);
+		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 		if (ViewModeBtnSlot)
 		{
 			ViewModeBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -154,10 +167,14 @@ void URammsCameraWidget::BuildWidgetTree()
 		ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		ViewModeButton->AddChild(ViewModeLabel);
 
-		// Data stream option cycling button (hidden until config has options)
+		// Data stream option cycling button (hidden until config has options) — wrapped in SizeBox
+		OptionBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("OptionBtnSizeBox"));
+		OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
+		OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
+		OptionBtnSizeBox->AddChild(OptionButton);
+		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 		if (OptBtnSlot)
 		{
 			OptBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -168,12 +185,16 @@ void URammsCameraWidget::BuildWidgetTree()
 		OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
 		OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		OptionButton->AddChild(OptionLabel);
-		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+		OptionBtnSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 
-		// Display mode cycle button (rightmost)
+		// Display mode cycle button (rightmost) — wrapped in SizeBox
+		DisplayModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DisplayModeBtnSizeBox"));
+		DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+		DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
 		DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+		DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
+		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 		if (CycleBtnSlot)
 		{
 			CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -362,10 +383,14 @@ void URammsCameraWidget::BuildWidgetTree()
 				LabelSlot->SetVerticalAlignment(VAlign_Center);
 			}
 
-			// View mode button in non-collapsible title bar
+			// View mode button in non-collapsible title bar — wrapped in SizeBox
+			ViewModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ViewModeBtnSizeBox"));
+			ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+			ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 			ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
+			ViewModeBtnSizeBox->AddChild(ViewModeButton);
+			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 			if (VMSlot)
 			{
 				VMSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -378,10 +403,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			ViewModeButton->AddChild(ViewModeLabel);
 
-			// Data stream option cycling button (hidden until config has options)
+			// Data stream option cycling button (hidden until config has options) — wrapped in SizeBox
+			OptionBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("OptionBtnSizeBox"));
+			OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
+			OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
+			OptionBtnSizeBox->AddChild(OptionButton);
+			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 			if (OptSlot)
 			{
 				OptSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -392,12 +421,16 @@ void URammsCameraWidget::BuildWidgetTree()
 			OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
 			OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			OptionButton->AddChild(OptionLabel);
-			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+			OptionBtnSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 
-			// Display mode cycle button
+			// Display mode cycle button — wrapped in SizeBox
+			DisplayModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DisplayModeBtnSizeBox"));
+			DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+			DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
 			DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+			DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
+			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 			if (CycleBtnSlot)
 			{
 				CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -438,6 +471,13 @@ void URammsCameraWidget::NativeOnInitialized()
 void URammsCameraWidget::NativeConstruct()
 {
 	SetIsFocusable(true);
+
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeConstruct: StreamID='%s' Provider=%s Slot=%s Parent=%s Visibility=%d"),
+		*GetName(), *StreamID,
+		CameraProvider.GetObject() ? *CameraProvider.GetObject()->GetName() : TEXT("null"),
+		Slot ? *Slot->GetClass()->GetName() : TEXT("no-slot"),
+		GetParent() ? *GetParent()->GetName() : TEXT("no-parent"),
+		(int32)GetVisibility());
 
 	Super::NativeConstruct();
 
@@ -548,8 +588,8 @@ void URammsCameraWidget::NativeConstruct()
 				ProviderSubscriptions.Add(Sub);
 			}
 
-			UE_LOG(LogTemp, Log, TEXT("RammsCameraWidget: Found %d providers, subscribed to all. StreamID='%s'"),
-				ProviderIfaces.Num(), *StreamID);
+			UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] AutoFind: Found %d providers, subscribed to all. StreamID='%s'"),
+				*GetName(), ProviderIfaces.Num(), *StreamID);
 		}
 	}
 
@@ -569,6 +609,13 @@ void URammsCameraWidget::NativeConstruct()
 	{
 		StartStream();
 	}
+	else
+	{
+		UE_LOG(LogRammsCameraWidget, Warning, TEXT("[%s] NativeConstruct: NOT starting stream — Provider=%s StreamID='%s'"),
+			*GetName(),
+			CameraProvider.GetInterface() ? TEXT("set") : TEXT("null"),
+			*StreamID);
+	}
 
 	// Auto-show bounding box overlay if configured
 	if (bShowDetectionOverlay)
@@ -587,6 +634,9 @@ void URammsCameraWidget::NativeConstruct()
 
 void URammsCameraWidget::NativeDestruct()
 {
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeDestruct: StreamID='%s' Subscriptions=%d"),
+		*GetName(), *StreamID, ProviderSubscriptions.Num());
+
 	UnregisterCorner();
 	StopStream();
 
@@ -821,21 +871,51 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 	// Style the collapse icon to match other headers
 	if (CollapseIcon)
 	{
-		CollapseIcon->SetFont(Style->Typography.Caption);
+		CollapseIcon->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		CollapseIcon->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
 	}
 
 	// Style header action buttons (view mode / option)
 	if (ViewModeLabel)
 	{
-		ViewModeLabel->SetFont(Style->Typography.Caption);
+		ViewModeLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		ViewModeLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
 	if (OptionLabel)
 	{
-		OptionLabel->SetFont(Style->Typography.Caption);
+		OptionLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		OptionLabel->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
+
+	if (DisplayModeCycleLabel)
+	{
+		DisplayModeCycleLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
+	}
+
+	// Apply style-driven min touch target sizes to header button SizeBoxes
+	{
+		const float MinSz = Style->Interaction.HeaderButtonMinSize;
+		if (CollapseBtnSizeBox)
+		{
+			CollapseBtnSizeBox->SetMinDesiredWidth(MinSz);
+			CollapseBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (ViewModeBtnSizeBox)
+		{
+			ViewModeBtnSizeBox->SetMinDesiredWidth(MinSz);
+			ViewModeBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (OptionBtnSizeBox)
+		{
+			OptionBtnSizeBox->SetMinDesiredWidth(MinSz);
+			OptionBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (DisplayModeBtnSizeBox)
+		{
+			DisplayModeBtnSizeBox->SetMinDesiredWidth(MinSz);
+			DisplayModeBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
 	}
 
 	// Update title bar visibility
@@ -929,6 +1009,9 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 	if (DisplayMode == NewMode)
 		return;
 
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] SetDisplayMode: %d -> %d (animate=%d)"),
+		*GetName(), (int32)DisplayMode, (int32)NewMode, bAnimateTransition);
+
 	// Cancel any active drag
 	if (bIsDragging)
 	{
@@ -1006,6 +1089,13 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
+
+	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateLayout: Mode=%d ViewportSize=%.0fx%.0f Scale=%.2f CanvasSize=%.0fx%.0f Slot=%s IsInViewport=%d"),
+		*GetName(), (int32)DisplayMode,
+		ViewportSize.X, ViewportSize.Y, ViewportScale,
+		CanvasSize.X, CanvasSize.Y,
+		Slot ? *Slot->GetClass()->GetName() : TEXT("null"),
+		IsInViewport());
 
 	// Title bar height to reserve when collapsible (header sits above image)
 	float TitleH = 0.0f;
@@ -1543,6 +1633,15 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 {
 	if (InStreamID == StreamID)
 	{
+		if (!CurrentTexture && Texture)
+		{
+			UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] First RGB frame: StreamID='%s' Texture=%s %ux%u Visibility=%d CameraImage=%s"),
+				*GetName(), *InStreamID,
+				*Texture->GetName(),
+				(uint32)Texture->GetSurfaceWidth(), (uint32)Texture->GetSurfaceHeight(),
+				(int32)GetVisibility(),
+				CameraImage ? TEXT("valid") : TEXT("null"));
+		}
 		CurrentTexture = Texture;
 
 		// Auto-detect aspect ratio from incoming RGB texture
@@ -1586,6 +1685,8 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 					if (Sub.Interface->GetStreamInfo(DataStreamID, Info) && Info.DepthFormat != ERammsDepthFormat::Unknown)
 					{
 						CachedDataDepthFormat = Info.DepthFormat;
+						UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
+							*GetName(), static_cast<int32>(Info.DepthFormat), *Info.PixelFormat, *DataStreamID);
 						UpdateDataMaterialParams();
 						break;
 					}
@@ -1627,8 +1728,9 @@ void URammsCameraWidget::StartStream()
 				}
 			}
 		}
-		UE_LOG(LogTemp, Log, TEXT("URammsCameraWidget: StartStream('%s') %s"), *StreamID,
-			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"));
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] StartStream('%s') %s — %d subscriptions"), *GetName(), *StreamID,
+			bStarted ? TEXT("succeeded") : TEXT("not yet registered (will receive when available)"),
+			ProviderSubscriptions.Num());
 	}
 
 	// Start data stream if configured
@@ -1933,6 +2035,7 @@ void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
 	DataStreamID = NewDataStreamID;
 	CurrentDataTexture = nullptr;
 	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+	bOverlayDiagLogged = false;
 
 	// Start new data stream
 	if (!DataStreamID.IsEmpty())
@@ -2009,9 +2112,13 @@ void URammsCameraWidget::UpdateOptionButton()
 	if (!OptionButton)
 		return;
 
+	USizeBox* WrapperBox = OptionBtnSizeBox;
 	if (DataStreamConfig.Options.Num() > 0 && DataStreamConfig.OptionParamName.IsValid())
 	{
-		OptionButton->SetVisibility(ESlateVisibility::Visible);
+		if (WrapperBox)
+			WrapperBox->SetVisibility(ESlateVisibility::Visible);
+		else
+			OptionButton->SetVisibility(ESlateVisibility::Visible);
 		if (OptionLabel)
 		{
 			int32 SafeIdx = FMath::Clamp(CurrentOptionIndex, 0, DataStreamConfig.Options.Num() - 1);
@@ -2020,7 +2127,10 @@ void URammsCameraWidget::UpdateOptionButton()
 	}
 	else
 	{
-		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+		if (WrapperBox)
+			WrapperBox->SetVisibility(ESlateVisibility::Collapsed);
+		else
+			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	// Button visibility changed — force header layout re-evaluation
 	CachedHeaderCheckWidth = -1.0f;
@@ -2031,11 +2141,11 @@ FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mod
 	switch (Mode)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
-			return TEXT("\u2922"); // ⤢ (expand arrows)
+			return TEXT("\u25A0"); // ■ (fullscreen)
 		case ERammsCameraDisplayMode::Windowed:
 			return TEXT("\u25A1"); // □ (window)
 		case ERammsCameraDisplayMode::Corner:
-			return TEXT("\u25F0"); // ◰ (corner)
+			return TEXT("\u250C"); // ┌ (corner)
 		case ERammsCameraDisplayMode::Widget:
 			return TEXT("\u25A3"); // ▣ (widget)
 		default:
@@ -2048,8 +2158,12 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	if (!DisplayModeCycleButton)
 		return;
 
-	bool bVisible = bShowDisplayModeCycleButton && AllowedDisplayModes.Num() > 1;
-	DisplayModeCycleButton->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	bool			 bVisible = bShowDisplayModeCycleButton && AllowedDisplayModes.Num() > 1;
+	ESlateVisibility Vis = bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+	if (DisplayModeBtnSizeBox)
+		DisplayModeBtnSizeBox->SetVisibility(Vis);
+	else
+		DisplayModeCycleButton->SetVisibility(Vis);
 
 	if (DisplayModeCycleLabel)
 	{
@@ -2320,7 +2434,7 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
 	if (Style)
 	{
-		TitleBar->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+		TitleBar->SetPadding(Style->Interaction.HeaderPadding);
 	}
 }
 
@@ -2340,6 +2454,8 @@ void URammsCameraWidget::EnsureDataMaterials()
 	if (DataStreamConfig.VisualizationMaterial && !DataMID)
 	{
 		DataMID = UMaterialInstanceDynamic::Create(DataStreamConfig.VisualizationMaterial, this);
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Created DataMID from '%s', DepthFormat=%d"),
+			*GetName(), *DataStreamConfig.VisualizationMaterial->GetName(), static_cast<int32>(CachedDataDepthFormat));
 		UpdateDataMaterialParams();
 	}
 
@@ -2347,6 +2463,10 @@ void URammsCameraWidget::EnsureDataMaterials()
 	if (DataStreamConfig.OverlayMaterial && !OverlayMID)
 	{
 		OverlayMID = UMaterialInstanceDynamic::Create(DataStreamConfig.OverlayMaterial, this);
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Created OverlayMID from '%s', DepthFormat=%d, RGBParam='%s' DataParam='%s' BlendParam='%s'"),
+			*GetName(), *DataStreamConfig.OverlayMaterial->GetName(), static_cast<int32>(CachedDataDepthFormat),
+			*DataStreamConfig.RGBTextureParam.ToString(), *DataStreamConfig.DataTextureParam.ToString(),
+			*DataStreamConfig.BlendAlphaParam.ToString());
 		UpdateDataMaterialParams();
 	}
 }
@@ -2361,6 +2481,11 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 		DepthUnnormalize = 65535.0f; // G16 texture is GPU-normalized to [0,1]
 		DepthScaleToCM = 0.1f;		 // mm → cm
 	}
+
+	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateDataMaterialParams: DepthFormat=%d Unnorm=%.1f ScaleToCM=%.3f DataTex=%s RGBTex=%s"),
+		*GetName(), static_cast<int32>(CachedDataDepthFormat), DepthUnnormalize, DepthScaleToCM,
+		CurrentDataTexture ? *CurrentDataTexture->GetName() : TEXT("null"),
+		CurrentTexture ? *CurrentTexture->GetName() : TEXT("null"));
 
 	// Apply all scalar params from config, then depth format params, to both materials
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
@@ -2402,7 +2527,11 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 void URammsCameraWidget::SetImageBrushFromTexture(UImage* Image, UTexture* Texture)
 {
 	if (!Image || !Texture)
+	{
+		UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] SetImageBrushFromTexture: skipped — Image=%s Texture=%s"),
+			*GetName(), Image ? TEXT("valid") : TEXT("null"), Texture ? TEXT("valid") : TEXT("null"));
 		return;
+	}
 
 	EnsureDataMaterials();
 
@@ -2598,6 +2727,25 @@ void URammsCameraWidget::UpdateDisplayedImages()
 			{
 				if (OverlayMID && CurrentDataTexture)
 				{
+					// One-time diagnostic for overlay material debugging (Vulkan depth issues)
+					if (!bOverlayDiagLogged)
+					{
+						bOverlayDiagLogged = true;
+						UTexture2D* DataTex2D = Cast<UTexture2D>(CurrentDataTexture);
+						UTexture2D* RGBTex2D = Cast<UTexture2D>(CurrentTexture);
+						UE_LOG(LogRammsCameraWidget, Log,
+							TEXT("[%s] Overlay first render: DepthFormat=%d RGBTex=%s(%dx%d PF=%d) DataTex=%s(%dx%d PF=%d) BlendAlpha=%.2f Material='%s'"),
+							*GetName(), static_cast<int32>(CachedDataDepthFormat),
+							CurrentTexture ? *CurrentTexture->GetName() : TEXT("null"),
+							RGBTex2D ? RGBTex2D->GetSizeX() : 0, RGBTex2D ? RGBTex2D->GetSizeY() : 0,
+							RGBTex2D ? static_cast<int32>(RGBTex2D->GetPixelFormat()) : -1,
+							CurrentDataTexture ? *CurrentDataTexture->GetName() : TEXT("null"),
+							DataTex2D ? DataTex2D->GetSizeX() : 0, DataTex2D ? DataTex2D->GetSizeY() : 0,
+							DataTex2D ? static_cast<int32>(DataTex2D->GetPixelFormat()) : -1,
+							OverlayBlendAlpha,
+							*DataStreamConfig.OverlayMaterial->GetName());
+					}
+
 					OverlayMID->SetTextureParameterValue(DataStreamConfig.RGBTextureParam, CurrentTexture);
 					OverlayMID->SetTextureParameterValue(DataStreamConfig.DataTextureParam, CurrentDataTexture);
 					OverlayMID->SetScalarParameterValue(DataStreamConfig.BlendAlphaParam, OverlayBlendAlpha);

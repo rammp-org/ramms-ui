@@ -393,6 +393,16 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
 
+	/** SizeBoxes wrapping header buttons for style-driven min touch targets */
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> CollapseBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> ViewModeBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> OptionBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DisplayModeBtnSizeBox;
+
 	/** Current index into DataStreamConfig.Options */
 	int32 CurrentOptionIndex = 0;
 
@@ -431,6 +441,9 @@ protected:
 
 	/** Cached depth format from the data stream provider (auto-detected on first frame) */
 	ERammsDepthFormat CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+
+	/** One-shot flag: true once we've logged overlay material diagnostics */
+	bool bOverlayDiagLogged = false;
 
 public:
 	virtual void NativeOnInitialized() override;

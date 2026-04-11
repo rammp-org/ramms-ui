@@ -88,6 +88,9 @@ protected:
 	TObjectPtr<UButton> ToggleButton;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> ToggleBtnSizeBox;
+
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ToggleIcon;
 
 	UPROPERTY(Transient, meta = (BindWidgetOptional))

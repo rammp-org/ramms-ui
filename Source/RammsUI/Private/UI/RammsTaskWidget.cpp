@@ -4,7 +4,6 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "Components/Spacer.h"
 #include "RammsUISubsystem.h"
 
 void URammsTaskWidget::ResetCachedWidgets()
@@ -60,13 +59,15 @@ void URammsTaskWidget::BuildWidgetTree()
 		StatusLabel->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	// Buttons row
+	// Buttons row — Fill slots give every visible button the same width
 	UHorizontalBox*	  ButtonRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ButtonRow"));
 	UVerticalBoxSlot* RowSlot = VBox->AddChildToVerticalBox(ButtonRow);
 	if (RowSlot)
 	{
-		RowSlot->SetHorizontalAlignment(HAlign_Center);
+		RowSlot->SetHorizontalAlignment(HAlign_Fill);
 	}
+
+	FSlateChildSize EqualFill(ESlateSizeRule::Fill);
 
 	// Cancel button (less destructive, on the left)
 	CancelButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("CancelBtn"));
@@ -80,16 +81,13 @@ void URammsTaskWidget::BuildWidgetTree()
 	UHorizontalBoxSlot* CancelSlot = ButtonRow->AddChildToHorizontalBox(CancelButton);
 	if (CancelSlot)
 	{
+		CancelSlot->SetSize(EqualFill);
 		CancelSlot->SetPadding(FMargin(4.0f));
-		CancelSlot->SetHorizontalAlignment(HAlign_Center);
+		CancelSlot->SetHorizontalAlignment(HAlign_Fill);
+		CancelSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 
-	// Spacer between buttons
-	USpacer* BtnSpacer = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("BtnSpacer"));
-	BtnSpacer->SetSize(FVector2D(16.0f, 1.0f));
-	ButtonRow->AddChildToHorizontalBox(BtnSpacer);
-
-	// Exit button (primary action, on the right)
+	// Exit button (primary action, in the middle)
 	ExitButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ExitBtn"));
 	ExitButton->SetLabelText(FText::FromString(TEXT("Exit")));
 	ExitButton->SetImageSize(ButtonImageSize);
@@ -101,15 +99,13 @@ void URammsTaskWidget::BuildWidgetTree()
 	UHorizontalBoxSlot* ExitSlot = ButtonRow->AddChildToHorizontalBox(ExitButton);
 	if (ExitSlot)
 	{
+		ExitSlot->SetSize(EqualFill);
 		ExitSlot->SetPadding(FMargin(4.0f));
-		ExitSlot->SetHorizontalAlignment(HAlign_Center);
+		ExitSlot->SetHorizontalAlignment(HAlign_Fill);
+		ExitSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 
 	// Confirm button (optional, shown via bShowConfirmButton)
-	USpacer* ConfirmSpacer = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("ConfirmSpacer"));
-	ConfirmSpacer->SetSize(FVector2D(16.0f, 1.0f));
-	ButtonRow->AddChildToHorizontalBox(ConfirmSpacer);
-
 	ConfirmButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ConfirmBtn"));
 	ConfirmButton->SetLabelText(FText::FromString(TEXT("Confirm")));
 	ConfirmButton->SetImageSize(ButtonImageSize);
@@ -121,14 +117,14 @@ void URammsTaskWidget::BuildWidgetTree()
 	UHorizontalBoxSlot* ConfirmSlot = ButtonRow->AddChildToHorizontalBox(ConfirmButton);
 	if (ConfirmSlot)
 	{
+		ConfirmSlot->SetSize(EqualFill);
 		ConfirmSlot->SetPadding(FMargin(4.0f));
-		ConfirmSlot->SetHorizontalAlignment(HAlign_Center);
+		ConfirmSlot->SetHorizontalAlignment(HAlign_Fill);
+		ConfirmSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 
-	// Apply initial visibility
-	ESlateVisibility ConfirmVis = bShowConfirmButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
-	ConfirmSpacer->SetVisibility(ConfirmVis);
-	ConfirmButton->SetVisibility(ConfirmVis);
+	// Apply initial visibility — collapsed Fill slots release their share to siblings
+	ConfirmButton->SetVisibility(bShowConfirmButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void URammsTaskWidget::NativeOnInitialized()
@@ -185,6 +181,20 @@ void URammsTaskWidget::ApplyStyle_Implementation()
 		CancelButton->SetStyle(Style);
 	if (ConfirmButton)
 		ConfirmButton->SetStyle(Style);
+
+	// Apply style-driven image button size only when the per-instance size
+	// matches the legacy default (48×48), preserving explicit overrides.
+	static const FVector2D LegacyDefault(48.0f, 48.0f);
+	if (ButtonImageSize.Equals(LegacyDefault, 0.1f))
+	{
+		const FVector2D StyleImgSz = Style->Interaction.ImageButtonSize;
+		if (ExitButton)
+			ExitButton->SetImageSize(StyleImgSz);
+		if (CancelButton)
+			CancelButton->SetImageSize(StyleImgSz);
+		if (ConfirmButton)
+			ConfirmButton->SetImageSize(StyleImgSz);
+	}
 }
 
 void URammsTaskWidget::SynchronizeProperties()

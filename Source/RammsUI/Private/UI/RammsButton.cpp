@@ -10,6 +10,7 @@
 
 void URammsButton::ResetCachedWidgets()
 {
+	RootSizeBox = nullptr;
 	ButtonBorder = nullptr;
 	InnerButton = nullptr;
 	ButtonLabel = nullptr;
@@ -18,13 +19,17 @@ void URammsButton::ResetCachedWidgets()
 
 void URammsButton::BuildWidgetTree()
 {
-	if (!WidgetTree || ButtonBorder)
+	if (!WidgetTree || RootSizeBox)
 		return;
 
-	// Root: Border — provides rounded corners, clipping, and visual background
+	// Root: SizeBox — allows optional fixed sizing
+	RootSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RootSizeBox"));
+	WidgetTree->RootWidget = RootSizeBox;
+
+	// Border — provides rounded corners, clipping, and visual background
 	ButtonBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ButtonBorder"));
 	ButtonBorder->SetClipping(EWidgetClipping::ClipToBounds);
-	WidgetTree->RootWidget = ButtonBorder;
+	RootSizeBox->AddChild(ButtonBorder);
 
 	// Inner: transparent UButton for click/hover/press handling
 	InnerButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("InnerButton"));
@@ -67,11 +72,14 @@ void URammsButton::BuildWidgetTree()
 	// Label
 	ButtonLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ButtonLabel"));
 	ButtonLabel->SetText(ButtonText);
+	ButtonLabel->SetAutoWrapText(bAutoWrapText);
 	if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(HBox->AddChildToHorizontalBox(ButtonLabel)))
 	{
 		LabelSlot->SetHorizontalAlignment(HAlign_Center);
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
 	}
+
+	ApplySizeOverrides();
 }
 
 void URammsButton::NativeOnInitialized()
@@ -138,6 +146,7 @@ void URammsButton::SynchronizeProperties()
 	if (ButtonLabel)
 	{
 		ButtonLabel->SetText(ButtonText);
+		ButtonLabel->SetAutoWrapText(bAutoWrapText);
 	}
 
 	if (ButtonIcon)
@@ -158,6 +167,7 @@ void URammsButton::SynchronizeProperties()
 		InnerButton->SetIsEnabled(bButtonEnabled);
 	}
 
+	ApplySizeOverrides();
 	UpdateVisualState();
 }
 
@@ -187,6 +197,45 @@ void URammsButton::SetVariant(ERammsButtonVariant NewVariant)
 {
 	Variant = NewVariant;
 	UpdateVisualState();
+}
+
+void URammsButton::SetAutoWrapText(bool bWrap)
+{
+	bAutoWrapText = bWrap;
+	if (ButtonLabel)
+	{
+		ButtonLabel->SetAutoWrapText(bAutoWrapText);
+	}
+}
+
+void URammsButton::SetUseCustomSize(bool bUseCustom)
+{
+	bUseCustomSize = bUseCustom;
+	ApplySizeOverrides();
+}
+
+void URammsButton::SetCustomSize(FVector2D NewSize)
+{
+	bUseCustomSize = true;
+	CustomSize = NewSize;
+	ApplySizeOverrides();
+}
+
+void URammsButton::ApplySizeOverrides()
+{
+	if (!RootSizeBox)
+		return;
+
+	if (bUseCustomSize)
+	{
+		RootSizeBox->SetWidthOverride(CustomSize.X);
+		RootSizeBox->SetHeightOverride(CustomSize.Y);
+	}
+	else
+	{
+		RootSizeBox->ClearWidthOverride();
+		RootSizeBox->ClearHeightOverride();
+	}
 }
 
 void URammsButton::OnButtonClicked()
