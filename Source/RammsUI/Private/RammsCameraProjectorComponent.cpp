@@ -120,10 +120,11 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float Inflate = FMath::Max(DecalBoundsInflation, 1.0f);
 
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
-	DecalComponent->DecalSize = FVector(HalfDepth * Inflate, HalfWidth * Inflate, HalfHeight * Inflate);
+	const float InflatedHalfDepth = HalfDepth * Inflate;
+	DecalComponent->DecalSize = FVector(InflatedHalfDepth, HalfWidth * Inflate, HalfHeight * Inflate);
 
 	// Offset the decal so the near face starts at the camera position
-	DecalComponent->SetRelativeLocation(FVector(HalfDepth, 0.0f, 0.0f));
+	DecalComponent->SetRelativeLocation(FVector(InflatedHalfDepth, 0.0f, 0.0f));
 
 	// DecalSize is a raw member — manually dirty the render state so the
 	// render proxy and culling bounds are recalculated.
