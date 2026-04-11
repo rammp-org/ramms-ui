@@ -409,6 +409,55 @@ struct FRammsColorPickerStyle
 };
 
 /**
+ * Touch target sizes and header/action button geometry.
+ * Allows per-theme tuning of interactive element sizes for different
+ * screen sizes and input methods (touch vs. mouse).
+ */
+USTRUCT(BlueprintType)
+struct FRammsInteractionStyle
+{
+	GENERATED_BODY()
+
+	/** Minimum width & height (px) for small header buttons (collapse, view mode, display mode) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Touch Targets", meta = (ClampMin = "0.0"))
+	float HeaderButtonMinSize = 32.0f;
+
+	/** Padding inside header bars (collapsible container, camera widget title bar) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Touch Targets")
+	FMargin HeaderPadding = FMargin(8.0f, 6.0f);
+
+	/** Minimum size (px) for action buttons (axis control +/−, reset, etc.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Touch Targets")
+	FVector2D ActionButtonMinSize = FVector2D(40.0f, 32.0f);
+
+	/** Default icon/image size (px) for image buttons (task widget actions, etc.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Touch Targets")
+	FVector2D ImageButtonSize = FVector2D(48.0f, 48.0f);
+
+	/** Font for header action button labels/icons (collapse, view mode, display mode).
+	 *  When Size is 0 the widget falls back to Typography.Caption. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fonts")
+	FSlateFontInfo HeaderButtonFont;
+
+	/** Font for action button labels (task widget, seat controller +/−).
+	 *  When Size is 0 the widget falls back to its existing Typography reference. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fonts")
+	FSlateFontInfo ActionButtonLabelFont;
+
+	/** Helper: return HeaderButtonFont if configured (Size > 0), else the provided fallback. */
+	const FSlateFontInfo& GetHeaderButtonFont(const FSlateFontInfo& Fallback) const
+	{
+		return (HeaderButtonFont.Size > 0) ? HeaderButtonFont : Fallback;
+	}
+
+	/** Helper: return ActionButtonLabelFont if configured (Size > 0), else the provided fallback. */
+	const FSlateFontInfo& GetActionButtonFont(const FSlateFontInfo& Fallback) const
+	{
+		return (ActionButtonLabelFont.Size > 0) ? ActionButtonLabelFont : Fallback;
+	}
+};
+
+/**
  * DataAsset defining the visual style for RammsUI
  * Create instances in the editor for different themes (Dark, Light, Custom, etc.)
  */
@@ -453,6 +502,10 @@ public:
 	/** Default colour picker appearance (gradient bars, swatch, thumb) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FRammsColorPickerStyle ColorPicker;
+
+	/** Touch-target sizes, header padding, and optional font overrides for interactive elements */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	FRammsInteractionStyle Interaction;
 
 	/** Default fade in animation */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animations")

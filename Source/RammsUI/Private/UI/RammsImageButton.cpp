@@ -132,7 +132,7 @@ void URammsImageButton::ApplyStyle_Implementation()
 
 	if (Label)
 	{
-		Label->SetFont(Style->Typography.Caption);
+		Label->SetFont(Style->Interaction.GetActionButtonFont(Style->Typography.Caption));
 	}
 
 	UpdateVisualState();

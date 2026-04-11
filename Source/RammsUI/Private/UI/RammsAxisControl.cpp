@@ -153,10 +153,10 @@ void URammsAxisControl::BuildWidgetTree()
 	}
 
 	// Decrement button  −
-	USizeBox* DecSizeBox = WidgetTree->ConstructWidget<USizeBox>(
+	DecrementSizeBox = WidgetTree->ConstructWidget<USizeBox>(
 		USizeBox::StaticClass(), TEXT("DecBox"));
-	DecSizeBox->SetMinDesiredWidth(40.0f);
-	DecSizeBox->SetMinDesiredHeight(32.0f);
+	DecrementSizeBox->SetMinDesiredWidth(40.0f);
+	DecrementSizeBox->SetMinDesiredHeight(32.0f);
 
 	DecrementButton = WidgetTree->ConstructWidget<UButton>(
 		UButton::StaticClass(), TEXT("DecBtn"));
@@ -166,9 +166,9 @@ void URammsAxisControl::BuildWidgetTree()
 	DecrementLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	DecrementLabel->SetJustification(ETextJustify::Center);
 	DecrementButton->AddChild(DecrementLabel);
-	DecSizeBox->AddChild(DecrementButton);
+	DecrementSizeBox->AddChild(DecrementButton);
 
-	UHorizontalBoxSlot* DecSlot = ControlRow->AddChildToHorizontalBox(DecSizeBox);
+	UHorizontalBoxSlot* DecSlot = ControlRow->AddChildToHorizontalBox(DecrementSizeBox);
 	if (DecSlot)
 	{
 		DecSlot->SetVerticalAlignment(VAlign_Center);
@@ -194,10 +194,10 @@ void URammsAxisControl::BuildWidgetTree()
 	}
 
 	// Increment button  +
-	USizeBox* IncSizeBox = WidgetTree->ConstructWidget<USizeBox>(
+	IncrementSizeBox = WidgetTree->ConstructWidget<USizeBox>(
 		USizeBox::StaticClass(), TEXT("IncBox"));
-	IncSizeBox->SetMinDesiredWidth(40.0f);
-	IncSizeBox->SetMinDesiredHeight(32.0f);
+	IncrementSizeBox->SetMinDesiredWidth(40.0f);
+	IncrementSizeBox->SetMinDesiredHeight(32.0f);
 
 	IncrementButton = WidgetTree->ConstructWidget<UButton>(
 		UButton::StaticClass(), TEXT("IncBtn"));
@@ -207,9 +207,9 @@ void URammsAxisControl::BuildWidgetTree()
 	IncrementLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	IncrementLabel->SetJustification(ETextJustify::Center);
 	IncrementButton->AddChild(IncrementLabel);
-	IncSizeBox->AddChild(IncrementButton);
+	IncrementSizeBox->AddChild(IncrementButton);
 
-	UHorizontalBoxSlot* IncSlot = ControlRow->AddChildToHorizontalBox(IncSizeBox);
+	UHorizontalBoxSlot* IncSlot = ControlRow->AddChildToHorizontalBox(IncrementSizeBox);
 	if (IncSlot)
 	{
 		IncSlot->SetVerticalAlignment(VAlign_Center);
@@ -301,13 +301,25 @@ void URammsAxisControl::ApplyStyle_Implementation()
 	}
 	if (DecrementLabel)
 	{
-		DecrementLabel->SetFont(Style->Typography.HeadingSmall);
+		DecrementLabel->SetFont(Style->Interaction.GetActionButtonFont(Style->Typography.HeadingSmall));
 		DecrementLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 	if (IncrementLabel)
 	{
-		IncrementLabel->SetFont(Style->Typography.HeadingSmall);
+		IncrementLabel->SetFont(Style->Interaction.GetActionButtonFont(Style->Typography.HeadingSmall));
 		IncrementLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
+
+	// Apply style-driven min touch target sizes to action button SizeBoxes
+	if (DecrementSizeBox)
+	{
+		DecrementSizeBox->SetMinDesiredWidth(Style->Interaction.ActionButtonMinSize.X);
+		DecrementSizeBox->SetMinDesiredHeight(Style->Interaction.ActionButtonMinSize.Y);
+	}
+	if (IncrementSizeBox)
+	{
+		IncrementSizeBox->SetMinDesiredWidth(Style->Interaction.ActionButtonMinSize.X);
+		IncrementSizeBox->SetMinDesiredHeight(Style->Interaction.ActionButtonMinSize.Y);
 	}
 }
 

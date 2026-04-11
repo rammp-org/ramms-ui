@@ -115,10 +115,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			BtnRowSlot->SetHorizontalAlignment(HAlign_Fill);
 		}
 
-		// Collapse button (leftmost, before label)
+		// Collapse button (leftmost, before label) — wrapped in SizeBox for touch target
+		CollapseBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CollapseBtnSizeBox"));
+		CollapseBtnSizeBox->SetMinDesiredWidth(32.0f);
+		CollapseBtnSizeBox->SetMinDesiredHeight(32.0f);
 		CollapseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CollapseButton"));
 		CollapseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseButton);
+		CollapseBtnSizeBox->AddChild(CollapseButton);
+		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseBtnSizeBox);
 		if (CollapseBtnSlot)
 		{
 			CollapseBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -143,10 +147,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			LabelSlot->SetVerticalAlignment(VAlign_Center);
 		}
 
-		// View mode toggle button
+		// View mode toggle button — wrapped in SizeBox for touch target
+		ViewModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ViewModeBtnSizeBox"));
+		ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+		ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 		ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
+		ViewModeBtnSizeBox->AddChild(ViewModeButton);
+		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 		if (ViewModeBtnSlot)
 		{
 			ViewModeBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -159,10 +167,14 @@ void URammsCameraWidget::BuildWidgetTree()
 		ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		ViewModeButton->AddChild(ViewModeLabel);
 
-		// Data stream option cycling button (hidden until config has options)
+		// Data stream option cycling button (hidden until config has options) — wrapped in SizeBox
+		OptionBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("OptionBtnSizeBox"));
+		OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
+		OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
+		OptionBtnSizeBox->AddChild(OptionButton);
+		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 		if (OptBtnSlot)
 		{
 			OptBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -173,12 +185,16 @@ void URammsCameraWidget::BuildWidgetTree()
 		OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
 		OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		OptionButton->AddChild(OptionLabel);
-		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+		OptionBtnSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 
-		// Display mode cycle button (rightmost)
+		// Display mode cycle button (rightmost) — wrapped in SizeBox
+		DisplayModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DisplayModeBtnSizeBox"));
+		DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+		DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
 		DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+		DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
+		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 		if (CycleBtnSlot)
 		{
 			CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -367,10 +383,14 @@ void URammsCameraWidget::BuildWidgetTree()
 				LabelSlot->SetVerticalAlignment(VAlign_Center);
 			}
 
-			// View mode button in non-collapsible title bar
+			// View mode button in non-collapsible title bar — wrapped in SizeBox
+			ViewModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ViewModeBtnSizeBox"));
+			ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+			ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
 			ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeButton);
+			ViewModeBtnSizeBox->AddChild(ViewModeButton);
+			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 			if (VMSlot)
 			{
 				VMSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -383,10 +403,14 @@ void URammsCameraWidget::BuildWidgetTree()
 			ViewModeLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			ViewModeButton->AddChild(ViewModeLabel);
 
-			// Data stream option cycling button (hidden until config has options)
+			// Data stream option cycling button (hidden until config has options) — wrapped in SizeBox
+			OptionBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("OptionBtnSizeBox"));
+			OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
+			OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
 			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionButton);
+			OptionBtnSizeBox->AddChild(OptionButton);
+			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 			if (OptSlot)
 			{
 				OptSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -397,12 +421,16 @@ void URammsCameraWidget::BuildWidgetTree()
 			OptionLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.8f, 1.0f)));
 			OptionLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 			OptionButton->AddChild(OptionLabel);
-			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+			OptionBtnSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 
-			// Display mode cycle button
+			// Display mode cycle button — wrapped in SizeBox
+			DisplayModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DisplayModeBtnSizeBox"));
+			DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
+			DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
 			DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeCycleButton);
+			DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
+			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 			if (CycleBtnSlot)
 			{
 				CycleBtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -843,21 +871,51 @@ void URammsCameraWidget::ApplyStyle_Implementation()
 	// Style the collapse icon to match other headers
 	if (CollapseIcon)
 	{
-		CollapseIcon->SetFont(Style->Typography.Caption);
+		CollapseIcon->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		CollapseIcon->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
 	}
 
 	// Style header action buttons (view mode / option)
 	if (ViewModeLabel)
 	{
-		ViewModeLabel->SetFont(Style->Typography.Caption);
+		ViewModeLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		ViewModeLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
 	if (OptionLabel)
 	{
-		OptionLabel->SetFont(Style->Typography.Caption);
+		OptionLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
 		OptionLabel->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
+
+	if (DisplayModeCycleLabel)
+	{
+		DisplayModeCycleLabel->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Caption));
+	}
+
+	// Apply style-driven min touch target sizes to header button SizeBoxes
+	{
+		const float MinSz = Style->Interaction.HeaderButtonMinSize;
+		if (CollapseBtnSizeBox)
+		{
+			CollapseBtnSizeBox->SetMinDesiredWidth(MinSz);
+			CollapseBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (ViewModeBtnSizeBox)
+		{
+			ViewModeBtnSizeBox->SetMinDesiredWidth(MinSz);
+			ViewModeBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (OptionBtnSizeBox)
+		{
+			OptionBtnSizeBox->SetMinDesiredWidth(MinSz);
+			OptionBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
+		if (DisplayModeBtnSizeBox)
+		{
+			DisplayModeBtnSizeBox->SetMinDesiredWidth(MinSz);
+			DisplayModeBtnSizeBox->SetMinDesiredHeight(MinSz);
+		}
 	}
 
 	// Update title bar visibility
@@ -2054,9 +2112,13 @@ void URammsCameraWidget::UpdateOptionButton()
 	if (!OptionButton)
 		return;
 
+	USizeBox* WrapperBox = OptionBtnSizeBox;
 	if (DataStreamConfig.Options.Num() > 0 && DataStreamConfig.OptionParamName.IsValid())
 	{
-		OptionButton->SetVisibility(ESlateVisibility::Visible);
+		if (WrapperBox)
+			WrapperBox->SetVisibility(ESlateVisibility::Visible);
+		else
+			OptionButton->SetVisibility(ESlateVisibility::Visible);
 		if (OptionLabel)
 		{
 			int32 SafeIdx = FMath::Clamp(CurrentOptionIndex, 0, DataStreamConfig.Options.Num() - 1);
@@ -2065,7 +2127,10 @@ void URammsCameraWidget::UpdateOptionButton()
 	}
 	else
 	{
-		OptionButton->SetVisibility(ESlateVisibility::Collapsed);
+		if (WrapperBox)
+			WrapperBox->SetVisibility(ESlateVisibility::Collapsed);
+		else
+			OptionButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	// Button visibility changed — force header layout re-evaluation
 	CachedHeaderCheckWidth = -1.0f;
@@ -2093,8 +2158,12 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	if (!DisplayModeCycleButton)
 		return;
 
-	bool bVisible = bShowDisplayModeCycleButton && AllowedDisplayModes.Num() > 1;
-	DisplayModeCycleButton->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	bool			 bVisible = bShowDisplayModeCycleButton && AllowedDisplayModes.Num() > 1;
+	ESlateVisibility Vis = bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+	if (DisplayModeBtnSizeBox)
+		DisplayModeBtnSizeBox->SetVisibility(Vis);
+	else
+		DisplayModeCycleButton->SetVisibility(Vis);
 
 	if (DisplayModeCycleLabel)
 	{
@@ -2365,7 +2434,7 @@ void URammsCameraWidget::UpdateHeaderCornerRadii()
 	URammsUIStyle::ApplyRoundedBrushToBorder(TitleBar, Brush);
 	if (Style)
 	{
-		TitleBar->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+		TitleBar->SetPadding(Style->Interaction.HeaderPadding);
 	}
 }
 

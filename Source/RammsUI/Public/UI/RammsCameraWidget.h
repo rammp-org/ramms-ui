@@ -393,6 +393,16 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
 
+	/** SizeBoxes wrapping header buttons for style-driven min touch targets */
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> CollapseBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> ViewModeBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> OptionBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DisplayModeBtnSizeBox;
+
 	/** Current index into DataStreamConfig.Options */
 	int32 CurrentOptionIndex = 0;
 
