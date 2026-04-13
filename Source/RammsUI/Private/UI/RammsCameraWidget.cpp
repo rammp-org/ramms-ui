@@ -1485,13 +1485,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			// Apply aspect ratio constraint via ImageAspectRatioBox if available
 			if (ImageAspectRatioBox && bMaintainAspectRatio && AspectRatio > 0.0f)
 			{
-				// SBS adjusts effective aspect ratio: vertical halves it, horizontal doubles it
-				float EffectiveAR = AspectRatio;
-				bool  bSBS = (ViewMode == ERammsCameraViewMode::SideBySide);
-				if (bSBS && bSBSVertical)
-					EffectiveAR = AspectRatio / 2.0f;
-				else if (bSBS)
-					EffectiveAR = AspectRatio * 2.0f;
+				const float EffectiveAR = GetEffectiveAspectRatio();
 				ImageAspectRatioBox->SetMinAspectRatio(EffectiveAR);
 				ImageAspectRatioBox->SetMaxAspectRatio(EffectiveAR);
 			}
