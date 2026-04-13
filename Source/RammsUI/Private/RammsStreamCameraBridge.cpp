@@ -176,6 +176,12 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 					if (Info.StreamRole == ERammsStreamRole::Other)
 						Info.StreamRole = ERammsStreamRole::Color;
 				}
+				else if (Fmt == TEXT("r8") || Fmt == TEXT("gray8") || Fmt == TEXT("mono8"))
+				{
+					Info.PixelFormat = TEXT("G8");
+					// Don't force a role — mono data could be a grayscale camera feed.
+					// The existing fallback logic below infers Color from message type.
+				}
 				else
 				{
 					Info.PixelFormat = Fmt.ToUpper();
