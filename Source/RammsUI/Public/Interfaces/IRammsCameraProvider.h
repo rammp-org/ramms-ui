@@ -102,6 +102,12 @@ struct FRammsCameraStreamInfo
 	/** Whether a valid extrinsic has been provided */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	bool bHasExtrinsic = false;
+
+	/** Dynamic scalar material parameters forwarded from stream metadata.
+	 *  Applied to rendering MIDs after static config params, allowing the
+	 *  sender to drive shader behaviour per-stream (e.g. NumSegmentIDs). */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	TMap<FName, float> MaterialScalarParams;
 };
 
 /**

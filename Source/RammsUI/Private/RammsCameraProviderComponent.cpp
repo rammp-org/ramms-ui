@@ -149,6 +149,15 @@ void URammsCameraProviderComponent::UpdateStreamExtrinsic(const FString& StreamI
 	CameraExtrinsicUpdatedDelegate.Broadcast(StreamID, WorldTransform);
 }
 
+void URammsCameraProviderComponent::UpdateStreamMaterialParams(const FString& StreamID, const TMap<FName, float>& Params)
+{
+	FRammsCameraStreamState* State = Streams.Find(StreamID);
+	if (!State)
+		return;
+
+	State->Info.MaterialScalarParams = Params;
+}
+
 // ── Blueprint Events ───────────────────────────────────────────────
 
 bool URammsCameraProviderComponent::OnStreamStartRequested_Implementation(const FString& StreamID)

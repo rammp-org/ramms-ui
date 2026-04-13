@@ -227,6 +227,20 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 				Info.Extrinsic = ExtractedTransform;
 				Info.bHasExtrinsic = true;
 			}
+
+			// Extract dynamic material scalar parameters
+			const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
+			if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
+			{
+				for (const auto& Pair : (*MatParamsObj)->Values)
+				{
+					double Val = 0.0;
+					if (Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+					{
+						Info.MaterialScalarParams.Add(FName(*Pair.Key), static_cast<float>(Val));
+					}
+				}
+			}
 		}
 		else
 		{
@@ -255,6 +269,25 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 		if (ParseTransformFromMeta(Meta, ExtractedTransform))
 		{
 			CameraProvider->UpdateStreamExtrinsic(StreamID, ExtractedTransform);
+		}
+
+		// Per-frame material scalar parameter update
+		const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
+		if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
+		{
+			TMap<FName, float> Params;
+			for (const auto& Pair : (*MatParamsObj)->Values)
+			{
+				double Val = 0.0;
+				if (Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+				{
+					Params.Add(FName(*Pair.Key), static_cast<float>(Val));
+				}
+			}
+			if (Params.Num() > 0)
+			{
+				CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
+			}
 		}
 	}
 

@@ -100,6 +100,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void UpdateStreamExtrinsic(const FString& StreamID, const FTransform& WorldTransform);
 
+	/** Update dynamic material scalar parameters for a stream (from per-frame metadata). */
+	void UpdateStreamMaterialParams(const FString& StreamID, const TMap<FName, float>& Params);
+
 	// --- Blueprint Events (override in Blueprint) ---
 
 	/** Called when a consumer requests a stream to start. Override to begin producing frames. Return true if stream started successfully. */

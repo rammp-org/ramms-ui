@@ -1675,23 +1675,37 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 		// Auto-detect depth format from provider on the first data frame.
 		// Once set, the format is cached for the lifetime of the stream
 		// subscription; it resets when the stream is re-subscribed.
-		if (CachedDataDepthFormat == ERammsDepthFormat::Unknown && !DataStreamID.IsEmpty())
+		bool bNeedParamUpdate = false;
+		if (!DataStreamID.IsEmpty())
 		{
 			for (const auto& Sub : ProviderSubscriptions)
 			{
 				if (Sub.Object.IsValid() && Sub.Interface)
 				{
 					FRammsCameraStreamInfo Info;
-					if (Sub.Interface->GetStreamInfo(DataStreamID, Info) && Info.DepthFormat != ERammsDepthFormat::Unknown)
+					if (Sub.Interface->GetStreamInfo(DataStreamID, Info))
 					{
-						CachedDataDepthFormat = Info.DepthFormat;
-						UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
-							*GetName(), static_cast<int32>(Info.DepthFormat), *Info.PixelFormat, *DataStreamID);
-						UpdateDataMaterialParams();
+						if (CachedDataDepthFormat == ERammsDepthFormat::Unknown && Info.DepthFormat != ERammsDepthFormat::Unknown)
+						{
+							CachedDataDepthFormat = Info.DepthFormat;
+							UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
+								*GetName(), static_cast<int32>(Info.DepthFormat), *Info.PixelFormat, *DataStreamID);
+							bNeedParamUpdate = true;
+						}
+						// Refresh dynamic material params from stream metadata
+						if (Info.MaterialScalarParams.Num() > 0 && !Info.MaterialScalarParams.OrderIndependentCompareEqual(CachedStreamMaterialParams))
+						{
+							CachedStreamMaterialParams = Info.MaterialScalarParams;
+							bNeedParamUpdate = true;
+						}
 						break;
 					}
 				}
 			}
+		}
+		if (bNeedParamUpdate)
+		{
+			UpdateDataMaterialParams();
 		}
 
 		UpdateDisplayedImages();
@@ -2491,7 +2505,13 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
 		if (!MID)
 			return;
+		// Static config params (widget-level defaults)
 		for (const auto& Pair : DataStreamConfig.ScalarParams)
+		{
+			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
+		}
+		// Dynamic per-stream params from metadata (override static config)
+		for (const auto& Pair : CachedStreamMaterialParams)
 		{
 			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
 		}
