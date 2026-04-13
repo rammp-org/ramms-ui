@@ -311,7 +311,7 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 							Verbose,
 							TEXT("Ignoring unknown material scalar parameter name '%s' for stream '%s'"),
 							*Pair.Key,
-							*StreamID.ToString());
+							*StreamID);
 					}
 				}
 			}
