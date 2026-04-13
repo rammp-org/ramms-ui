@@ -193,6 +193,33 @@ bool URammsCameraProviderComponent::GetStreamInfo(const FString& StreamID, FRamm
 	return false;
 }
 
+const TMap<FName, float>* URammsCameraProviderComponent::GetStreamMaterialParams(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return &State->Info.MaterialScalarParams;
+	}
+	return nullptr;
+}
+
+ERammsDepthFormat URammsCameraProviderComponent::GetStreamDepthFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.DepthFormat;
+	}
+	return ERammsDepthFormat::Unknown;
+}
+
+FString URammsCameraProviderComponent::GetStreamPixelFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.PixelFormat;
+	}
+	return FString();
+}
+
 bool URammsCameraProviderComponent::StartStream(const FString& StreamID)
 {
 	if (!Streams.Contains(StreamID))

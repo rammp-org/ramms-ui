@@ -180,6 +180,33 @@ bool ARammsCameraProviderBase::GetStreamInfo(const FString& StreamID, FRammsCame
 	return false;
 }
 
+const TMap<FName, float>* ARammsCameraProviderBase::GetStreamMaterialParams(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return &State->Info.MaterialScalarParams;
+	}
+	return nullptr;
+}
+
+ERammsDepthFormat ARammsCameraProviderBase::GetStreamDepthFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.DepthFormat;
+	}
+	return ERammsDepthFormat::Unknown;
+}
+
+FString ARammsCameraProviderBase::GetStreamPixelFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.PixelFormat;
+	}
+	return FString();
+}
+
 bool ARammsCameraProviderBase::StartStream(const FString& StreamID)
 {
 	if (!Streams.Contains(StreamID))

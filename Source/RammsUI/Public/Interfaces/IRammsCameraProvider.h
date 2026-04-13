@@ -164,6 +164,24 @@ public:
 	virtual bool GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) = 0;
 
 	/**
+	 * Lightweight accessor for per-stream dynamic material scalar params.
+	 * Returns a pointer to the internal map (valid until next modification) or nullptr.
+	 * Avoids the full FRammsCameraStreamInfo copy of GetStreamInfo().
+	 */
+	virtual const TMap<FName, float>* GetStreamMaterialParams(const FString& StreamID) const { return nullptr; }
+
+	/**
+	 * Lightweight accessor for per-stream depth format.
+	 * Returns ERammsDepthFormat::Unknown if the stream doesn't exist or has no depth.
+	 */
+	virtual ERammsDepthFormat GetStreamDepthFormat(const FString& StreamID) const { return ERammsDepthFormat::Unknown; }
+
+	/**
+	 * Lightweight accessor for per-stream pixel format string.
+	 */
+	virtual FString GetStreamPixelFormat(const FString& StreamID) const { return FString(); }
+
+	/**
 	 * Start receiving a camera stream
 	 * @param StreamID - Stream identifier
 	 * @return True if stream started successfully

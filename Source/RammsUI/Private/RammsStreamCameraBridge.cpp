@@ -281,13 +281,15 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 				double Val = 0.0;
 				if (Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
 				{
-					Params.Add(FName(*Pair.Key), static_cast<float>(Val));
+					FName ParamName(*Pair.Key, FNAME_Find);
+					if (ParamName != NAME_None)
+					{
+						Params.Add(ParamName, static_cast<float>(Val));
+					}
 				}
 			}
-			if (Params.Num() > 0)
-			{
-				CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
-			}
+			// Always update — even an empty map clears previous overrides
+			CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
 		}
 	}
 

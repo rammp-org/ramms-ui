@@ -116,6 +116,9 @@ public:
 	// --- IRammsCameraProvider interface ---
 	virtual TArray<FRammsCameraStreamInfo> GetAvailableStreams() override;
 	virtual bool						   GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) override;
+	virtual const TMap<FName, float>*	   GetStreamMaterialParams(const FString& StreamID) const override;
+	virtual ERammsDepthFormat			   GetStreamDepthFormat(const FString& StreamID) const override;
+	virtual FString						   GetStreamPixelFormat(const FString& StreamID) const override;
 	virtual bool						   StartStream(const FString& StreamID) override;
 	virtual void						   StopStream(const FString& StreamID) override;
 	virtual bool						   IsStreamActive(const FString& StreamID) const override;
