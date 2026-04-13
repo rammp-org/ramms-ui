@@ -807,6 +807,9 @@ protected:
 	/** Composite key this widget is registered under in the corner registry */
 	TPair<UWidget*, uint8> RegisteredCornerKey = { nullptr, 0xFF };
 
+	/** Set when frame data arrives while invisible; cleared after the first visible-tick refresh */
+	bool bNeedsDisplayUpdate = false;
+
 	/** Global counter for focus-on-click ordering across all camera widget instances */
 	static int32 FocusZOrderCounter;
 

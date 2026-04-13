@@ -41,6 +41,50 @@ bool URammsBaseWidget::Initialize()
 	return bResult;
 }
 
+bool URammsBaseWidget::IsEffectivelyVisible() const
+{
+	// Walk up the UMG parent chain; if any ancestor is Collapsed or Hidden, this widget
+	// cannot be seen and per-frame processing can be skipped.
+	//
+	// UWidget::GetParent() only walks within a single UUserWidget's WidgetTree.
+	// When it returns null (root of that tree), we jump to the owning UUserWidget
+	// via GetTypedOuter to continue checking the outer hierarchy.  This is critical
+	// for widgets placed inside layouts — the layout's own Collapsed visibility would
+	// otherwise be missed.
+	const UWidget*	Current = this;
+	int32			Depth = 0;
+	constexpr int32 MaxDepth = 64;
+	while (Current && Depth < MaxDepth)
+	{
+		++Depth;
+		ESlateVisibility V = Current->GetVisibility();
+		if (V == ESlateVisibility::Collapsed || V == ESlateVisibility::Hidden)
+		{
+			return false;
+		}
+
+		const UWidget* Parent = Current->GetParent();
+		if (Parent)
+		{
+			Current = Parent;
+			continue;
+		}
+
+		// Reached root of a UUserWidget's WidgetTree — jump to the owning
+		// UUserWidget to continue checking the outer widget hierarchy.
+		const UUserWidget* Owner = Current->GetTypedOuter<UUserWidget>();
+		if (Owner && Owner != Current)
+		{
+			Current = Owner;
+			continue;
+		}
+
+		// No owning UUserWidget (top-level widget) — done
+		break;
+	}
+	return true;
+}
+
 void URammsBaseWidget::SetContentForSlot(FName SlotName, UWidget* Content)
 {
 	// Let Super handle NamedSlotBindings persistence and WidgetTree->FindWidget.

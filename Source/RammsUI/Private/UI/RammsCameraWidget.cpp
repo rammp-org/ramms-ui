@@ -698,6 +698,57 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// Skip expensive per-frame work when this widget (or an ancestor) is hidden.
+	// Animations are also skipped since the widget is invisible — they'll snap to
+	// their final state on the next visible tick if still in progress.
+	const bool bVisible = IsEffectivelyVisible();
+
+	// One-time diagnostic: log the first time we detect we're hidden
+	static TSet<FName> LoggedHidden;
+	if (!bVisible && !LoggedHidden.Contains(GetFName()))
+	{
+		LoggedHidden.Add(GetFName());
+
+		// Trace parent chain for diagnostics
+		FString Chain;
+		for (const UWidget* W = this; W != nullptr;)
+		{
+			Chain += FString::Printf(TEXT("[%s vis=%d] -> "), *W->GetName(), (int32)W->GetVisibility());
+			const UWidget* Parent = W->GetParent();
+			if (Parent)
+			{
+				W = Parent;
+			}
+			else
+			{
+				const UUserWidget* Owner = W->GetTypedOuter<UUserWidget>();
+				if (Owner && Owner != W)
+				{
+					Chain += FString::Printf(TEXT("(outer) "));
+					W = Owner;
+				}
+				else
+				{
+					Chain += TEXT("(root)");
+					break;
+				}
+			}
+		}
+		UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] IsEffectivelyVisible=false — parent chain: %s"), *GetName(), *Chain);
+	}
+
+	if (!bVisible)
+	{
+		return;
+	}
+
+	// If frame data arrived while we were hidden, push it to the displayed images now
+	if (bNeedsDisplayUpdate)
+	{
+		bNeedsDisplayUpdate = false;
+		UpdateDisplayedImages();
+	}
+
 	// Check if header needs to switch between single-line and two-row layout
 	// (only when the title bar width actually changes — avoids per-frame GetDesiredSize calls)
 	{
@@ -1644,6 +1695,14 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 		}
 		CurrentTexture = Texture;
 
+		// Skip expensive image/material updates when the widget is hidden;
+		// bNeedsDisplayUpdate ensures the next visible tick refreshes.
+		if (!IsEffectivelyVisible())
+		{
+			bNeedsDisplayUpdate = true;
+			return;
+		}
+
 		// Auto-detect aspect ratio from incoming RGB texture
 		if (bMaintainAspectRatio && bAutoDetectAspectRatio && Texture)
 		{
@@ -1671,6 +1730,13 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	else if (InStreamID == DataStreamID)
 	{
 		CurrentDataTexture = Texture;
+
+		// Skip expensive processing when hidden
+		if (!IsEffectivelyVisible())
+		{
+			bNeedsDisplayUpdate = true;
+			return;
+		}
 
 		// Auto-detect depth format from provider on the first data frame.
 		// Once set, the format is cached for the lifetime of the stream

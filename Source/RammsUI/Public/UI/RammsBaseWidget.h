@@ -91,6 +91,14 @@ public:
 	virtual UWidget* GetRootWidgetForValidation() { return nullptr; }
 
 	/**
+	 * Check whether this widget is effectively visible (neither this widget
+	 * nor any ancestor in the UMG tree is Collapsed or Hidden).
+	 * Use this to skip expensive per-frame work on hidden widgets.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Visibility")
+	bool IsEffectivelyVisible() const;
+
+	/**
 	 * Return the UNamedSlot widget for a given slot name.
 	 * Used to bypass WidgetTree->FindWidget (which may find stale deserialized
 	 * widgets with the same name). Override in widgets that own NamedSlots.
