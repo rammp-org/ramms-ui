@@ -100,7 +100,7 @@ public:
 	 * filtering is lost.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
-	bool bAutoDisableStencilOnVulkan = true;
+	bool bAutoDisableStencilOnVulkan = false;
 
 	// ── PGM Configuration ──────────────────────────────
 
