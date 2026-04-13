@@ -232,12 +232,18 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
 			if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
 			{
+				constexpr int32 MaxParamEntries = 64;
+				int32			Count = 0;
 				for (const auto& Pair : (*MatParamsObj)->Values)
 				{
+					if (Count >= MaxParamEntries)
+						break;
 					double Val = 0.0;
-					if (Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+					if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
+						&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
 					{
 						Info.MaterialScalarParams.Add(FName(*Pair.Key), static_cast<float>(Val));
+						++Count;
 					}
 				}
 			}
@@ -271,25 +277,34 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			CameraProvider->UpdateStreamExtrinsic(StreamID, ExtractedTransform);
 		}
 
-		// Per-frame material scalar parameter update
+		// Per-frame material scalar parameter update.
+		// If metadata exists but field is absent, clear previous overrides
+		// so senders can stop sending the field to remove params.
 		const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
 		if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
 		{
 			TMap<FName, float> Params;
+			constexpr int32	   MaxParamEntries = 64;
+			int32			   Count = 0;
 			for (const auto& Pair : (*MatParamsObj)->Values)
 			{
+				if (Count >= MaxParamEntries)
+					break;
 				double Val = 0.0;
-				if (Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+				if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
+					&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
 				{
-					FName ParamName(*Pair.Key, FNAME_Find);
-					if (ParamName != NAME_None)
-					{
-						Params.Add(ParamName, static_cast<float>(Val));
-					}
+					Params.Add(FName(*Pair.Key), static_cast<float>(Val));
+					++Count;
 				}
 			}
-			// Always update — even an empty map clears previous overrides
 			CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
+		}
+		else
+		{
+			// Field absent from metadata — clear any previous overrides
+			static const TMap<FName, float> EmptyParams;
+			CameraProvider->UpdateStreamMaterialParams(StreamID, EmptyParams);
 		}
 	}
 

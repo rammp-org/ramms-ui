@@ -1681,6 +1681,14 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 			{
 				if (Sub.Object.IsValid() && Sub.Interface)
 				{
+					// Check if this provider serves our DataStreamID
+					const TMap<FName, float>* StreamParams = Sub.Interface->GetStreamMaterialParams(DataStreamID);
+					if (!StreamParams)
+					{
+						// Provider doesn't have this stream — try next provider
+						continue;
+					}
+
 					// Depth format: detect once, cache for stream lifetime
 					if (CachedDataDepthFormat == ERammsDepthFormat::Unknown)
 					{
@@ -1696,13 +1704,10 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 					}
 
 					// Material params: refresh whenever they differ (including clearing)
-					if (const TMap<FName, float>* StreamParams = Sub.Interface->GetStreamMaterialParams(DataStreamID))
+					if (!StreamParams->OrderIndependentCompareEqual(CachedStreamMaterialParams))
 					{
-						if (!StreamParams->OrderIndependentCompareEqual(CachedStreamMaterialParams))
-						{
-							CachedStreamMaterialParams = *StreamParams;
-							bNeedParamUpdate = true;
-						}
+						CachedStreamMaterialParams = *StreamParams;
+						bNeedParamUpdate = true;
 					}
 					break;
 				}
