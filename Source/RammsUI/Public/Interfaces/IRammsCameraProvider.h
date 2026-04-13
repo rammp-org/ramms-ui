@@ -102,6 +102,12 @@ struct FRammsCameraStreamInfo
 	/** Whether a valid extrinsic has been provided */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
 	bool bHasExtrinsic = false;
+
+	/** Dynamic scalar material parameters forwarded from stream metadata.
+	 *  Applied to rendering MIDs after static config params, allowing the
+	 *  sender to drive shader behaviour per-stream (e.g. NumSegmentIDs). */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Camera")
+	TMap<FName, float> MaterialScalarParams;
 };
 
 /**
@@ -156,6 +162,24 @@ public:
 	 * @return True if stream exists
 	 */
 	virtual bool GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) = 0;
+
+	/**
+	 * Lightweight accessor for per-stream dynamic material scalar params.
+	 * Returns a pointer to the internal map (valid until next modification) or nullptr.
+	 * Avoids the full FRammsCameraStreamInfo copy of GetStreamInfo().
+	 */
+	virtual const TMap<FName, float>* GetStreamMaterialParams(const FString& StreamID) const { return nullptr; }
+
+	/**
+	 * Lightweight accessor for per-stream depth format.
+	 * Returns ERammsDepthFormat::Unknown if the stream doesn't exist or has no depth.
+	 */
+	virtual ERammsDepthFormat GetStreamDepthFormat(const FString& StreamID) const { return ERammsDepthFormat::Unknown; }
+
+	/**
+	 * Lightweight accessor for per-stream pixel format string.
+	 */
+	virtual FString GetStreamPixelFormat(const FString& StreamID) const { return FString(); }
 
 	/**
 	 * Start receiving a camera stream

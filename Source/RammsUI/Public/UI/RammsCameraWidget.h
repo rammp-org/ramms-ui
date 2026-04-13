@@ -442,6 +442,9 @@ protected:
 	/** Cached depth format from the data stream provider (auto-detected on first frame) */
 	ERammsDepthFormat CachedDataDepthFormat = ERammsDepthFormat::Unknown;
 
+	/** Cached dynamic material scalar params from stream metadata (updated per-frame) */
+	TMap<FName, float> CachedStreamMaterialParams;
+
 	/** One-shot flag: true once we've logged overlay material diagnostics */
 	bool bOverlayDiagLogged = false;
 

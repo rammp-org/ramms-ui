@@ -867,9 +867,21 @@ void URammsStatusPanel::RefreshAllFields()
 					break;
 				}
 				case ERammsStatusValueFormat::Boolean:
-					FormattedValue = FText::FromString(
-						(bIsNumeric ? (NumericValue > 0.5f) : false) ? TEXT("Yes") : TEXT("No"));
+				{
+					if (bIsNumeric)
+					{
+						StringValue = (NumericValue > 0.5f) ? TEXT("Yes") : TEXT("No");
+					}
+					else
+					{
+						StringValue.TrimStartAndEndInline();
+						StringValue.ToLowerInline();
+						bool bVal = StringValue == TEXT("true") || StringValue == TEXT("yes") || StringValue == TEXT("on") || StringValue == TEXT("1");
+						StringValue = bVal ? TEXT("Yes") : TEXT("No");
+					}
+					FormattedValue = FText::FromString(StringValue);
 					break;
+				}
 				case ERammsStatusValueFormat::EnumName:
 				{
 					if (Field.EnumType && bIsNumeric)
