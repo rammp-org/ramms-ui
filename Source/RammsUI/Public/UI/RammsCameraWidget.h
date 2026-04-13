@@ -693,6 +693,10 @@ protected:
 	/** Compute effective aspect ratio accounting for SBS orientation */
 	float GetEffectiveAspectRatio() const;
 
+	/** Clamp widget size up to MinHeaderWidth while preserving image aspect ratio.
+	 *  Handles single, vertical-SBS, and horizontal-SBS layouts. Returns adjusted size. */
+	FVector2D ClampToMinHeaderWidth(FVector2D Size, float MinWidth, float TitleH) const;
+
 	/** Create or update dynamic material instances for data stream visualization */
 	void EnsureDataMaterials();
 

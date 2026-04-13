@@ -1069,7 +1069,8 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 	}
 
 	DisplayMode = NewMode;
-	UpdateLayout(false); // Apply layout immediately (sets anchors, alignment, size)
+	ApplyViewModeLayout(); // Re-evaluate SBS orientation for new display mode
+	UpdateLayout(false);   // Apply layout immediately (sets anchors, alignment, size)
 
 	// Start smooth transition from old geometry to new (in absolute coordinates)
 	if (bAnimateTransition)
@@ -1148,14 +1149,16 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	if (TitleBar)
 	{
 		float BtnsW = 0.0f;
-		auto  AddBtn = [&BtnsW](UWidget* Btn) {
-			 if (Btn && Btn->GetVisibility() != ESlateVisibility::Collapsed)
-				 BtnsW += Btn->GetDesiredSize().X + 4.0f;
+		auto  AddBtn = [&BtnsW](USizeBox* Wrapper, UWidget* Btn) {
+			 // Prefer wrapper SizeBox (controls actual visibility/min-size); fall back to raw button
+			 UWidget* W = Wrapper ? static_cast<UWidget*>(Wrapper) : Btn;
+			 if (W && W->GetVisibility() != ESlateVisibility::Collapsed)
+				 BtnsW += W->GetDesiredSize().X + 4.0f;
 		};
-		AddBtn(CollapseButton);
-		AddBtn(ViewModeButton);
-		AddBtn(OptionButton);
-		AddBtn(DisplayModeCycleButton);
+		AddBtn(CollapseBtnSizeBox, CollapseButton);
+		AddBtn(ViewModeBtnSizeBox, ViewModeButton);
+		AddBtn(OptionBtnSizeBox, OptionButton);
+		AddBtn(DisplayModeBtnSizeBox, DisplayModeCycleButton);
 		// 16 = title bar horizontal padding (8px each side), 20 = minimum label space
 		MinHeaderWidth = BtnsW + 16.0f + 20.0f;
 	}
@@ -1269,8 +1272,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			}
 
 			// Enforce minimum width so header buttons stay within bounds
-			if (MinHeaderWidth > 0.0f && SizeInUnits.X < MinHeaderWidth)
-				SizeInUnits.X = MinHeaderWidth;
+			SizeInUnits = ClampToMinHeaderWidth(SizeInUnits, MinHeaderWidth, TitleH);
 
 			if (CanvasSlot)
 			{
@@ -1383,8 +1385,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			}
 
 			// Enforce minimum width so header buttons stay within bounds
-			if (MinHeaderWidth > 0.0f && WidgetSize.X < MinHeaderWidth)
-				WidgetSize.X = MinHeaderWidth;
+			WidgetSize = ClampToMinHeaderWidth(WidgetSize, MinHeaderWidth, TitleH);
 
 			// Compute anchor and alignment from corner alignment enums
 			float	  AnchorX = (CornerHAlign == HAlign_Right) ? 1.0f : (CornerHAlign == HAlign_Center ? 0.5f : 0.0f);
@@ -2167,6 +2168,7 @@ void URammsCameraWidget::SetViewMode(ERammsCameraViewMode NewViewMode)
 
 	ViewMode = NewViewMode;
 	ApplyViewModeLayout();
+	UpdateLayout(false);
 	UpdateDisplayedImages();
 }
 
@@ -2518,6 +2520,7 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	}
 
 	const bool bSBS = (ViewMode == ERammsCameraViewMode::SideBySide);
+	bool	   bLayoutChanged = false; // Track if sizing/orientation actually changed
 
 	// Determine SBS orientation: landscape → vertical stack, portrait → horizontal
 	// Fullscreen always uses horizontal (current behavior)
@@ -2532,6 +2535,7 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	{
 		if (bWantVertical != bSBSVertical || DataImage->GetVisibility() == ESlateVisibility::Collapsed)
 		{
+			bLayoutChanged = true;
 			// Remove images from their current parents
 			if (CameraImage->GetParent())
 				CameraImage->RemoveFromParent();
@@ -2587,9 +2591,14 @@ void URammsCameraWidget::ApplyViewModeLayout()
 	}
 	else if (!bSBS)
 	{
+		// Detect layout change: DataImage transitioning from visible (SBS) to collapsed
+		if (DataImage && DataImage->GetVisibility() != ESlateVisibility::Collapsed)
+			bLayoutChanged = true;
+
 		// Leaving SBS — move images back to HBox if they're in VBox
 		if (bSBSVertical && CameraImage && DataImage && ImageHBox && ImageVBox)
 		{
+			bLayoutChanged = true;
 			if (CameraImage->GetParent())
 				CameraImage->RemoveFromParent();
 			if (DataImage->GetParent())
@@ -2633,30 +2642,34 @@ void URammsCameraWidget::ApplyViewModeLayout()
 		}
 	}
 
-	// Adjust corner radii based on whether side-by-side or single image
-	UpdateImageCornerRadii();
-
-	// Update aspect ratio box for SBS-adjusted AR
-	if (ImageAspectRatioBox && bMaintainAspectRatio && AspectRatio > 0.0f)
+	// Only refresh layout + siblings when SBS orientation or visibility actually changed
+	if (bLayoutChanged)
 	{
-		float EffAR = GetEffectiveAspectRatio();
-		ImageAspectRatioBox->SetMinAspectRatio(EffAR);
-		ImageAspectRatioBox->SetMaxAspectRatio(EffAR);
-	}
+		// Adjust corner radii based on whether side-by-side or single image
+		UpdateImageCornerRadii();
 
-	// SBS may change widget sizing — refresh layout
-	UpdateLayout(false);
-
-	// SBS size change may affect corner siblings — refresh them
-	if (DisplayMode == ERammsCameraDisplayMode::Corner && RegisteredCornerKey.Value != 0xFF)
-	{
-		if (const TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey))
+		// Update aspect ratio box for SBS-adjusted AR
+		if (ImageAspectRatioBox && bMaintainAspectRatio && AspectRatio > 0.0f)
 		{
-			for (const TWeakObjectPtr<URammsCameraWidget>& Sibling : *Stack)
+			float EffAR = GetEffectiveAspectRatio();
+			ImageAspectRatioBox->SetMinAspectRatio(EffAR);
+			ImageAspectRatioBox->SetMaxAspectRatio(EffAR);
+		}
+
+		// SBS may change widget sizing — refresh layout
+		UpdateLayout(false);
+
+		// SBS size change may affect corner siblings — refresh them
+		if (DisplayMode == ERammsCameraDisplayMode::Corner && RegisteredCornerKey.Value != 0xFF)
+		{
+			if (const TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey))
 			{
-				if (Sibling.IsValid() && Sibling.Get() != this)
+				for (const TWeakObjectPtr<URammsCameraWidget>& Sibling : *Stack)
 				{
-					Sibling->UpdateLayout(false);
+					if (Sibling.IsValid() && Sibling.Get() != this)
+					{
+						Sibling->UpdateLayout(false);
+					}
 				}
 			}
 		}
@@ -2674,6 +2687,46 @@ float URammsCameraWidget::GetEffectiveAspectRatio() const
 	if (bSBS)
 		return AspectRatio * 2.0f;
 	return AspectRatio;
+}
+
+FVector2D URammsCameraWidget::ClampToMinHeaderWidth(FVector2D Size, float MinWidth, float InTitleH) const
+{
+	if (MinWidth <= 0.0f || Size.X >= MinWidth)
+		return Size;
+
+	if (!bMaintainAspectRatio || AspectRatio <= 0.0f)
+	{
+		Size.X = MinWidth;
+		return Size;
+	}
+
+	const bool		bSBS = (ViewMode == ERammsCameraViewMode::SideBySide);
+	constexpr float SBSGap = 2.0f;
+
+	if (bSBS && bSBSVertical)
+	{
+		// Vertical stack: widget width = single image width
+		float FitW = MinWidth;
+		float FitH = FitW / AspectRatio;
+		Size.X = FitW;
+		Size.Y = 2.0f * FitH + SBSGap + InTitleH;
+	}
+	else if (bSBS && !bSBSVertical)
+	{
+		// Horizontal stack: widget width = 2 * image width + gap
+		float FitW = FMath::Max((MinWidth - SBSGap) * 0.5f, 1.0f);
+		float FitH = FitW / AspectRatio;
+		Size.X = MinWidth;
+		Size.Y = FitH + InTitleH;
+	}
+	else
+	{
+		// Single view
+		Size.X = MinWidth;
+		Size.Y = MinWidth / AspectRatio + InTitleH;
+	}
+
+	return Size;
 }
 
 void URammsCameraWidget::UpdateImageCornerRadii()
