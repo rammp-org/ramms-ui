@@ -2168,7 +2168,6 @@ void URammsCameraWidget::SetViewMode(ERammsCameraViewMode NewViewMode)
 
 	ViewMode = NewViewMode;
 	ApplyViewModeLayout();
-	UpdateLayout(false);
 	UpdateDisplayedImages();
 }
 
