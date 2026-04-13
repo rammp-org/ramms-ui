@@ -294,8 +294,21 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 				if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
 					&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
 				{
-					Params.Add(FName(*Pair.Key), static_cast<float>(Val));
-					++Count;
+					const FName ParamName(*Pair.Key, FNAME_Find);
+					if (ParamName != NAME_None)
+					{
+						Params.Add(ParamName, static_cast<float>(Val));
+						++Count;
+					}
+					else
+					{
+						UE_LOG(
+							LogRammsStreamBridge,
+							Verbose,
+							TEXT("Ignoring unknown material scalar parameter name '%s' for stream '%s'"),
+							*Pair.Key,
+							*StreamID.ToString());
+					}
 				}
 			}
 			CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
