@@ -20,11 +20,25 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
 
+namespace
+{
+	TMap<TWeakObjectPtr<UMaterialInstanceDynamic>, TSet<FName>> GPreviouslyAppliedDynamicScalarParams;
+}
+
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
 void URammsCameraWidget::ResetCachedWidgets()
 {
+	if (PassthroughMID_RGB)
+	{
+		GPreviouslyAppliedDynamicScalarParams.Remove(PassthroughMID_RGB);
+	}
+	if (PassthroughMID_Data)
+	{
+		GPreviouslyAppliedDynamicScalarParams.Remove(PassthroughMID_Data);
+	}
+
 	CameraBorder = nullptr;
 	CameraRootOverlay = nullptr;
 	ImageContainerOverlay = nullptr;
@@ -2515,7 +2529,43 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 	// Apply all scalar params from config, then depth format params, to both materials
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
 		if (!MID)
+		{
 			return;
+		}
+
+		for (auto It = GPreviouslyAppliedDynamicScalarParams.CreateIterator(); It; ++It)
+		{
+			if (!It.Key().IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
+
+		TSet<FName> CurrentDynamicKeys;
+		for (const auto& Pair : CachedStreamMaterialParams)
+		{
+			CurrentDynamicKeys.Add(Pair.Key);
+		}
+
+		const TSet<FName>* PreviouslyAppliedKeys = GPreviouslyAppliedDynamicScalarParams.Find(MID);
+		if (PreviouslyAppliedKeys)
+		{
+			for (const FName& PreviouslyAppliedKey : *PreviouslyAppliedKeys)
+			{
+				if (!CurrentDynamicKeys.Contains(PreviouslyAppliedKey))
+				{
+					if (const float* DefaultValue = DataStreamConfig.ScalarParams.Find(PreviouslyAppliedKey))
+					{
+						MID->SetScalarParameterValue(PreviouslyAppliedKey, *DefaultValue);
+					}
+					else
+					{
+						MID->SetScalarParameterValue(PreviouslyAppliedKey, 0.0f);
+					}
+				}
+			}
+		}
+
 		// Static config params (widget-level defaults)
 		for (const auto& Pair : DataStreamConfig.ScalarParams)
 		{
@@ -2529,6 +2579,8 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 		// Auto-injected depth format params (materials can use these to normalize depth)
 		MID->SetScalarParameterValue(FName("DepthUnnormalize"), DepthUnnormalize);
 		MID->SetScalarParameterValue(FName("DepthScaleToCM"), DepthScaleToCM);
+
+		GPreviouslyAppliedDynamicScalarParams.Add(MID, MoveTemp(CurrentDynamicKeys));
 	};
 
 	if (DataMID)
