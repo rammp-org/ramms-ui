@@ -242,8 +242,12 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 					if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
 						&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
 					{
-						Info.MaterialScalarParams.Add(FName(*Pair.Key), static_cast<float>(Val));
-						++Count;
+						const FName ParamName(*Pair.Key, FNAME_Find);
+						if (ParamName != NAME_None)
+						{
+							Info.MaterialScalarParams.Add(ParamName, static_cast<float>(Val));
+							++Count;
+						}
 					}
 				}
 			}
