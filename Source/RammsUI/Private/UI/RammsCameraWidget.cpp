@@ -1810,6 +1810,10 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 				if (!FMath::IsNearlyEqual(AspectRatio, DetectedAR, 0.01f))
 				{
 					AspectRatio = DetectedAR;
+					if (ViewMode == ERammsCameraViewMode::SideBySide)
+					{
+						ApplyViewModeLayout();
+					}
 					if (ImageAspectRatioBox)
 					{
 						float EffAR = GetEffectiveAspectRatio();
