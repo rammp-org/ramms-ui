@@ -65,6 +65,7 @@ public:
 	void UpdateStreamExtrinsic(const FString& StreamID, const FTransform& WorldTransform);
 
 	/** Update dynamic material scalar parameters for a stream (from per-frame metadata). */
+	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void UpdateStreamMaterialParams(const FString& StreamID, const TMap<FName, float>& Params);
 
 	// --- Blueprint Events ---
