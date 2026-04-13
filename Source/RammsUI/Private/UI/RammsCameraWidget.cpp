@@ -20,11 +20,25 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
 
+namespace
+{
+	TMap<TWeakObjectPtr<UMaterialInstanceDynamic>, TSet<FName>> GPreviouslyAppliedDynamicScalarParams;
+}
+
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
 
 void URammsCameraWidget::ResetCachedWidgets()
 {
+	if (PassthroughMID_RGB)
+	{
+		GPreviouslyAppliedDynamicScalarParams.Remove(PassthroughMID_RGB);
+	}
+	if (PassthroughMID_Data)
+	{
+		GPreviouslyAppliedDynamicScalarParams.Remove(PassthroughMID_Data);
+	}
+
 	CameraBorder = nullptr;
 	CameraRootOverlay = nullptr;
 	ImageContainerOverlay = nullptr;
@@ -1672,26 +1686,50 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	{
 		CurrentDataTexture = Texture;
 
-		// Auto-detect depth format from provider on the first data frame.
-		// Once set, the format is cached for the lifetime of the stream
-		// subscription; it resets when the stream is re-subscribed.
-		if (CachedDataDepthFormat == ERammsDepthFormat::Unknown && !DataStreamID.IsEmpty())
+		// Auto-detect depth format and refresh material params from provider
+		// using lightweight accessors (avoids full FRammsCameraStreamInfo copy).
+		bool bNeedParamUpdate = false;
+		if (!DataStreamID.IsEmpty())
 		{
 			for (const auto& Sub : ProviderSubscriptions)
 			{
 				if (Sub.Object.IsValid() && Sub.Interface)
 				{
-					FRammsCameraStreamInfo Info;
-					if (Sub.Interface->GetStreamInfo(DataStreamID, Info) && Info.DepthFormat != ERammsDepthFormat::Unknown)
+					// Check if this provider serves our DataStreamID
+					const TMap<FName, float>* StreamParams = Sub.Interface->GetStreamMaterialParams(DataStreamID);
+					if (!StreamParams)
 					{
-						CachedDataDepthFormat = Info.DepthFormat;
-						UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
-							*GetName(), static_cast<int32>(Info.DepthFormat), *Info.PixelFormat, *DataStreamID);
-						UpdateDataMaterialParams();
-						break;
+						// Provider doesn't have this stream — try next provider
+						continue;
 					}
+
+					// Depth format: detect once, cache for stream lifetime
+					if (CachedDataDepthFormat == ERammsDepthFormat::Unknown)
+					{
+						ERammsDepthFormat Fmt = Sub.Interface->GetStreamDepthFormat(DataStreamID);
+						if (Fmt != ERammsDepthFormat::Unknown)
+						{
+							CachedDataDepthFormat = Fmt;
+							FString PixFmt = Sub.Interface->GetStreamPixelFormat(DataStreamID);
+							UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Auto-detected depth format=%d PixelFmt='%s' for DataStream='%s'"),
+								*GetName(), static_cast<int32>(Fmt), *PixFmt, *DataStreamID);
+							bNeedParamUpdate = true;
+						}
+					}
+
+					// Material params: refresh whenever they differ (including clearing)
+					if (!StreamParams->OrderIndependentCompareEqual(CachedStreamMaterialParams))
+					{
+						CachedStreamMaterialParams = *StreamParams;
+						bNeedParamUpdate = true;
+					}
+					break;
 				}
 			}
+		}
+		if (bNeedParamUpdate)
+		{
+			UpdateDataMaterialParams();
 		}
 
 		UpdateDisplayedImages();
@@ -2035,6 +2073,7 @@ void URammsCameraWidget::SetDataStreamID(const FString& NewDataStreamID)
 	DataStreamID = NewDataStreamID;
 	CurrentDataTexture = nullptr;
 	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+	CachedStreamMaterialParams.Empty();
 	bOverlayDiagLogged = false;
 
 	// Start new data stream
@@ -2490,14 +2529,58 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 	// Apply all scalar params from config, then depth format params, to both materials
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
 		if (!MID)
+		{
 			return;
+		}
+
+		for (auto It = GPreviouslyAppliedDynamicScalarParams.CreateIterator(); It; ++It)
+		{
+			if (!It.Key().IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
+
+		TSet<FName> CurrentDynamicKeys;
+		for (const auto& Pair : CachedStreamMaterialParams)
+		{
+			CurrentDynamicKeys.Add(Pair.Key);
+		}
+
+		const TSet<FName>* PreviouslyAppliedKeys = GPreviouslyAppliedDynamicScalarParams.Find(MID);
+		if (PreviouslyAppliedKeys)
+		{
+			for (const FName& PreviouslyAppliedKey : *PreviouslyAppliedKeys)
+			{
+				if (!CurrentDynamicKeys.Contains(PreviouslyAppliedKey))
+				{
+					if (const float* DefaultValue = DataStreamConfig.ScalarParams.Find(PreviouslyAppliedKey))
+					{
+						MID->SetScalarParameterValue(PreviouslyAppliedKey, *DefaultValue);
+					}
+					else
+					{
+						MID->SetScalarParameterValue(PreviouslyAppliedKey, 0.0f);
+					}
+				}
+			}
+		}
+
+		// Static config params (widget-level defaults)
 		for (const auto& Pair : DataStreamConfig.ScalarParams)
+		{
+			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
+		}
+		// Dynamic per-stream params from metadata (override static config)
+		for (const auto& Pair : CachedStreamMaterialParams)
 		{
 			MID->SetScalarParameterValue(Pair.Key, Pair.Value);
 		}
 		// Auto-injected depth format params (materials can use these to normalize depth)
 		MID->SetScalarParameterValue(FName("DepthUnnormalize"), DepthUnnormalize);
 		MID->SetScalarParameterValue(FName("DepthScaleToCM"), DepthScaleToCM);
+
+		GPreviouslyAppliedDynamicScalarParams.Add(MID, MoveTemp(CurrentDynamicKeys));
 	};
 
 	if (DataMID)

@@ -149,6 +149,15 @@ void URammsCameraProviderComponent::UpdateStreamExtrinsic(const FString& StreamI
 	CameraExtrinsicUpdatedDelegate.Broadcast(StreamID, WorldTransform);
 }
 
+void URammsCameraProviderComponent::UpdateStreamMaterialParams(const FString& StreamID, const TMap<FName, float>& Params)
+{
+	FRammsCameraStreamState* State = Streams.Find(StreamID);
+	if (!State)
+		return;
+
+	State->Info.MaterialScalarParams = Params;
+}
+
 // ── Blueprint Events ───────────────────────────────────────────────
 
 bool URammsCameraProviderComponent::OnStreamStartRequested_Implementation(const FString& StreamID)
@@ -182,6 +191,33 @@ bool URammsCameraProviderComponent::GetStreamInfo(const FString& StreamID, FRamm
 		return true;
 	}
 	return false;
+}
+
+const TMap<FName, float>* URammsCameraProviderComponent::GetStreamMaterialParams(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return &State->Info.MaterialScalarParams;
+	}
+	return nullptr;
+}
+
+ERammsDepthFormat URammsCameraProviderComponent::GetStreamDepthFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.DepthFormat;
+	}
+	return ERammsDepthFormat::Unknown;
+}
+
+FString URammsCameraProviderComponent::GetStreamPixelFormat(const FString& StreamID) const
+{
+	if (const FRammsCameraStreamState* State = Streams.Find(StreamID))
+	{
+		return State->Info.PixelFormat;
+	}
+	return FString();
 }
 
 bool URammsCameraProviderComponent::StartStream(const FString& StreamID)
