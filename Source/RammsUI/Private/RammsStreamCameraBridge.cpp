@@ -176,6 +176,12 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 					if (Info.StreamRole == ERammsStreamRole::Other)
 						Info.StreamRole = ERammsStreamRole::Color;
 				}
+				else if (Fmt == TEXT("r8") || Fmt == TEXT("gray8") || Fmt == TEXT("mono8"))
+				{
+					Info.PixelFormat = TEXT("G8");
+					if (Info.StreamRole == ERammsStreamRole::Other)
+						Info.StreamRole = ERammsStreamRole::Mask;
+				}
 				else
 				{
 					Info.PixelFormat = Fmt.ToUpper();
