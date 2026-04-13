@@ -879,6 +879,7 @@ void URammsStatusPanel::RefreshAllFields()
 						bool bVal = StringValue == TEXT("true") || StringValue == TEXT("yes") || StringValue == TEXT("on") || StringValue == TEXT("1");
 						StringValue = bVal ? TEXT("Yes") : TEXT("No");
 					}
+					FormattedValue = FText::FromString(StringValue);
 					break;
 				}
 				case ERammsStatusValueFormat::EnumName:
