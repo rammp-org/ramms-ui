@@ -2480,6 +2480,11 @@ void URammsCameraWidget::SetAspectRatio(float NewAspectRatio)
 	bAutoDetectAspectRatio = false;
 	AspectRatio = FMath::Clamp(NewAspectRatio, 0.1f, 10.0f);
 
+	if (ViewMode == ERammsCameraViewMode::SideBySide)
+	{
+		ApplyViewModeLayout();
+	}
+
 	if (ImageAspectRatioBox && bMaintainAspectRatio)
 	{
 		float EffAR = GetEffectiveAspectRatio();
