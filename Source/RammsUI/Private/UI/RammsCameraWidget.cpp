@@ -755,13 +755,16 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	// Re-layout when the viewport size changes (handles Linux Vulkan late initialization,
 	// window resizes, and any other viewport change after the initial NativeConstruct layout).
 	// Also triggers when the viewport transitions from invalid (0,0) to a valid size.
+	// Defer this while a display mode transition is animating so UpdateLayout() does not
+	// overwrite the temporary absolute-coordinate anchors/alignment used by the lerp.
 	{
 		FVector2D CurrentViewportSize(0, 0);
 		if (GEngine && GEngine->GameViewport)
 		{
 			GEngine->GameViewport->GetViewportSize(CurrentViewportSize);
 		}
-		if (CurrentViewportSize.X > 0.0f && CurrentViewportSize.Y > 0.0f
+		if (!bDisplayModeTransitioning
+			&& CurrentViewportSize.X > 0.0f && CurrentViewportSize.Y > 0.0f
 			&& !CurrentViewportSize.Equals(CachedLayoutViewportSize, 1.0f))
 		{
 			UpdateLayout(false);
