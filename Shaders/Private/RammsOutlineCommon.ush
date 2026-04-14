@@ -5,12 +5,65 @@
 // All functions accept Viewport UV (the UV from ScreenPosition / TexCoord
 // in your Custom node).  Internally they convert to Buffer UV via
 // ViewportUVToBufferUV() before sampling scene textures.
+//
+// ── Scene Texture Access ───────────────────────────────────────────
+//
+// By default, sampling uses CalcSceneCustomDepth / CalcSceneCustomStencil /
+// CalcSceneDepth from UE's SceneTexturesCommon.ush.  These wrappers are
+// platform-aware (they select SceneTexturesStruct on desktop and
+// MobileSceneTextures on mobile internally), but the material compiler
+// cannot track dependencies hidden inside #included HLSL — it only
+// inspects the material expression graph.  On mobile Vulkan this means
+// the textures may not be bound and render-pass barriers may be missing,
+// which can break decals and other stencil-dependent features.
+//
+// To fix this, wire SceneTexture expression nodes into the Custom node
+// as **float / color inputs** (the only output types SceneTexture nodes
+// support).  The HLSL code does not need to read those inputs; the
+// *connection* alone forces the material compiler to register the scene-
+// texture dependencies so the correct bindings and barriers are emitted
+// for every target platform.
+//
+//   Material graph wiring (add as Custom node inputs):
+//     SceneTexture(Custom Depth)   → _DepthRef   (float, unused in code)
+//     SceneTexture(Custom Stencil) → _StencilRef  (float, unused in code)
+//     SceneTexture(Scene Depth)    → _SceneDepthRef (float, unused if
+//                                     not using depth-aware outlines)
+//
+// With those connections the default RAMMS_SAMPLE_* macros (CalcScene*)
+// work correctly on all platforms.
+//
+// If you need to replace the sampling entirely (e.g. reading from a
+// render-target copy instead of the live buffers), override the macros
+// BEFORE including this file:
+//
+//   #define RAMMS_SAMPLE_CUSTOM_DEPTH(BufUV)    MyDepthTex.SampleLevel(MySamp, BufUV, 0).r
+//   #define RAMMS_SAMPLE_CUSTOM_STENCIL(Pixel)  (int)(MyStencilTex.Load(int3(Pixel, 0)).r)
+//   #define RAMMS_SAMPLE_SCENE_DEPTH(BufUV)     MySceneDepthTex.SampleLevel(MySamp, BufUV, 0).r
+//   #include "/RammsUI/Private/RammsOutline.usf"
 
 #pragma once
 
 // ── Stencil Outline Configuration ──────────────────────────────────
 
 #define RAMMS_MAX_OUTLINE_PROFILES 8
+
+// ── Scene Texture Sampling Macros ──────────────────────────────────
+// Override these BEFORE including this header to control where depth /
+// stencil reads come from.  Defaults use UE's built-in CalcScene*
+// functions (desktop-only safe).
+
+#ifndef RAMMS_SAMPLE_CUSTOM_DEPTH
+#define RAMMS_SAMPLE_CUSTOM_DEPTH(BufUV) CalcSceneCustomDepth(BufUV)
+#endif
+
+#ifndef RAMMS_SAMPLE_CUSTOM_STENCIL
+#define RAMMS_SAMPLE_CUSTOM_STENCIL(Pixel) CalcSceneCustomStencil(Pixel)
+#endif
+
+#ifndef RAMMS_SAMPLE_SCENE_DEPTH
+#define RAMMS_SAMPLE_SCENE_DEPTH(BufUV) CalcSceneDepth(BufUV)
+#endif
 
 // ── Internal Helpers ───────────────────────────────────────────────
 
@@ -22,11 +75,12 @@ float2 Ramms_GetTexelSize()
 
 // ── Sampling Helpers ───────────────────────────────────────────────
 // All accept Viewport UV, convert to Buffer UV internally.
+// Actual texture reads go through the RAMMS_SAMPLE_* macros above.
 
 float Ramms_SampleCustomDepth(float2 ViewportUV)
 {
 	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
-	float WorldDepth = CalcSceneCustomDepth(BufUV);
+	float WorldDepth = RAMMS_SAMPLE_CUSTOM_DEPTH(BufUV);
 	return (WorldDepth > 1e6f) ? 0.0f : WorldDepth;
 }
 
@@ -34,13 +88,13 @@ int Ramms_SampleStencilInt(float2 ViewportUV)
 {
 	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
 	uint2 Pixel = (uint2)(int2(BufUV * View_BufferSizeAndInvSize.xy));
-	return (int)CalcSceneCustomStencil(Pixel);
+	return (int)RAMMS_SAMPLE_CUSTOM_STENCIL(Pixel);
 }
 
 float Ramms_SampleSceneDepth(float2 ViewportUV)
 {
 	float2 BufUV = ViewportUVToBufferUV(ViewportUV);
-	return CalcSceneDepth(BufUV);
+	return RAMMS_SAMPLE_SCENE_DEPTH(BufUV);
 }
 
 // ── Edge Detection Kernels ─────────────────────────────────────────
