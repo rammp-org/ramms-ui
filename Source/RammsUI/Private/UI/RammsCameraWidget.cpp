@@ -1131,8 +1131,10 @@ void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 
 void URammsCameraWidget::UpdateLayout(bool bAnimate)
 {
-	// Get viewport size in pixels
-	FVector2D ViewportSize(1920, 1080);
+	// Get viewport size in pixels. Keep this at zero until GameViewport exists
+	// and returns an authoritative size, so late viewport initialization can
+	// still be detected by NativeTick even if the eventual size is 1920x1080.
+	FVector2D ViewportSize = FVector2D::ZeroVector;
 	if (GEngine && GEngine->GameViewport)
 	{
 		GEngine->GameViewport->GetViewportSize(ViewportSize);
