@@ -90,6 +90,14 @@ void URammsTaskSelector::ApplyStyle_Implementation()
 
 void URammsTaskSelector::SelectTask(int64 EnumValue)
 {
+	if (!bToggleButtons)
+	{
+		// Momentary mode: fire the event but don't persist selection or
+		// active highlight — SelectedValue stays INDEX_NONE.
+		OnTaskSelected.Broadcast(EnumValue);
+		return;
+	}
+
 	if (SelectedValue == EnumValue)
 		return;
 
@@ -114,6 +122,12 @@ void URammsTaskSelector::SelectTask(int64 EnumValue)
 
 void URammsTaskSelector::ClearSelection()
 {
+	if (!bToggleButtons)
+	{
+		// Momentary mode: nothing to clear (SelectedValue is always INDEX_NONE).
+		return;
+	}
+
 	if (SelectedValue == INDEX_NONE)
 		return;
 
