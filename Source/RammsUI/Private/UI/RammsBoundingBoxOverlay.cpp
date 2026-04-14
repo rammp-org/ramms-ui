@@ -422,15 +422,15 @@ void URammsBoundingBoxOverlay::DrawLabel(const FRammsBoundingBox& Box, const FLi
 		return;
 	}
 
-	const TSharedPtr<FSlateRenderer> Renderer = FSlateApplication::Get().GetRenderer();
-	if (!Renderer.IsValid())
+	FSlateRenderer* Renderer = FSlateApplication::Get().GetRenderer();
+	if (!Renderer)
 	{
 		return;
 	}
 
 	// Measure text
 	const TSharedRef<FSlateFontMeasure> FontMeasure = Renderer->GetFontMeasureService();
-	const FVector2D TextSize = FontMeasure->Measure(LabelStr, CachedLabelFont);
+	const FVector2D						TextSize = FontMeasure->Measure(LabelStr, CachedLabelFont);
 
 	const float LabelPad = 3.0f;
 	const float BgWidth = TextSize.X + LabelPad * 2.0f;

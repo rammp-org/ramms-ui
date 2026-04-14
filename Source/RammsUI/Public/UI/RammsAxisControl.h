@@ -133,10 +133,16 @@ protected:
 	TObjectPtr<UButton> DecrementButton;
 
 	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DecrementSizeBox;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DecrementLabel;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> IncrementButton;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> IncrementSizeBox;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> IncrementLabel;

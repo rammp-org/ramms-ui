@@ -176,6 +176,12 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 					if (Info.StreamRole == ERammsStreamRole::Other)
 						Info.StreamRole = ERammsStreamRole::Color;
 				}
+				else if (Fmt == TEXT("r8") || Fmt == TEXT("gray8") || Fmt == TEXT("mono8"))
+				{
+					Info.PixelFormat = TEXT("G8");
+					// Don't force a role — mono data could be a grayscale camera feed.
+					// The existing fallback logic below infers Color from message type.
+				}
 				else
 				{
 					Info.PixelFormat = Fmt.ToUpper();
@@ -221,6 +227,30 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 				Info.Extrinsic = ExtractedTransform;
 				Info.bHasExtrinsic = true;
 			}
+
+			// Extract dynamic material scalar parameters
+			const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
+			if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
+			{
+				constexpr int32 MaxParamEntries = 64;
+				int32			Count = 0;
+				for (const auto& Pair : (*MatParamsObj)->Values)
+				{
+					if (Count >= MaxParamEntries)
+						break;
+					double Val = 0.0;
+					if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
+						&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+					{
+						const FName ParamName(*Pair.Key, FNAME_Find);
+						if (ParamName != NAME_None)
+						{
+							Info.MaterialScalarParams.Add(ParamName, static_cast<float>(Val));
+							++Count;
+						}
+					}
+				}
+			}
 		}
 		else
 		{
@@ -249,6 +279,49 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 		if (ParseTransformFromMeta(Meta, ExtractedTransform))
 		{
 			CameraProvider->UpdateStreamExtrinsic(StreamID, ExtractedTransform);
+		}
+
+		// Per-frame material scalar parameter update.
+		// If metadata exists but field is absent, clear previous overrides
+		// so senders can stop sending the field to remove params.
+		const TSharedPtr<FJsonObject>* MatParamsObj = nullptr;
+		if (Meta->TryGetObjectField(TEXT("MaterialScalarParameters"), MatParamsObj) && MatParamsObj->IsValid())
+		{
+			TMap<FName, float> Params;
+			constexpr int32	   MaxParamEntries = 64;
+			int32			   Count = 0;
+			for (const auto& Pair : (*MatParamsObj)->Values)
+			{
+				if (Count >= MaxParamEntries)
+					break;
+				double Val = 0.0;
+				if (Pair.Key.Len() > 0 && Pair.Key.Len() <= 128
+					&& Pair.Value.IsValid() && Pair.Value->TryGetNumber(Val))
+				{
+					const FName ParamName(*Pair.Key, FNAME_Find);
+					if (ParamName != NAME_None)
+					{
+						Params.Add(ParamName, static_cast<float>(Val));
+						++Count;
+					}
+					else
+					{
+						UE_LOG(
+							LogRammsStreamBridge,
+							Verbose,
+							TEXT("Ignoring unknown material scalar parameter name '%s' for stream '%s'"),
+							*Pair.Key,
+							*StreamID);
+					}
+				}
+			}
+			CameraProvider->UpdateStreamMaterialParams(StreamID, Params);
+		}
+		else
+		{
+			// Field absent from metadata — clear any previous overrides
+			static const TMap<FName, float> EmptyParams;
+			CameraProvider->UpdateStreamMaterialParams(StreamID, EmptyParams);
 		}
 	}
 

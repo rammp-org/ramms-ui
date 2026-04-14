@@ -51,6 +51,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ImageButton")
 	bool bShowLabel = true;
 
+	/** Allow label text to wrap to multiple lines */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ImageButton")
+	bool bAutoWrapLabel = false;
+
+	/** When true, the button uses CustomSize instead of auto-sizing to content */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+	bool bUseCustomSize = false;
+
+	/** Fixed button size in pixels (only used when bUseCustomSize is true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (EditCondition = "bUseCustomSize"))
+	FVector2D CustomSize = FVector2D(80.0f, 100.0f);
+
 	/** Padding around image content */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	float ContentPadding = 8.0f;
@@ -60,6 +72,9 @@ protected:
 	float ActiveBorderWidth = 3.0f;
 
 	// Widget references (Transient — rebuilt programmatically)
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> RootSizeBox;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> ButtonBorder;
 
@@ -127,11 +142,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ImageButton")
 	void SetLabelAutoWrap(bool bAutoWrap);
 
+	/** Enable or disable custom sizing */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetUseCustomSize(bool bUseCustom);
+
+	/** Set the custom size (also enables custom sizing) */
+	UFUNCTION(BlueprintCallable, Category = "Layout")
+	void SetCustomSize(FVector2D NewSize);
+
 protected:
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;
-	virtual UWidget* GetRootWidgetForValidation() override { return ButtonBorder; }
+	virtual UWidget* GetRootWidgetForValidation() override { return RootSizeBox ? (UWidget*)RootSizeBox : (UWidget*)ButtonBorder; }
 	void			 UpdateVisualState();
+
+	/** Apply size overrides to the root SizeBox based on bUseCustomSize */
+	void ApplySizeOverrides();
 
 	UFUNCTION()
 	void HandleClicked();

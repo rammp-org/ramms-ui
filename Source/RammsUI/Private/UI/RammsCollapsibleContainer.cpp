@@ -63,9 +63,13 @@ void URammsCollapsibleContainer::BuildWidgetTree()
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
 	}
 
+	ToggleBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ToggleBtnSizeBox"));
+	ToggleBtnSizeBox->SetMinDesiredWidth(32.0f);
+	ToggleBtnSizeBox->SetMinDesiredHeight(32.0f);
 	ToggleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ToggleButton"));
 	ToggleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
-	UHorizontalBoxSlot* BtnSlot = HeaderRow->AddChildToHorizontalBox(ToggleButton);
+	ToggleBtnSizeBox->AddChild(ToggleButton);
+	UHorizontalBoxSlot* BtnSlot = HeaderRow->AddChildToHorizontalBox(ToggleBtnSizeBox);
 	if (BtnSlot)
 	{
 		BtnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -523,8 +527,16 @@ void URammsCollapsibleContainer::ApplyStyle_Implementation()
 
 	if (ToggleIcon)
 	{
-		ToggleIcon->SetFont(Style->Typography.Body);
+		ToggleIcon->SetFont(Style->Interaction.GetHeaderButtonFont(Style->Typography.Body));
 		ToggleIcon->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+
+	// Apply style-driven min touch target size to toggle button
+	if (ToggleBtnSizeBox)
+	{
+		const float MinSz = Style->Interaction.HeaderButtonMinSize;
+		ToggleBtnSizeBox->SetMinDesiredWidth(MinSz);
+		ToggleBtnSizeBox->SetMinDesiredHeight(MinSz);
 	}
 
 	if (Style->ExpandCollapseCurve.Duration > 0.0f)
@@ -724,7 +736,7 @@ void URammsCollapsibleContainer::UpdateHeaderCornerRadii()
 	URammsUIStyle::ApplyRoundedBrushToBorder(HeaderBorder, Brush);
 	if (Style)
 	{
-		HeaderBorder->SetPadding(FMargin(Style->Spacing.Medium, Style->Spacing.Small));
+		HeaderBorder->SetPadding(Style->Interaction.HeaderPadding);
 	}
 }
 

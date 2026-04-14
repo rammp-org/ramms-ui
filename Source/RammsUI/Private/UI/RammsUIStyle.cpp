@@ -279,6 +279,7 @@ void URammsUIStyle::ResetToDarkDefaults()
 	Slider = FRammsSliderStyle();
 	CheckBox = FRammsCheckBoxStyle();
 	ColorPicker = FRammsColorPickerStyle();
+	Interaction = FRammsInteractionStyle();
 	FadeInCurve = FRammsAnimationCurve();
 	FadeOutCurve = FRammsAnimationCurve();
 	SlideCurve = FRammsAnimationCurve();
@@ -335,6 +336,7 @@ void URammsUIStyle::CopyFrom(const URammsUIStyle* Source)
 	Slider = Source->Slider;
 	CheckBox = Source->CheckBox;
 	ColorPicker = Source->ColorPicker;
+	Interaction = Source->Interaction;
 	FadeInCurve = Source->FadeInCurve;
 	FadeOutCurve = Source->FadeOutCurve;
 	SlideCurve = Source->SlideCurve;

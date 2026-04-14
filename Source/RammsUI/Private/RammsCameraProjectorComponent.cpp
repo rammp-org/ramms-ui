@@ -6,8 +6,23 @@
 #include "ProceduralMeshComponent.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "RHI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsPGM, Log, All);
+
+static bool IsVulkanRHI()
+{
+	return GDynamicRHI && FCString::Stristr(GDynamicRHI->GetName(), TEXT("Vulkan")) != nullptr;
+}
+
+int32 URammsCameraProjectorComponent::GetEffectiveStencilValue() const
+{
+	if (bAutoDisableStencilOnVulkan && IsVulkanRHI())
+	{
+		return 0; // disable stencil mask — UE-227727
+	}
+	return TargetStencilValue;
+}
 
 URammsCameraProjectorComponent::URammsCameraProjectorComponent()
 {
@@ -64,6 +79,27 @@ void URammsCameraProjectorComponent::EnsureDecalCreated()
 
 	UpdateDecalSize();
 	UpdateMaterialParameters();
+
+	const FString RHIName = GDynamicRHI ? GDynamicRHI->GetName() : TEXT("Unknown");
+	const int32	  EffectiveStencil = GetEffectiveStencilValue();
+
+	UE_LOG(LogRammsPGM, Log,
+		TEXT("Decal created: Size=%s Loc=%s Inflate=%.1f RHI=%s StencilCfg=%d Effective=%d AutoDisableVulkan=%d"),
+		*DecalComponent->DecalSize.ToString(),
+		*DecalComponent->GetRelativeLocation().ToString(),
+		DecalBoundsInflation,
+		*RHIName,
+		TargetStencilValue,
+		EffectiveStencil,
+		bAutoDisableStencilOnVulkan ? 1 : 0);
+
+	if (EffectiveStencil != TargetStencilValue)
+	{
+		UE_LOG(LogRammsPGM, Warning,
+			TEXT("Stencil mask auto-disabled on %s (UE-227727: SceneTexture:CustomStencil broken in decal materials on Vulkan). "
+				 "Projection frustum masking still active. Set bAutoDisableStencilOnVulkan=false to force stencil test."),
+			*RHIName);
+	}
 }
 
 void URammsCameraProjectorComponent::UpdateDecalSize()
@@ -79,11 +115,20 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float HalfHeight = MaxProjectionDistance * (float)ImageHeight / (2.0f * Fy);
 	const float HalfDepth = MaxProjectionDistance * 0.5f;
 
+	// Inflate decal volume for culling robustness. The projection material
+	// handles the actual frustum masking, so oversized bounds are safe.
+	const float Inflate = FMath::Max(DecalBoundsInflation, 1.0f);
+
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
-	DecalComponent->DecalSize = FVector(HalfDepth, HalfWidth, HalfHeight);
+	const float InflatedHalfDepth = HalfDepth * Inflate;
+	DecalComponent->DecalSize = FVector(InflatedHalfDepth, HalfWidth * Inflate, HalfHeight * Inflate);
 
 	// Offset the decal so the near face starts at the camera position
-	DecalComponent->SetRelativeLocation(FVector(HalfDepth, 0.0f, 0.0f));
+	DecalComponent->SetRelativeLocation(FVector(InflatedHalfDepth, 0.0f, 0.0f));
+
+	// DecalSize is a raw member — manually dirty the render state so the
+	// render proxy and culling bounds are recalculated.
+	DecalComponent->MarkRenderStateDirty();
 }
 
 void URammsCameraProjectorComponent::UpdateMaterialParameters()
@@ -100,7 +145,7 @@ void URammsCameraProjectorComponent::UpdateMaterialParameters()
 		FLinearColor((float)ImageWidth, (float)ImageHeight, 0.0f, 0.0f));
 
 	MaterialInstance->SetScalarParameterValue(FName("FadeWidth"), FadeWidth);
-	MaterialInstance->SetScalarParameterValue(FName("TargetStencil"), (float)TargetStencilValue);
+	MaterialInstance->SetScalarParameterValue(FName("TargetStencil"), (float)GetEffectiveStencilValue());
 
 	UpdateCameraTransformParameters();
 }

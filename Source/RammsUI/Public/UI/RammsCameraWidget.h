@@ -12,6 +12,7 @@
 #include "Components/Overlay.h"
 #include "Components/SizeBox.h"
 #include "Components/HorizontalBox.h"
+#include "Components/VerticalBox.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 
@@ -316,6 +317,14 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UOverlay> ImageContainerOverlay;
 
+	/** Horizontal box for side-by-side image layout (portrait SBS / fullscreen SBS) */
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> ImageHBox;
+
+	/** Vertical box for top/bottom image layout (landscape SBS) */
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> ImageVBox;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> CameraImage;
 
@@ -393,6 +402,16 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
 
+	/** SizeBoxes wrapping header buttons for style-driven min touch targets */
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> CollapseBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> ViewModeBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> OptionBtnSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> DisplayModeBtnSizeBox;
+
 	/** Current index into DataStreamConfig.Options */
 	int32 CurrentOptionIndex = 0;
 
@@ -431,6 +450,12 @@ protected:
 
 	/** Cached depth format from the data stream provider (auto-detected on first frame) */
 	ERammsDepthFormat CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+
+	/** Cached dynamic material scalar params from stream metadata (updated per-frame) */
+	TMap<FName, float> CachedStreamMaterialParams;
+
+	/** One-shot flag: true once we've logged overlay material diagnostics */
+	bool bOverlayDiagLogged = false;
 
 public:
 	virtual void NativeOnInitialized() override;
@@ -665,6 +690,13 @@ protected:
 	/** Update header corner radii based on collapse state (all corners when collapsed, top only when expanded) */
 	void UpdateHeaderCornerRadii();
 
+	/** Compute effective aspect ratio accounting for SBS orientation */
+	float GetEffectiveAspectRatio() const;
+
+	/** Clamp widget size up to MinHeaderWidth while preserving image aspect ratio.
+	 *  Handles single, vertical-SBS, and horizontal-SBS layouts. Returns adjusted size. */
+	FVector2D ClampToMinHeaderWidth(FVector2D Size, float MinWidth, float TitleH) const;
+
 	/** Create or update dynamic material instances for data stream visualization */
 	void EnsureDataMaterials();
 
@@ -773,6 +805,9 @@ protected:
 
 	/** Whether the header is currently in narrow (two-row) mode */
 	bool bHeaderNarrowMode = false;
+
+	/** Whether the current SBS layout is vertical (top/bottom stacking for landscape images) */
+	bool bSBSVertical = false;
 
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;

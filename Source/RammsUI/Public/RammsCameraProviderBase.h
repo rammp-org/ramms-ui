@@ -100,6 +100,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
 	void UpdateStreamExtrinsic(const FString& StreamID, const FTransform& WorldTransform);
 
+	/** Update dynamic material scalar parameters for a stream (from per-frame metadata). */
+	UFUNCTION(BlueprintCallable, Category = "Camera Provider")
+	void UpdateStreamMaterialParams(const FString& StreamID, const TMap<FName, float>& Params);
+
 	// --- Blueprint Events (override in Blueprint) ---
 
 	/** Called when a consumer requests a stream to start. Override to begin producing frames. Return true if stream started successfully. */
@@ -113,6 +117,9 @@ public:
 	// --- IRammsCameraProvider interface ---
 	virtual TArray<FRammsCameraStreamInfo> GetAvailableStreams() override;
 	virtual bool						   GetStreamInfo(const FString& StreamID, FRammsCameraStreamInfo& OutInfo) override;
+	virtual const TMap<FName, float>*	   GetStreamMaterialParams(const FString& StreamID) const override;
+	virtual ERammsDepthFormat			   GetStreamDepthFormat(const FString& StreamID) const override;
+	virtual FString						   GetStreamPixelFormat(const FString& StreamID) const override;
 	virtual bool						   StartStream(const FString& StreamID) override;
 	virtual void						   StopStream(const FString& StreamID) override;
 	virtual bool						   IsStreamActive(const FString& StreamID) const override;
