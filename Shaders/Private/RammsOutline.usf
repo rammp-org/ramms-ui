@@ -7,7 +7,7 @@
 // textures, so outlines align correctly regardless of viewport/buffer
 // size differences (PIE, split-screen, scene captures, dynamic resolution).
 //
-// ── Custom Node Setup ──────────────────────────────────────────────
+// ── Custom Node Setup (Desktop / SM5) ──────────────────────────────
 //
 // 1. Create a post-process material with a Custom expression node.
 // 2. Add inputs: SceneColor (float3), OutlineColor (float3),
@@ -21,6 +21,39 @@
 //    For per-stencil outlines (add StencilValue int input):
 //      return Ramms_GetStencilOutlineComposite(SceneColor, UV, StencilValue,
 //                                              OutlineColor, Thickness, Softness);
+//
+// ── Custom Node Setup (Mobile / Vulkan) ────────────────────────────
+//
+// On mobile Vulkan the material compiler must see explicit scene-texture
+// dependencies so it can set up correct render-pass barriers.  Wire
+// SceneTexture expression nodes into the Custom node as color / float
+// inputs — the connection alone registers the dependency even though
+// the HLSL code does not reference the input values.
+//
+// 1. Create a post-process material.  Add a Custom expression node.
+// 2. Add the same scalar inputs as above (SceneColor, OutlineColor, etc.).
+// 3. Add SceneTexture expression nodes and connect them as float inputs:
+//      - SceneTexture(Custom Depth)   → _DepthRef    (float, unused)
+//      - SceneTexture(Custom Stencil) → _StencilRef   (float, unused)
+//      - SceneTexture(Scene Depth)    → _SceneDepthRef (float, unused
+//                                        — only if using depth-aware outlines)
+// 4. In the Custom node code, include and call normally (no macro
+//    overrides needed — the dependencies are registered by the wiring):
+//
+//      #include "/RammsUI/Private/RammsOutline.usf"
+//      return Ramms_GetOutlineComposite(SceneColor, UV, OutlineColor,
+//                                       Thickness, Softness);
+//
+// ── Macro Overrides ────────────────────────────────────────────────
+//
+// To replace the built-in sampling entirely (e.g. reading from a
+// render-target copy), define these BEFORE the #include:
+//
+//   RAMMS_SAMPLE_CUSTOM_DEPTH(BufUV)    — read custom-depth at Buffer UV
+//   RAMMS_SAMPLE_CUSTOM_STENCIL(Pixel)  — read custom-stencil at uint2 pixel
+//   RAMMS_SAMPLE_SCENE_DEPTH(BufUV)     — read scene-depth at Buffer UV
+//
+// See RammsOutlineCommon.ush header comment for full details.
 
 #include "/RammsUI/Private/RammsOutlineCommon.ush"
 

@@ -6,6 +6,7 @@
 #include "Engine/DataAsset.h"
 #include "Styling/SlateBrush.h"
 #include "Fonts/SlateFontInfo.h"
+#include "RammsCameraTypes.h"
 #include "RammsUIStyle.generated.h"
 
 /**
@@ -454,6 +455,54 @@ struct FRammsInteractionStyle
 	FSlateFontInfo GetActionButtonFont(const FSlateFontInfo& Fallback) const
 	{
 		return (ActionButtonLabelFont.Size > 0) ? ActionButtonLabelFont : Fallback;
+	}
+
+	// --- Display-mode icon overrides (camera widget header) ---
+	// When a brush has a valid image resource it replaces the default Unicode text.
+
+	/** Icon for Fullscreen display mode (replaces Unicode text when set) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush FullscreenModeIcon;
+
+	/** Icon for Windowed display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush WindowedModeIcon;
+
+	/** Icon for Corner / PIP display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush CornerModeIcon;
+
+	/** Icon for Widget (embedded) display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush WidgetModeIcon;
+
+	/** Returns the icon brush for a display mode, or nullptr if not configured. */
+	const FSlateBrush* GetDisplayModeIcon(ERammsCameraDisplayMode Mode) const
+	{
+		const FSlateBrush* Brush = nullptr;
+		switch (Mode)
+		{
+			case ERammsCameraDisplayMode::Fullscreen:
+				Brush = &FullscreenModeIcon;
+				break;
+			case ERammsCameraDisplayMode::Windowed:
+				Brush = &WindowedModeIcon;
+				break;
+			case ERammsCameraDisplayMode::Corner:
+				Brush = &CornerModeIcon;
+				break;
+			case ERammsCameraDisplayMode::Widget:
+				Brush = &WidgetModeIcon;
+				break;
+			default:
+				return nullptr;
+		}
+		if (Brush && Brush->DrawAs != ESlateBrushDrawType::NoDrawType
+			&& (Brush->GetResourceObject() != nullptr || Brush->GetResourceName() != NAME_None))
+		{
+			return Brush;
+		}
+		return nullptr;
 	}
 };
 

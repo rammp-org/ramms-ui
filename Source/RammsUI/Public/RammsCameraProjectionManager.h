@@ -66,8 +66,8 @@ public:
 	 * The projection material masks to the correct frustum, so oversized bounds
 	 * only affect culling conservatism.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "10.0"))
-	float DefaultDecalBoundsInflation = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "1000.0"))
+	float DefaultDecalBoundsInflation = 10.0f;
 
 	/** Auto-create projectors when streams become available */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
