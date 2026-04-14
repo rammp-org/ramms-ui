@@ -753,8 +753,8 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	}
 
 	// Re-layout when the viewport size changes (handles Linux Vulkan late initialization,
-	// window resizes, and any other viewport change after the initial NativeConstruct layout)
-	if (CachedLayoutViewportSize.X > 0.0f)
+	// window resizes, and any other viewport change after the initial NativeConstruct layout).
+	// Also triggers when the viewport transitions from invalid (0,0) to a valid size.
 	{
 		FVector2D CurrentViewportSize(0, 0);
 		if (GEngine && GEngine->GameViewport)
@@ -1144,7 +1144,12 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
-	CachedLayoutViewportSize = ViewportSize;
+	// Only cache valid viewport sizes so the NativeTick change-detection
+	// can trigger a re-layout when the viewport goes from 0→valid (Linux Vulkan late init)
+	if (ViewportSize.X > 0.0f && ViewportSize.Y > 0.0f)
+	{
+		CachedLayoutViewportSize = ViewportSize;
+	}
 
 	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateLayout: Mode=%d ViewportSize=%.0fx%.0f Scale=%.2f CanvasSize=%.0fx%.0f Slot=%s IsInViewport=%d"),
 		*GetName(), (int32)DisplayMode,
@@ -1157,8 +1162,14 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	float TitleH = 0.0f;
 	if (bCollapsible && TitleBar)
 	{
+		// Force Slate to measure the title bar subtree so GetDesiredSize returns
+		// accurate values even on the very first layout pass (before any Slate tick).
+		TitleBar->ForceLayoutPrepass();
+
 		FVector2D TitleSize = TitleBar->GetDesiredSize();
-		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : 24.0f;
+		// Use style button size as fallback height before first Slate layout pass
+		const float FallbackH = (Style ? Style->Interaction.HeaderButtonMinSize : 32.0f);
+		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : FallbackH;
 	}
 
 	// Minimum width so header buttons never overflow the widget edge
@@ -1166,11 +1177,14 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	if (TitleBar)
 	{
 		float BtnsW = 0.0f;
-		auto  AddBtn = [&BtnsW](USizeBox* Wrapper, UWidget* Btn) {
-			 // Prefer wrapper SizeBox (controls actual visibility/min-size); fall back to raw button
-			 UWidget* W = Wrapper ? static_cast<UWidget*>(Wrapper) : Btn;
-			 if (W && W->GetVisibility() != ESlateVisibility::Collapsed)
-				 BtnsW += W->GetDesiredSize().X + 4.0f;
+		// Use style-configured button min size as floor in case ForceLayoutPrepass
+		// still returned zero (e.g. widget tree not yet fully realized).
+		const float BtnMinSz = (Style ? Style->Interaction.HeaderButtonMinSize : 32.0f);
+		auto		AddBtn = [&BtnsW, BtnMinSz](USizeBox* Wrapper, UWidget* Btn) {
+			   // Prefer wrapper SizeBox (controls actual visibility/min-size); fall back to raw button
+			   UWidget* W = Wrapper ? static_cast<UWidget*>(Wrapper) : Btn;
+			   if (W && W->GetVisibility() != ESlateVisibility::Collapsed)
+				   BtnsW += FMath::Max(W->GetDesiredSize().X, BtnMinSz) + 4.0f;
 		};
 		AddBtn(CollapseBtnSizeBox, CollapseButton);
 		AddBtn(ViewModeBtnSizeBox, ViewModeButton);
@@ -1254,11 +1268,10 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 					if (bSBS && bSBSVertical)
 					{
 						float NeededH = 2.0f * FitH + SBSGap;
-						float MaxH = MaxBounds.Y - TitleH;
+						float MaxH = FMath::Max(MaxBounds.Y - TitleH, SBSGap + 2.0f);
 						if (NeededH > MaxH)
 						{
-							float ScaledH = MaxH;
-							FitH = (ScaledH - SBSGap) * 0.5f;
+							FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
 							FitW = FitH * AspectRatio;
 						}
 						SizeInUnits.X = FitW;
@@ -1269,8 +1282,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 						float NeededW = 2.0f * FitW + SBSGap;
 						if (NeededW > MaxBounds.X)
 						{
-							float ScaledW = MaxBounds.X;
-							FitW = (ScaledW - SBSGap) * 0.5f;
+							FitW = FMath::Max((MaxBounds.X - SBSGap) * 0.5f, 1.0f);
 							FitH = FitW / AspectRatio;
 						}
 						SizeInUnits.X = 2.0f * FitW + SBSGap;
@@ -1356,12 +1368,10 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				{
 					// Vertical stack: double height, clamp to screen
 					float NeededH = 2.0f * FitH + SBSGap;
-					float MaxH = CanvasSize.Y - TitleH;
+					float MaxH = FMath::Max(CanvasSize.Y - TitleH, SBSGap + 2.0f);
 					if (NeededH > MaxH)
 					{
-						// Scale down to fit
-						float ScaledH = MaxH;
-						FitH = (ScaledH - SBSGap) * 0.5f;
+						FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
 						FitW = FitH * AspectRatio;
 					}
 					SizeInUnits.X = FitW;
@@ -1373,8 +1383,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 					float NeededW = 2.0f * FitW + SBSGap;
 					if (NeededW > CanvasSize.X)
 					{
-						float ScaledW = CanvasSize.X;
-						FitW = (ScaledW - SBSGap) * 0.5f;
+						FitW = FMath::Max((CanvasSize.X - SBSGap) * 0.5f, 1.0f);
 						FitH = FitW / AspectRatio;
 					}
 					SizeInUnits.X = 2.0f * FitW + SBSGap;
@@ -1470,11 +1479,10 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				{
 					// Vertical stack: double height, clamp to screen
 					float NeededH = 2.0f * FitH + SBSGap;
-					float MaxH = CanvasSize.Y - TitleH;
+					float MaxH = FMath::Max(CanvasSize.Y - TitleH, SBSGap + 2.0f);
 					if (NeededH > MaxH)
 					{
-						float ScaledH = MaxH;
-						FitH = (ScaledH - SBSGap) * 0.5f;
+						FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
 						FitW = FitH * AspectRatio;
 					}
 					WidgetSize.X = FitW;
@@ -1486,8 +1494,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 					float NeededW = 2.0f * FitW + SBSGap;
 					if (NeededW > CanvasSize.X)
 					{
-						float ScaledW = CanvasSize.X;
-						FitW = (ScaledW - SBSGap) * 0.5f;
+						FitW = FMath::Max((CanvasSize.X - SBSGap) * 0.5f, 1.0f);
 						FitH = FitW / AspectRatio;
 					}
 					WidgetSize.X = 2.0f * FitW + SBSGap;
