@@ -42,12 +42,15 @@ void URammsTaskSelector::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Sync button active states with SelectedValue
-	for (auto& Pair : ButtonMap)
+	// Sync button active states with SelectedValue (only in toggle mode)
+	if (bToggleButtons)
 	{
-		if (Pair.Value)
+		for (auto& Pair : ButtonMap)
 		{
-			Pair.Value->SetActive(Pair.Key == SelectedValue);
+			if (Pair.Value)
+			{
+				Pair.Value->SetActive(Pair.Key == SelectedValue);
+			}
 		}
 	}
 }
@@ -87,6 +90,14 @@ void URammsTaskSelector::ApplyStyle_Implementation()
 
 void URammsTaskSelector::SelectTask(int64 EnumValue)
 {
+	if (!bToggleButtons)
+	{
+		// Momentary mode: fire the event but don't persist selection or
+		// active highlight — SelectedValue stays INDEX_NONE.
+		OnTaskSelected.Broadcast(EnumValue);
+		return;
+	}
+
 	if (SelectedValue == EnumValue)
 		return;
 
@@ -111,6 +122,12 @@ void URammsTaskSelector::SelectTask(int64 EnumValue)
 
 void URammsTaskSelector::ClearSelection()
 {
+	if (!bToggleButtons)
+	{
+		// Momentary mode: nothing to clear (SelectedValue is always INDEX_NONE).
+		return;
+	}
+
 	if (SelectedValue == INDEX_NONE)
 		return;
 
@@ -320,7 +337,10 @@ void URammsTaskSelector::RebuildButtons()
 			Btn->SetButtonImage(Def.Image);
 		}
 		Btn->SetButtonEnabled(Def.bEnabled);
-		Btn->SetActive(Def.EnumValue == SelectedValue);
+		if (bToggleButtons)
+		{
+			Btn->SetActive(Def.EnumValue == SelectedValue);
+		}
 
 		if (bWrapLabelText)
 		{
@@ -417,16 +437,24 @@ void URammsTaskSelector::OnButtonClicked()
 	if (ClickedValue == INDEX_NONE)
 		return;
 
-	if (ClickedValue == SelectedValue)
+	if (bToggleButtons)
 	{
-		if (bAllowDeselect)
+		if (ClickedValue == SelectedValue)
 		{
-			ClearSelection();
+			if (bAllowDeselect)
+			{
+				ClearSelection();
+			}
+		}
+		else
+		{
+			SelectTask(ClickedValue);
 		}
 	}
 	else
 	{
-		SelectTask(ClickedValue);
+		// Momentary mode: fire event without persisting active state
+		OnTaskSelected.Broadcast(ClickedValue);
 	}
 }
 

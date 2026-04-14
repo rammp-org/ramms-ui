@@ -20,48 +20,11 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Widgets/Layout/Anchors.h"
 #include "RammsDetectionTypes.h"
+#include "RammsCameraTypes.h"
 #include "RammsCameraWidget.generated.h"
 
 class UCanvasPanelSlot;
 class URammsBoundingBoxOverlay;
-
-/**
- * Display modes for camera widget
- */
-UENUM(BlueprintType)
-enum class ERammsCameraDisplayMode : uint8
-{
-	/** Full screen (fills entire viewport) */
-	Fullscreen,
-
-	/** Large window (centered, takes most of screen) */
-	Windowed,
-
-	/** Corner widget (small, anchored to corner) */
-	Corner,
-
-	/** Widget mode — size determined by parent layout, no viewport % sizing */
-	Widget
-};
-
-/**
- * Which data channel to visualize
- */
-UENUM(BlueprintType)
-enum class ERammsCameraViewMode : uint8
-{
-	/** Show RGB color image */
-	RGB UMETA(DisplayName = "RGB Color"),
-
-	/** Show data stream through visualization material */
-	Data UMETA(DisplayName = "Data (Visualized)"),
-
-	/** Side-by-side RGB + Data */
-	SideBySide UMETA(DisplayName = "Side-by-Side"),
-
-	/** RGB with data overlay (alpha blended) */
-	Overlay UMETA(DisplayName = "RGB + Data Overlay")
-};
 
 /**
  * A named option for a data stream visualization dropdown.
@@ -196,6 +159,16 @@ protected:
 	/** Windowed size (screen percentage) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.3", ClampMax = "1.0"))
 	FVector2D WindowedSize = FVector2D(0.8f, 0.8f);
+
+	/** Fullscreen size (screen percentage).  1.0 = fill the entire axis.
+	 *  Values below 1.0 leave free space around the widget (centered). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	FVector2D FullscreenSize = FVector2D(1.0f, 1.0f);
+
+	/** Padding from the screen edge in DPI-scaled pixels (Fullscreen mode).
+	 *  Applied after FullscreenSize — shrinks the available area inward. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.0"))
+	FVector2D FullscreenPadding = FVector2D(0.0f, 0.0f);
 
 	/** Which display modes are available for cycling (default: all) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
@@ -401,6 +374,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
+
+	/** Image shown instead of text when a style icon override is configured */
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> DisplayModeCycleImage = nullptr;
 
 	/** SizeBoxes wrapping header buttons for style-driven min touch targets */
 	UPROPERTY(Transient)
@@ -811,6 +788,9 @@ protected:
 
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;
+
+	/** Viewport size from last UpdateLayout call — used to detect viewport changes and re-layout */
+	FVector2D CachedLayoutViewportSize = FVector2D::ZeroVector;
 
 	/** Cached MID pointers for material corner param change detection */
 	TWeakObjectPtr<UMaterialInstanceDynamic> LastCornerMID_RGB;

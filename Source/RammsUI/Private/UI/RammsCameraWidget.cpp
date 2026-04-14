@@ -218,10 +218,26 @@ void URammsCameraWidget::BuildWidgetTree()
 			CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
 			CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 		}
+		// Overlay inside button: text label + optional style-driven image icon
+		UOverlay* CycleBtnOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CycleBtnOverlay"));
+		DisplayModeCycleButton->AddChild(CycleBtnOverlay);
+
 		DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
 		DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
 		DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-		DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+		UOverlaySlot* LblSlot = CycleBtnOverlay->AddChildToOverlay(DisplayModeCycleLabel);
+		if (LblSlot)
+			LblSlot->SetHorizontalAlignment(HAlign_Center);
+
+		DisplayModeCycleImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DisplayModeCycleImage"));
+		DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+		DisplayModeCycleImage->SetColorAndOpacity(FLinearColor(0.7f, 0.9f, 0.7f));
+		UOverlaySlot* ImgSlot = CycleBtnOverlay->AddChildToOverlay(DisplayModeCycleImage);
+		if (ImgSlot)
+		{
+			ImgSlot->SetHorizontalAlignment(HAlign_Center);
+			ImgSlot->SetVerticalAlignment(VAlign_Center);
+		}
 
 		// Wrapped label row (shown in narrow mode, below buttons)
 		CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
@@ -474,10 +490,25 @@ void URammsCameraWidget::BuildWidgetTree()
 				CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
 				CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 			}
+			UOverlay* CycleBtnOverlay2 = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CycleBtnOverlay2"));
+			DisplayModeCycleButton->AddChild(CycleBtnOverlay2);
+
 			DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
 			DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
 			DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-			DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+			UOverlaySlot* LblSlot2 = CycleBtnOverlay2->AddChildToOverlay(DisplayModeCycleLabel);
+			if (LblSlot2)
+				LblSlot2->SetHorizontalAlignment(HAlign_Center);
+
+			DisplayModeCycleImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DisplayModeCycleImage"));
+			DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+			DisplayModeCycleImage->SetColorAndOpacity(FLinearColor(0.7f, 0.9f, 0.7f));
+			UOverlaySlot* ImgSlot2 = CycleBtnOverlay2->AddChildToOverlay(DisplayModeCycleImage);
+			if (ImgSlot2)
+			{
+				ImgSlot2->SetHorizontalAlignment(HAlign_Center);
+				ImgSlot2->SetVerticalAlignment(VAlign_Center);
+			}
 
 			// Wrapped label row (shown in narrow mode, below buttons)
 			CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
@@ -800,6 +831,25 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		{
 			CachedHeaderCheckWidth = CurrentWidth;
 			UpdateHeaderLayout();
+		}
+	}
+
+	// Re-layout when the viewport size changes (handles Linux Vulkan late initialization,
+	// window resizes, and any other viewport change after the initial NativeConstruct layout).
+	// Also triggers when the viewport transitions from invalid (0,0) to a valid size.
+	// Defer this while a display mode transition is animating so UpdateLayout() does not
+	// overwrite the temporary absolute-coordinate anchors/alignment used by the lerp.
+	{
+		FVector2D CurrentViewportSize(0, 0);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CurrentViewportSize);
+		}
+		if (!bDisplayModeTransitioning
+			&& CurrentViewportSize.X > 0.0f && CurrentViewportSize.Y > 0.0f
+			&& !CurrentViewportSize.Equals(CachedLayoutViewportSize, 1.0f))
+		{
+			UpdateLayout(false);
 		}
 	}
 
@@ -1166,11 +1216,24 @@ void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 
 void URammsCameraWidget::UpdateLayout(bool bAnimate)
 {
-	// Get viewport size in pixels
-	FVector2D ViewportSize(1920, 1080);
+	// Get viewport size in pixels. Keep this at zero until GameViewport exists
+	// and returns an authoritative size, so late viewport initialization can
+	// still be detected by NativeTick even if the eventual size is 1920x1080.
+	FVector2D ViewportSize = FVector2D::ZeroVector;
 	if (GEngine && GEngine->GameViewport)
 	{
 		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	}
+
+	// Widget mode doesn't use viewport sizing, but all other modes compute
+	// positions/sizes from CanvasSize.  When the viewport hasn't been
+	// initialized yet (returns 0,0), skip the layout to avoid applying bogus
+	// negative/offscreen geometry.  NativeTick will retry once the viewport
+	// becomes valid.
+	const bool bViewportValid = (ViewportSize.X > 0.0f && ViewportSize.Y > 0.0f);
+	if (!bViewportValid && DisplayMode != ERammsCameraDisplayMode::Widget)
+	{
+		return;
 	}
 
 	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
@@ -1179,6 +1242,12 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
+	// Only cache valid viewport sizes so the NativeTick change-detection
+	// can trigger a re-layout when the viewport goes from 0→valid (Linux Vulkan late init)
+	if (bViewportValid)
+	{
+		CachedLayoutViewportSize = ViewportSize;
+	}
 
 	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateLayout: Mode=%d ViewportSize=%.0fx%.0f Scale=%.2f CanvasSize=%.0fx%.0f Slot=%s IsInViewport=%d"),
 		*GetName(), (int32)DisplayMode,
@@ -1191,8 +1260,14 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	float TitleH = 0.0f;
 	if (bCollapsible && TitleBar)
 	{
+		// Force Slate to measure the title bar subtree so GetDesiredSize returns
+		// accurate values even on the very first layout pass (before any Slate tick).
+		TitleBar->ForceLayoutPrepass();
+
 		FVector2D TitleSize = TitleBar->GetDesiredSize();
-		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : 24.0f;
+		// Use style button size as fallback height before first Slate layout pass
+		const float FallbackH = (Style ? Style->Interaction.HeaderButtonMinSize : 32.0f);
+		TitleH = (TitleSize.Y > 0.0f) ? TitleSize.Y : FallbackH;
 	}
 
 	// Minimum width so header buttons never overflow the widget edge
@@ -1200,11 +1275,14 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	if (TitleBar)
 	{
 		float BtnsW = 0.0f;
-		auto  AddBtn = [&BtnsW](USizeBox* Wrapper, UWidget* Btn) {
-			 // Prefer wrapper SizeBox (controls actual visibility/min-size); fall back to raw button
-			 UWidget* W = Wrapper ? static_cast<UWidget*>(Wrapper) : Btn;
-			 if (W && W->GetVisibility() != ESlateVisibility::Collapsed)
-				 BtnsW += W->GetDesiredSize().X + 4.0f;
+		// Use style-configured button min size as floor in case ForceLayoutPrepass
+		// still returned zero (e.g. widget tree not yet fully realized).
+		const float BtnMinSz = (Style ? Style->Interaction.HeaderButtonMinSize : 32.0f);
+		auto		AddBtn = [&BtnsW, BtnMinSz](USizeBox* Wrapper, UWidget* Btn) {
+			   // Prefer wrapper SizeBox (controls actual visibility/min-size); fall back to raw button
+			   UWidget* W = Wrapper ? static_cast<UWidget*>(Wrapper) : Btn;
+			   if (W && W->GetVisibility() != ESlateVisibility::Collapsed)
+				   BtnsW += FMath::Max(W->GetDesiredSize().X, BtnMinSz) + 4.0f;
 		};
 		AddBtn(CollapseBtnSizeBox, CollapseButton);
 		AddBtn(ViewModeBtnSizeBox, ViewModeButton);
@@ -1225,28 +1303,129 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 		case ERammsCameraDisplayMode::Fullscreen:
 		{
 			UnregisterCorner();
-			if (CanvasSlot)
+
+			// Compute effective fullscreen bounds (screen percentage + padding)
+			const bool bCustomFullscreen = (FullscreenSize.X < 1.0f || FullscreenSize.Y < 1.0f
+				|| FullscreenPadding.X > 0.0f || FullscreenPadding.Y > 0.0f);
+
+			if (!bCustomFullscreen)
 			{
-				// Stretch anchors fill entire Canvas Panel
-				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-				CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
-			}
-			else if (bInLayoutContainer)
-			{
-				// In layout container: fill available space (clear size overrides)
-				if (InternalSizeBox)
+				// Default: stretch anchors fill entire canvas (original behavior)
+				if (CanvasSlot)
 				{
-					InternalSizeBox->ClearWidthOverride();
-					InternalSizeBox->ClearHeightOverride();
+					CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+					CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+				}
+				else if (bInLayoutContainer)
+				{
+					if (InternalSizeBox)
+					{
+						InternalSizeBox->ClearWidthOverride();
+						InternalSizeBox->ClearHeightOverride();
+					}
+				}
+				else
+				{
+					SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+					SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+					SetPositionInViewport(FVector2D::ZeroVector, false);
+					SetDesiredSizeInViewport(FVector2D::ZeroVector);
 				}
 			}
 			else
 			{
-				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-				SetPositionInViewport(FVector2D::ZeroVector, false);
-				SetDesiredSizeInViewport(FVector2D::ZeroVector);
+				// Custom fullscreen: apply size percentage and padding
+				FVector2D MaxBounds;
+				MaxBounds.X = CanvasSize.X * FullscreenSize.X - 2.0f * FullscreenPadding.X;
+				MaxBounds.Y = CanvasSize.Y * FullscreenSize.Y - 2.0f * FullscreenPadding.Y;
+				MaxBounds.X = FMath::Max(MaxBounds.X, 1.0f);
+				MaxBounds.Y = FMath::Max(MaxBounds.Y, 1.0f);
+
+				FVector2D SizeInUnits;
+				if (bMaintainAspectRatio && AspectRatio > 0.0f)
+				{
+					const bool		bSBS = (ViewMode == ERammsCameraViewMode::SideBySide);
+					constexpr float SBSGap = 2.0f;
+
+					float AvailH = MaxBounds.Y - TitleH;
+					if (AvailH < 1.0f)
+						AvailH = 1.0f;
+
+					float FitW, FitH;
+					if (MaxBounds.X / AspectRatio <= AvailH)
+					{
+						FitW = MaxBounds.X;
+						FitH = MaxBounds.X / AspectRatio;
+					}
+					else
+					{
+						FitH = AvailH;
+						FitW = AvailH * AspectRatio;
+					}
+
+					if (bSBS && bSBSVertical)
+					{
+						float NeededH = 2.0f * FitH + SBSGap;
+						float MaxH = FMath::Max(MaxBounds.Y - TitleH, SBSGap + 2.0f);
+						if (NeededH > MaxH)
+						{
+							FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
+							FitW = FitH * AspectRatio;
+						}
+						SizeInUnits.X = FitW;
+						SizeInUnits.Y = 2.0f * FitH + SBSGap + TitleH;
+					}
+					else if (bSBS && !bSBSVertical)
+					{
+						float NeededW = 2.0f * FitW + SBSGap;
+						if (NeededW > MaxBounds.X)
+						{
+							FitW = FMath::Max((MaxBounds.X - SBSGap) * 0.5f, 1.0f);
+							FitH = FitW / AspectRatio;
+						}
+						SizeInUnits.X = 2.0f * FitW + SBSGap;
+						SizeInUnits.Y = FitH + TitleH;
+					}
+					else
+					{
+						SizeInUnits.X = FitW;
+						SizeInUnits.Y = FitH + TitleH;
+					}
+				}
+				else
+				{
+					SizeInUnits = MaxBounds;
+				}
+
+				SizeInUnits = ClampToMinHeaderWidth(SizeInUnits, MinHeaderWidth, TitleH);
+
+				if (CanvasSlot)
+				{
+					CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+					CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+					CanvasSlot->SetPosition(FVector2D::ZeroVector);
+					CanvasSlot->SetSize(SizeInUnits);
+					CachedExpandedSlotSize = SizeInUnits;
+				}
+				else if (bInLayoutContainer)
+				{
+					if (InternalSizeBox)
+					{
+						InternalSizeBox->SetWidthOverride(SizeInUnits.X);
+						InternalSizeBox->SetHeightOverride(SizeInUnits.Y);
+					}
+					CachedExpandedSlotSize = SizeInUnits;
+				}
+				else
+				{
+					FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
+					SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+					SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+					SetDesiredSizeInViewport(SizeInUnits);
+					SetPositionInViewport(Position, false);
+				}
 			}
+
 			WidgetPosition = FVector2D::ZeroVector;
 			if (bAnimate)
 				ScaleIn();
@@ -1287,12 +1466,10 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				{
 					// Vertical stack: double height, clamp to screen
 					float NeededH = 2.0f * FitH + SBSGap;
-					float MaxH = CanvasSize.Y - TitleH;
+					float MaxH = FMath::Max(CanvasSize.Y - TitleH, SBSGap + 2.0f);
 					if (NeededH > MaxH)
 					{
-						// Scale down to fit
-						float ScaledH = MaxH;
-						FitH = (ScaledH - SBSGap) * 0.5f;
+						FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
 						FitW = FitH * AspectRatio;
 					}
 					SizeInUnits.X = FitW;
@@ -1304,8 +1481,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 					float NeededW = 2.0f * FitW + SBSGap;
 					if (NeededW > CanvasSize.X)
 					{
-						float ScaledW = CanvasSize.X;
-						FitW = (ScaledW - SBSGap) * 0.5f;
+						FitW = FMath::Max((CanvasSize.X - SBSGap) * 0.5f, 1.0f);
 						FitH = FitW / AspectRatio;
 					}
 					SizeInUnits.X = 2.0f * FitW + SBSGap;
@@ -1401,11 +1577,10 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 				{
 					// Vertical stack: double height, clamp to screen
 					float NeededH = 2.0f * FitH + SBSGap;
-					float MaxH = CanvasSize.Y - TitleH;
+					float MaxH = FMath::Max(CanvasSize.Y - TitleH, SBSGap + 2.0f);
 					if (NeededH > MaxH)
 					{
-						float ScaledH = MaxH;
-						FitH = (ScaledH - SBSGap) * 0.5f;
+						FitH = FMath::Max((MaxH - SBSGap) * 0.5f, 1.0f);
 						FitW = FitH * AspectRatio;
 					}
 					WidgetSize.X = FitW;
@@ -1417,8 +1592,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 					float NeededW = 2.0f * FitW + SBSGap;
 					if (NeededW > CanvasSize.X)
 					{
-						float ScaledW = CanvasSize.X;
-						FitW = (ScaledW - SBSGap) * 0.5f;
+						FitW = FMath::Max((CanvasSize.X - SBSGap) * 0.5f, 1.0f);
 						FitH = FitW / AspectRatio;
 					}
 					WidgetSize.X = 2.0f * FitW + SBSGap;
@@ -2392,13 +2566,13 @@ FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mod
 	switch (Mode)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
-			return TEXT("\u25A0"); // ■ (fullscreen)
+			return TEXT("\u25A3"); // ▣ filled centre = full content
 		case ERammsCameraDisplayMode::Windowed:
-			return TEXT("\u25A1"); // □ (window)
+			return TEXT("\u25A1"); // □ outline = floating window
 		case ERammsCameraDisplayMode::Corner:
-			return TEXT("\u250C"); // ┌ (corner)
+			return TEXT("\u25F0"); // ◰ quarter quadrant = PIP / corner
 		case ERammsCameraDisplayMode::Widget:
-			return TEXT("\u25A3"); // ▣ (widget)
+			return TEXT("\u229E"); // ⊞ squared plus = embedded widget
 		default:
 			return TEXT("?");
 	}
@@ -2416,10 +2590,33 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	else
 		DisplayModeCycleButton->SetVisibility(Vis);
 
-	if (DisplayModeCycleLabel)
+	// Check for a style-driven icon override for the current display mode
+	const FSlateBrush* IconBrush = nullptr;
+	if (Style)
 	{
-		DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
+		IconBrush = Style->Interaction.GetDisplayModeIcon(DisplayMode);
 	}
+
+	if (IconBrush && DisplayModeCycleImage)
+	{
+		// Use image icon — hide text label
+		DisplayModeCycleImage->SetBrush(*IconBrush);
+		DisplayModeCycleImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (DisplayModeCycleLabel)
+			DisplayModeCycleLabel->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		// Use text label — hide image
+		if (DisplayModeCycleLabel)
+		{
+			DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
+			DisplayModeCycleLabel->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+		if (DisplayModeCycleImage)
+			DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
 	// Button visibility/text changed — force header layout re-evaluation
 	CachedHeaderCheckWidth = -1.0f;
 }

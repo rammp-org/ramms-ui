@@ -85,8 +85,8 @@ public:
 	 * material masks to the correct frustum, so oversized bounds only affect
 	 * culling conservatism.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "10.0"))
-	float DecalBoundsInflation = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection", meta = (ClampMin = "1.0", ClampMax = "1000.0"))
+	float DecalBoundsInflation = 10.0f;
 
 	/** Stencil value that target surfaces must have (set 0 to disable filtering) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projection")
