@@ -455,6 +455,50 @@ struct FRammsInteractionStyle
 	{
 		return (ActionButtonLabelFont.Size > 0) ? ActionButtonLabelFont : Fallback;
 	}
+
+	// --- Display-mode icon overrides (camera widget header) ---
+	// When a brush has a valid image resource it replaces the default Unicode text.
+
+	/** Icon for Fullscreen display mode (replaces Unicode text when set) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush FullscreenModeIcon;
+
+	/** Icon for Windowed display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush WindowedModeIcon;
+
+	/** Icon for Corner / PIP display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush CornerModeIcon;
+
+	/** Icon for Widget (embedded) display mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
+	FSlateBrush WidgetModeIcon;
+
+	/** Returns the icon brush for a display mode, or nullptr if not configured.
+	 *  @param ModeIndex  Cast of ERammsCameraDisplayMode (0=FS, 1=Win, 2=Corner, 3=Widget) */
+	const FSlateBrush* GetDisplayModeIcon(uint8 ModeIndex) const
+	{
+		const FSlateBrush* Brush = nullptr;
+		switch (ModeIndex)
+		{
+			case 0:
+				Brush = &FullscreenModeIcon;
+				break;
+			case 1:
+				Brush = &WindowedModeIcon;
+				break;
+			case 2:
+				Brush = &CornerModeIcon;
+				break;
+			case 3:
+				Brush = &WidgetModeIcon;
+				break;
+			default:
+				return nullptr;
+		}
+		return (Brush && Brush->GetResourceObject()) ? Brush : nullptr;
+	}
 };
 
 /**

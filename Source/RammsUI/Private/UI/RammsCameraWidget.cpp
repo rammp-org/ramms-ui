@@ -218,10 +218,26 @@ void URammsCameraWidget::BuildWidgetTree()
 			CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
 			CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 		}
+		// Overlay inside button: text label + optional style-driven image icon
+		UOverlay* CycleBtnOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CycleBtnOverlay"));
+		DisplayModeCycleButton->AddChild(CycleBtnOverlay);
+
 		DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
 		DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
 		DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-		DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+		UOverlaySlot* LblSlot = CycleBtnOverlay->AddChildToOverlay(DisplayModeCycleLabel);
+		if (LblSlot)
+			LblSlot->SetHorizontalAlignment(HAlign_Center);
+
+		DisplayModeCycleImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DisplayModeCycleImage"));
+		DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+		DisplayModeCycleImage->SetColorAndOpacity(FLinearColor(0.7f, 0.9f, 0.7f));
+		UOverlaySlot* ImgSlot = CycleBtnOverlay->AddChildToOverlay(DisplayModeCycleImage);
+		if (ImgSlot)
+		{
+			ImgSlot->SetHorizontalAlignment(HAlign_Center);
+			ImgSlot->SetVerticalAlignment(VAlign_Center);
+		}
 
 		// Wrapped label row (shown in narrow mode, below buttons)
 		CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
@@ -474,10 +490,25 @@ void URammsCameraWidget::BuildWidgetTree()
 				CycleBtnSlot->SetVerticalAlignment(VAlign_Center);
 				CycleBtnSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
 			}
+			UOverlay* CycleBtnOverlay2 = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CycleBtnOverlay2"));
+			DisplayModeCycleButton->AddChild(CycleBtnOverlay2);
+
 			DisplayModeCycleLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("DisplayModeCycleLabel"));
 			DisplayModeCycleLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.9f, 0.7f)));
 			DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
-			DisplayModeCycleButton->AddChild(DisplayModeCycleLabel);
+			UOverlaySlot* LblSlot2 = CycleBtnOverlay2->AddChildToOverlay(DisplayModeCycleLabel);
+			if (LblSlot2)
+				LblSlot2->SetHorizontalAlignment(HAlign_Center);
+
+			DisplayModeCycleImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DisplayModeCycleImage"));
+			DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+			DisplayModeCycleImage->SetColorAndOpacity(FLinearColor(0.7f, 0.9f, 0.7f));
+			UOverlaySlot* ImgSlot2 = CycleBtnOverlay2->AddChildToOverlay(DisplayModeCycleImage);
+			if (ImgSlot2)
+			{
+				ImgSlot2->SetHorizontalAlignment(HAlign_Center);
+				ImgSlot2->SetVerticalAlignment(VAlign_Center);
+			}
 
 			// Wrapped label row (shown in narrow mode, below buttons)
 			CameraLabelWrap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraLabelWrap"));
@@ -2458,13 +2489,13 @@ FString URammsCameraWidget::GetDisplayModeShortLabel(ERammsCameraDisplayMode Mod
 	switch (Mode)
 	{
 		case ERammsCameraDisplayMode::Fullscreen:
-			return TEXT("\u25A0"); // ■ (fullscreen)
+			return TEXT("\u25A3"); // ▣ filled centre = full content
 		case ERammsCameraDisplayMode::Windowed:
-			return TEXT("\u25A1"); // □ (window)
+			return TEXT("\u25A1"); // □ outline = floating window
 		case ERammsCameraDisplayMode::Corner:
-			return TEXT("\u250C"); // ┌ (corner)
+			return TEXT("\u25F0"); // ◰ quarter quadrant = PIP / corner
 		case ERammsCameraDisplayMode::Widget:
-			return TEXT("\u25A3"); // ▣ (widget)
+			return TEXT("\u229E"); // ⊞ squared plus = embedded widget
 		default:
 			return TEXT("?");
 	}
@@ -2482,10 +2513,33 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	else
 		DisplayModeCycleButton->SetVisibility(Vis);
 
-	if (DisplayModeCycleLabel)
+	// Check for a style-driven icon override for the current display mode
+	const FSlateBrush* IconBrush = nullptr;
+	if (Style)
 	{
-		DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
+		IconBrush = Style->Interaction.GetDisplayModeIcon(static_cast<uint8>(DisplayMode));
 	}
+
+	if (IconBrush && DisplayModeCycleImage)
+	{
+		// Use image icon — hide text label
+		DisplayModeCycleImage->SetBrush(*IconBrush);
+		DisplayModeCycleImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (DisplayModeCycleLabel)
+			DisplayModeCycleLabel->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		// Use text label — hide image
+		if (DisplayModeCycleLabel)
+		{
+			DisplayModeCycleLabel->SetText(FText::FromString(GetDisplayModeShortLabel(DisplayMode)));
+			DisplayModeCycleLabel->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+		if (DisplayModeCycleImage)
+			DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
 	// Button visibility/text changed — force header layout re-evaluation
 	CachedHeaderCheckWidth = -1.0f;
 }
