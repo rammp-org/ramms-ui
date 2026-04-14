@@ -99,8 +99,17 @@ public:
 		meta = (EditCondition = "bAutoGenerateFromEnum"))
 	TArray<FRammsTaskIconMapping> IconOverrides;
 
-	/** Allow clicking the active task to deselect it (nothing selected). */
+	/** When true, buttons act as toggles: the selected button shows a
+	 *  persistent active highlight with radio-group mutual exclusion.
+	 *  When false, buttons are momentary — clicking fires OnTaskSelected
+	 *  but no visual active state persists. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tasks")
+	bool bToggleButtons = true;
+
+	/** Allow clicking the active task to deselect it (nothing selected).
+	 *  Only meaningful when bToggleButtons is true. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tasks",
+		meta = (EditCondition = "bToggleButtons"))
 	bool bAllowDeselect = true;
 
 	// ── Layout ───────────────────────────────────────────────────
