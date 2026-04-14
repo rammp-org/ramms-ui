@@ -475,6 +475,14 @@ struct FRammsInteractionStyle
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
 	FSlateBrush WidgetModeIcon;
 
+	/** Returns true if the brush is configured with a drawable resource. */
+	static bool IsConfiguredIconBrush(const FSlateBrush* Brush)
+	{
+		return Brush
+			&& Brush->DrawAs != ESlateBrushDrawType::NoDrawType
+			&& (Brush->GetResourceObject() != nullptr || Brush->GetResourceName() != NAME_None);
+	}
+
 	/** Returns the icon brush for a display mode, or nullptr if not configured.
 	 *  @param ModeIndex  Cast of ERammsCameraDisplayMode (0=FS, 1=Win, 2=Corner, 3=Widget) */
 	const FSlateBrush* GetDisplayModeIcon(uint8 ModeIndex) const
@@ -497,7 +505,7 @@ struct FRammsInteractionStyle
 			default:
 				return nullptr;
 		}
-		return (Brush && Brush->GetResourceObject()) ? Brush : nullptr;
+		return IsConfiguredIconBrush(Brush) ? Brush : nullptr;
 	}
 };
 
