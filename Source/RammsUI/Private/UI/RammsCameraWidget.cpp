@@ -1174,6 +1174,17 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 		GEngine->GameViewport->GetViewportSize(ViewportSize);
 	}
 
+	// Widget mode doesn't use viewport sizing, but all other modes compute
+	// positions/sizes from CanvasSize.  When the viewport hasn't been
+	// initialized yet (returns 0,0), skip the layout to avoid applying bogus
+	// negative/offscreen geometry.  NativeTick will retry once the viewport
+	// becomes valid.
+	const bool bViewportValid = (ViewportSize.X > 0.0f && ViewportSize.Y > 0.0f);
+	if (!bViewportValid && DisplayMode != ERammsCameraDisplayMode::Widget)
+	{
+		return;
+	}
+
 	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
 	if (ViewportScale <= 0.0f)
 		ViewportScale = 1.0f;
@@ -1182,7 +1193,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
 	// Only cache valid viewport sizes so the NativeTick change-detection
 	// can trigger a re-layout when the viewport goes from 0→valid (Linux Vulkan late init)
-	if (ViewportSize.X > 0.0f && ViewportSize.Y > 0.0f)
+	if (bViewportValid)
 	{
 		CachedLayoutViewportSize = ViewportSize;
 	}
