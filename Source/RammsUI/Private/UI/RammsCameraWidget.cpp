@@ -752,6 +752,22 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		}
 	}
 
+	// Re-layout when the viewport size changes (handles Linux Vulkan late initialization,
+	// window resizes, and any other viewport change after the initial NativeConstruct layout)
+	if (CachedLayoutViewportSize.X > 0.0f)
+	{
+		FVector2D CurrentViewportSize(0, 0);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(CurrentViewportSize);
+		}
+		if (CurrentViewportSize.X > 0.0f && CurrentViewportSize.Y > 0.0f
+			&& !CurrentViewportSize.Equals(CachedLayoutViewportSize, 1.0f))
+		{
+			UpdateLayout(false);
+		}
+	}
+
 	// Display mode transition animation (smooth size/position interpolation)
 	if (bDisplayModeTransitioning)
 	{
@@ -1128,6 +1144,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 
 	// Canvas Panel coordinate space = viewport pixels / DPI scale
 	FVector2D CanvasSize = ViewportSize / ViewportScale;
+	CachedLayoutViewportSize = ViewportSize;
 
 	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] UpdateLayout: Mode=%d ViewportSize=%.0fx%.0f Scale=%.2f CanvasSize=%.0fx%.0f Slot=%s IsInViewport=%d"),
 		*GetName(), (int32)DisplayMode,
@@ -1174,28 +1191,131 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 		case ERammsCameraDisplayMode::Fullscreen:
 		{
 			UnregisterCorner();
-			if (CanvasSlot)
+
+			// Compute effective fullscreen bounds (screen percentage + padding)
+			const bool bCustomFullscreen = (FullscreenSize.X < 1.0f || FullscreenSize.Y < 1.0f
+				|| FullscreenPadding.X > 0.0f || FullscreenPadding.Y > 0.0f);
+
+			if (!bCustomFullscreen)
 			{
-				// Stretch anchors fill entire Canvas Panel
-				CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-				CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
-			}
-			else if (bInLayoutContainer)
-			{
-				// In layout container: fill available space (clear size overrides)
-				if (InternalSizeBox)
+				// Default: stretch anchors fill entire canvas (original behavior)
+				if (CanvasSlot)
 				{
-					InternalSizeBox->ClearWidthOverride();
-					InternalSizeBox->ClearHeightOverride();
+					CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+					CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+				}
+				else if (bInLayoutContainer)
+				{
+					if (InternalSizeBox)
+					{
+						InternalSizeBox->ClearWidthOverride();
+						InternalSizeBox->ClearHeightOverride();
+					}
+				}
+				else
+				{
+					SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+					SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+					SetPositionInViewport(FVector2D::ZeroVector, false);
+					SetDesiredSizeInViewport(FVector2D::ZeroVector);
 				}
 			}
 			else
 			{
-				SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-				SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
-				SetPositionInViewport(FVector2D::ZeroVector, false);
-				SetDesiredSizeInViewport(FVector2D::ZeroVector);
+				// Custom fullscreen: apply size percentage and padding
+				FVector2D MaxBounds;
+				MaxBounds.X = CanvasSize.X * FullscreenSize.X - 2.0f * FullscreenPadding.X;
+				MaxBounds.Y = CanvasSize.Y * FullscreenSize.Y - 2.0f * FullscreenPadding.Y;
+				MaxBounds.X = FMath::Max(MaxBounds.X, 1.0f);
+				MaxBounds.Y = FMath::Max(MaxBounds.Y, 1.0f);
+
+				FVector2D SizeInUnits;
+				if (bMaintainAspectRatio && AspectRatio > 0.0f)
+				{
+					const bool		bSBS = (ViewMode == ERammsCameraViewMode::SideBySide);
+					constexpr float SBSGap = 2.0f;
+
+					float AvailH = MaxBounds.Y - TitleH;
+					if (AvailH < 1.0f)
+						AvailH = 1.0f;
+
+					float FitW, FitH;
+					if (MaxBounds.X / AspectRatio <= AvailH)
+					{
+						FitW = MaxBounds.X;
+						FitH = MaxBounds.X / AspectRatio;
+					}
+					else
+					{
+						FitH = AvailH;
+						FitW = AvailH * AspectRatio;
+					}
+
+					if (bSBS && bSBSVertical)
+					{
+						float NeededH = 2.0f * FitH + SBSGap;
+						float MaxH = MaxBounds.Y - TitleH;
+						if (NeededH > MaxH)
+						{
+							float ScaledH = MaxH;
+							FitH = (ScaledH - SBSGap) * 0.5f;
+							FitW = FitH * AspectRatio;
+						}
+						SizeInUnits.X = FitW;
+						SizeInUnits.Y = 2.0f * FitH + SBSGap + TitleH;
+					}
+					else if (bSBS && !bSBSVertical)
+					{
+						float NeededW = 2.0f * FitW + SBSGap;
+						if (NeededW > MaxBounds.X)
+						{
+							float ScaledW = MaxBounds.X;
+							FitW = (ScaledW - SBSGap) * 0.5f;
+							FitH = FitW / AspectRatio;
+						}
+						SizeInUnits.X = 2.0f * FitW + SBSGap;
+						SizeInUnits.Y = FitH + TitleH;
+					}
+					else
+					{
+						SizeInUnits.X = FitW;
+						SizeInUnits.Y = FitH + TitleH;
+					}
+				}
+				else
+				{
+					SizeInUnits = MaxBounds;
+				}
+
+				SizeInUnits = ClampToMinHeaderWidth(SizeInUnits, MinHeaderWidth, TitleH);
+
+				if (CanvasSlot)
+				{
+					CanvasSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+					CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+					CanvasSlot->SetPosition(FVector2D::ZeroVector);
+					CanvasSlot->SetSize(SizeInUnits);
+					CachedExpandedSlotSize = SizeInUnits;
+				}
+				else if (bInLayoutContainer)
+				{
+					if (InternalSizeBox)
+					{
+						InternalSizeBox->SetWidthOverride(SizeInUnits.X);
+						InternalSizeBox->SetHeightOverride(SizeInUnits.Y);
+					}
+					CachedExpandedSlotSize = SizeInUnits;
+				}
+				else
+				{
+					FVector2D Position = (CanvasSize - SizeInUnits) * 0.5f;
+					SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+					SetAlignmentInViewport(FVector2D(0.0f, 0.0f));
+					SetDesiredSizeInViewport(SizeInUnits);
+					SetPositionInViewport(Position, false);
+				}
 			}
+
 			WidgetPosition = FVector2D::ZeroVector;
 			if (bAnimate)
 				ScaleIn();

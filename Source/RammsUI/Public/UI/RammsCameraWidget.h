@@ -197,6 +197,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.3", ClampMax = "1.0"))
 	FVector2D WindowedSize = FVector2D(0.8f, 0.8f);
 
+	/** Fullscreen size (screen percentage).  1.0 = fill the entire axis.
+	 *  Values below 1.0 leave free space around the widget (centered). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	FVector2D FullscreenSize = FVector2D(1.0f, 1.0f);
+
+	/** Padding from the screen edge in DPI-scaled pixels (Fullscreen mode).
+	 *  Applied after FullscreenSize — shrinks the available area inward. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display", meta = (ClampMin = "0.0"))
+	FVector2D FullscreenPadding = FVector2D(0.0f, 0.0f);
+
 	/** Which display modes are available for cycling (default: all) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
 	TArray<ERammsCameraDisplayMode> AllowedDisplayModes = {
@@ -811,6 +821,9 @@ protected:
 
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;
+
+	/** Viewport size from last UpdateLayout call — used to detect viewport changes and re-layout */
+	FVector2D CachedLayoutViewportSize = FVector2D::ZeroVector;
 
 	/** Cached MID pointers for material corner param change detection */
 	TWeakObjectPtr<UMaterialInstanceDynamic> LastCornerMID_RGB;
