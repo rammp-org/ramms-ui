@@ -2517,7 +2517,7 @@ void URammsCameraWidget::UpdateDisplayModeCycleButton()
 	const FSlateBrush* IconBrush = nullptr;
 	if (Style)
 	{
-		IconBrush = Style->Interaction.GetDisplayModeIcon(static_cast<uint8>(DisplayMode));
+		IconBrush = Style->Interaction.GetDisplayModeIcon(DisplayMode);
 	}
 
 	if (IconBrush && DisplayModeCycleImage)

@@ -6,6 +6,7 @@
 #include "Engine/DataAsset.h"
 #include "Styling/SlateBrush.h"
 #include "Fonts/SlateFontInfo.h"
+#include "RammsCameraTypes.h"
 #include "RammsUIStyle.generated.h"
 
 /**
@@ -475,37 +476,33 @@ struct FRammsInteractionStyle
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
 	FSlateBrush WidgetModeIcon;
 
-	/** Returns true if the brush is configured with a drawable resource. */
-	static bool IsConfiguredIconBrush(const FSlateBrush* Brush)
-	{
-		return Brush
-			&& Brush->DrawAs != ESlateBrushDrawType::NoDrawType
-			&& (Brush->GetResourceObject() != nullptr || Brush->GetResourceName() != NAME_None);
-	}
-
-	/** Returns the icon brush for a display mode, or nullptr if not configured.
-	 *  @param ModeIndex  Cast of ERammsCameraDisplayMode (0=FS, 1=Win, 2=Corner, 3=Widget) */
-	const FSlateBrush* GetDisplayModeIcon(uint8 ModeIndex) const
+	/** Returns the icon brush for a display mode, or nullptr if not configured. */
+	const FSlateBrush* GetDisplayModeIcon(ERammsCameraDisplayMode Mode) const
 	{
 		const FSlateBrush* Brush = nullptr;
-		switch (ModeIndex)
+		switch (Mode)
 		{
-			case 0:
+			case ERammsCameraDisplayMode::Fullscreen:
 				Brush = &FullscreenModeIcon;
 				break;
-			case 1:
+			case ERammsCameraDisplayMode::Windowed:
 				Brush = &WindowedModeIcon;
 				break;
-			case 2:
+			case ERammsCameraDisplayMode::Corner:
 				Brush = &CornerModeIcon;
 				break;
-			case 3:
+			case ERammsCameraDisplayMode::Widget:
 				Brush = &WidgetModeIcon;
 				break;
 			default:
 				return nullptr;
 		}
-		return IsConfiguredIconBrush(Brush) ? Brush : nullptr;
+		if (Brush && Brush->DrawAs != ESlateBrushDrawType::NoDrawType
+			&& (Brush->GetResourceObject() != nullptr || Brush->GetResourceName() != NAME_None))
+		{
+			return Brush;
+		}
+		return nullptr;
 	}
 };
 
