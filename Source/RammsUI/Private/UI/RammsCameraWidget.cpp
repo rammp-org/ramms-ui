@@ -1401,7 +1401,7 @@ void URammsCameraWidget::UpdateLayout(bool bAnimate)
 			int32 StackIndex = GetCornerStackIndex();
 			if (StackIndex > 0)
 			{
-				bool  bStackVertically = (AspectRatio >= 1.0f || !bMaintainAspectRatio);
+				bool  bStackVertically = !WidgetSize.IsNearlyZero() ? (WidgetSize.X >= WidgetSize.Y) : (AspectRatio >= 1.0f || !bMaintainAspectRatio);
 				float CumulativeOffset = 0.0f;
 
 				const TArray<TWeakObjectPtr<URammsCameraWidget>>* Stack = CornerRegistry.Find(RegisteredCornerKey);
