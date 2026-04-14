@@ -413,8 +413,8 @@ protected:
 	TObjectPtr<UTextBlock> DisplayModeCycleLabel;
 
 	/** Image shown instead of text when a style icon override is configured */
-	UPROPERTY(Transient)
-	TObjectPtr<UImage> DisplayModeCycleImage;
+	UPROPERTY(Transient, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> DisplayModeCycleImage = nullptr;
 
 	/** SizeBoxes wrapping header buttons for style-driven min touch targets */
 	UPROPERTY(Transient)
