@@ -84,10 +84,13 @@ void URammsImageButton::BuildWidgetTree()
 	if (ButtonImage)
 	{
 		ContentImage->SetBrushFromTexture(ButtonImage);
+		FLinearColor Tint = (bApplyIconTint && Style) ? Style->Colors.IconTint : FLinearColor::White;
+		ContentImage->SetBrushTintColor(FSlateColor(Tint));
 	}
 	else
 	{
-		ContentImage->SetBrushTintColor(FSlateColor(FLinearColor(0.3f, 0.3f, 0.35f)));
+		FLinearColor PlaceholderTint = Style ? Style->Colors.TextDisabled : FLinearColor(0.3f, 0.3f, 0.35f);
+		ContentImage->SetBrushTintColor(FSlateColor(PlaceholderTint));
 	}
 	ImageSizeBox->AddChild(ContentImage);
 
@@ -169,7 +172,8 @@ void URammsImageButton::SynchronizeProperties()
 		if (ButtonImage)
 		{
 			ContentImage->SetBrushFromTexture(ButtonImage);
-			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor::White));
+			FLinearColor Tint = (bApplyIconTint && Style) ? Style->Colors.IconTint : FLinearColor::White;
+			ContentImage->SetBrushTintColor(FSlateColor(Tint));
 		}
 		else
 		{
@@ -195,7 +199,8 @@ void URammsImageButton::SetButtonImage(UTexture2D* Texture)
 		if (Texture)
 		{
 			ContentImage->SetBrushFromTexture(Texture);
-			ContentImage->SetBrushTintColor(FSlateColor(FLinearColor::White));
+			FLinearColor Tint = (bApplyIconTint && Style) ? Style->Colors.IconTint : FLinearColor::White;
+			ContentImage->SetBrushTintColor(FSlateColor(Tint));
 		}
 		else
 		{
@@ -269,6 +274,14 @@ void URammsImageButton::SetCustomSize(FVector2D NewSize)
 	bUseCustomSize = true;
 	CustomSize = NewSize;
 	ApplySizeOverrides();
+}
+
+void URammsImageButton::SetApplyIconTint(bool bApply)
+{
+	if (bApplyIconTint == bApply)
+		return;
+	bApplyIconTint = bApply;
+	UpdateVisualState();
 }
 
 void URammsImageButton::ApplySizeOverrides()
@@ -374,12 +387,19 @@ void URammsImageButton::UpdateVisualState()
 		Label->SetColorAndOpacity(FSlateColor(TextColor));
 	}
 
-	// Tint image when disabled
+	// Tint image: use style IconTint when enabled (and opted in), desaturated tint when disabled
 	if (ContentImage && ButtonImage)
 	{
-		FLinearColor Tint = bButtonEnabled ? FLinearColor::White
-										   : (Style ? FLinearColor(Style->Colors.TextDisabled.R, Style->Colors.TextDisabled.G, Style->Colors.TextDisabled.B)
-													: FLinearColor(0.5f, 0.5f, 0.5f));
+		FLinearColor Tint = FLinearColor::White;
+		if (!bButtonEnabled)
+		{
+			Tint = Style ? FLinearColor(Style->Colors.TextDisabled.R, Style->Colors.TextDisabled.G, Style->Colors.TextDisabled.B)
+						 : FLinearColor(0.5f, 0.5f, 0.5f);
+		}
+		else if (bApplyIconTint && Style)
+		{
+			Tint = Style->Colors.IconTint;
+		}
 		ContentImage->SetBrushTintColor(FSlateColor(Tint));
 	}
 }

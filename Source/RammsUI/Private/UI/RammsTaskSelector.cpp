@@ -218,9 +218,11 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 
 		// Icon-only overrides for enum values not covered by full overrides
 		TMap<int64, UTexture2D*> IconMap;
+		TMap<int64, bool>		 IconTintMap;
 		for (const FRammsTaskIconMapping& Mapping : IconOverrides)
 		{
 			IconMap.Add(Mapping.EnumValue, Mapping.Icon);
+			IconTintMap.Add(Mapping.EnumValue, Mapping.bApplyIconTint);
 		}
 
 		const int32 Count = TaskEnum->NumEnums();
@@ -259,6 +261,10 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 					{
 						Def.Image = *IconPtr;
 					}
+					if (const bool* TintPtr = IconTintMap.Find(Val))
+					{
+						Def.bApplyIconTint = *TintPtr;
+					}
 				}
 				Merged.Add(MoveTemp(Def));
 			}
@@ -273,6 +279,10 @@ TArray<FRammsTaskDefinition> URammsTaskSelector::BuildMergedTaskList() const
 				if (UTexture2D** IconPtr = IconMap.Find(Val))
 				{
 					Auto.Image = *IconPtr;
+				}
+				if (const bool* TintPtr = IconTintMap.Find(Val))
+				{
+					Auto.bApplyIconTint = *TintPtr;
 				}
 
 				Merged.Add(MoveTemp(Auto));
@@ -337,6 +347,7 @@ void URammsTaskSelector::RebuildButtons()
 			Btn->SetButtonImage(Def.Image);
 		}
 		Btn->SetButtonEnabled(Def.bEnabled);
+		Btn->SetApplyIconTint(Def.bApplyIconTint);
 		if (bToggleButtons)
 		{
 			Btn->SetActive(Def.EnumValue == SelectedValue);

@@ -61,13 +61,14 @@ void URammsCollapsibleContainer::BuildWidgetTree()
 	{
 		LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
+		LabelSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
 	}
 
 	ToggleBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ToggleBtnSizeBox"));
 	ToggleBtnSizeBox->SetMinDesiredWidth(32.0f);
 	ToggleBtnSizeBox->SetMinDesiredHeight(32.0f);
 	ToggleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ToggleButton"));
-	ToggleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+	ToggleButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 	ToggleBtnSizeBox->AddChild(ToggleButton);
 	UHorizontalBoxSlot* BtnSlot = HeaderRow->AddChildToHorizontalBox(ToggleBtnSizeBox);
 	if (BtnSlot)
@@ -79,6 +80,7 @@ void URammsCollapsibleContainer::BuildWidgetTree()
 
 	ToggleIcon = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ToggleIcon"));
 	ToggleIcon->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	ToggleIcon->SetJustification(ETextJustify::Center);
 	ToggleButton->AddChild(ToggleIcon);
 
 	// Content area: SizeBox -> ScrollBox -> VBox -> NamedSlot
