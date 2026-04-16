@@ -57,6 +57,12 @@ void URammsBoundingBoxOverlay::NativeDestruct()
 	Super::NativeDestruct();
 }
 
+void URammsBoundingBoxOverlay::ApplyStyle_Implementation()
+{
+	// Force font cache rebuild on next paint so the style font is picked up
+	CachedFontSize = 0;
+}
+
 void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -210,6 +216,18 @@ FLinearColor URammsBoundingBoxOverlay::ColorFromLabelHash(const FText& Label)
 
 void URammsBoundingBoxOverlay::EnsureLabelFont() const
 {
+	// Style font takes priority when configured
+	if (Style && Style->Interaction.GetBoundingBoxLabelFont())
+	{
+		const FSlateFontInfo& StyleFont = *Style->Interaction.GetBoundingBoxLabelFont();
+		if (CachedFontSize != StyleFont.Size || CachedLabelFont.FontObject != StyleFont.FontObject)
+		{
+			CachedLabelFont = StyleFont;
+			CachedFontSize = StyleFont.Size;
+		}
+		return;
+	}
+
 	if (CachedFontSize != LabelFontSize)
 	{
 		CachedLabelFont = FCoreStyle::GetDefaultFontStyle("Regular", LabelFontSize);

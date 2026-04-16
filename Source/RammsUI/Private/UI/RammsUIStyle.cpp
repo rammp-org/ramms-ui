@@ -27,6 +27,18 @@ void URammsUIStyle::ApplyRoundedBrushToBorder(UBorder* Border, const FSlateBrush
 	}
 }
 
+FButtonStyle URammsUIStyle::MakeTransparentButtonStyle()
+{
+	FButtonStyle Style;
+	Style.Normal.DrawAs = ESlateBrushDrawType::NoDrawType;
+	Style.Hovered.DrawAs = ESlateBrushDrawType::NoDrawType;
+	Style.Pressed.DrawAs = ESlateBrushDrawType::NoDrawType;
+	Style.Disabled.DrawAs = ESlateBrushDrawType::NoDrawType;
+	Style.NormalPadding = FMargin(0);
+	Style.PressedPadding = FMargin(0);
+	return Style;
+}
+
 void URammsUIStyle::ApplyScrollBarStyle(UScrollBox* ScrollBox, const FRammsScrollBarStyle& SBS)
 {
 	if (!ScrollBox)

@@ -71,6 +71,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	float ActiveBorderWidth = 3.0f;
 
+	/** When true, the style's IconTint color is applied to the image.
+	 *  Disable for full-color / photographic images that should not be tinted. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	bool bApplyIconTint = true;
+
 	// Widget references (Transient — rebuilt programmatically)
 	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> RootSizeBox;

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Styling/SlateBrush.h"
+#include "Styling/SlateTypes.h"
 #include "Fonts/SlateFontInfo.h"
 #include "RammsCameraTypes.h"
 #include "RammsUIStyle.generated.h"
@@ -99,6 +100,13 @@ struct FRammsColorPalette
 	/** Information state */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
 	FLinearColor Info = FLinearColor(0.0f, 0.7f, 0.9f, 1.0f); // Cyan
+
+	/** Tint applied to monochrome/transparent icon images so they
+	 *  adapt to the current theme.  White icons on a dark theme should
+	 *  use White; the same icons on a light theme need a dark tint.
+	 *  Default: White (no tint change). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+	FLinearColor IconTint = FLinearColor::White;
 };
 
 /**
@@ -476,6 +484,17 @@ struct FRammsInteractionStyle
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Icons")
 	FSlateBrush WidgetModeIcon;
 
+	/** Font for bounding-box overlay labels.
+	 *  When Size is 0 the overlay falls back to its per-widget LabelFontSize. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fonts")
+	FSlateFontInfo BoundingBoxLabelFont;
+
+	/** Helper: return BoundingBoxLabelFont if configured (Size > 0), else nullptr. */
+	const FSlateFontInfo* GetBoundingBoxLabelFont() const
+	{
+		return (BoundingBoxLabelFont.Size > 0) ? &BoundingBoxLabelFont : nullptr;
+	}
+
 	/** Returns the icon brush for a display mode, or nullptr if not configured. */
 	const FSlateBrush* GetDisplayModeIcon(ERammsCameraDisplayMode Mode) const
 	{
@@ -635,6 +654,9 @@ public:
 	 * Apply a rounded brush to a UBorder widget, syncing to the underlying Slate widget
 	 */
 	static void ApplyRoundedBrushToBorder(class UBorder* Border, const FSlateBrush& Brush);
+
+	/** Return a fully transparent FButtonStyle with zero internal padding. */
+	static FButtonStyle MakeTransparentButtonStyle();
 
 	/**
 	 * Apply scrollbar styling to a UScrollBox.
