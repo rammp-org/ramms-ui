@@ -224,7 +224,7 @@ void URammsBoundingBoxOverlay::EnsureLabelFont() const
 	if (Style && Style->Interaction.GetBoundingBoxLabelFont())
 	{
 		const FSlateFontInfo& StyleFont = *Style->Interaction.GetBoundingBoxLabelFont();
-		if (CachedFontSize != StyleFont.Size || CachedLabelFont.FontObject != StyleFont.FontObject)
+		if (!(CachedLabelFont == StyleFont))
 		{
 			CachedLabelFont = StyleFont;
 			CachedFontSize = StyleFont.Size;
