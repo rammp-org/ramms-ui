@@ -61,6 +61,10 @@ void URammsBoundingBoxOverlay::ApplyStyle_Implementation()
 {
 	// Force font cache rebuild on next paint so the style font is picked up
 	CachedFontSize = 0;
+
+	// Ensure widgets inside invalidation panels are repainted immediately so
+	// the updated style/font is actually picked up.
+	InvalidateLayoutAndVolatility();
 }
 
 void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
