@@ -12,14 +12,144 @@
 #include "Blueprint/UserWidget.h"
 #include "UObject/UObjectIterator.h"
 
-// Static member
-TWeakObjectPtr<URammsNotificationContainer> URammsRemoteBridge::NotificationContainer;
+// ── Static members ─────────────────────────────────────────────────
 
-// Forward declarations — defined below in Notifications/Properties sections
-static UWorld*			  GetPlayWorld();
-static URammsUISubsystem* GetUISubsystem();
+TWeakObjectPtr<URammsNotificationContainer> URammsRemoteBridge::NotificationContainer;
+TWeakObjectPtr<URammsUISubsystem>			URammsRemoteBridge::CachedSubsystem;
+TWeakObjectPtr<UWorld>						URammsRemoteBridge::CachedWorld;
+TArray<TWeakObjectPtr<URammsStatusPanel>>	URammsRemoteBridge::CachedPanels;
+bool										URammsRemoteBridge::bPanelCacheDirty = true;
+TWeakObjectPtr<URammsUIStyle>				URammsRemoteBridge::CachedStyle;
+
+// ── Cache infrastructure ───────────────────────────────────────────
+
+UWorld* URammsRemoteBridge::GetPlayWorld()
+{
+	if (!GEngine)
+		return nullptr;
+
+	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	{
+		if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+		{
+			return Context.World();
+		}
+	}
+	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	{
+		if (Context.WorldType == EWorldType::Editor)
+		{
+			return Context.World();
+		}
+	}
+	return nullptr;
+}
+
+URammsUISubsystem* URammsRemoteBridge::GetCachedSubsystem()
+{
+	// Fast path — cached pointer still valid and world hasn't changed
+	UWorld* World = GetPlayWorld();
+	if (CachedSubsystem.IsValid() && CachedWorld.Get() == World)
+	{
+		return CachedSubsystem.Get();
+	}
+
+	// World changed or cache stale — refresh everything
+	CachedWorld = World;
+	bPanelCacheDirty = true;
+	CachedStyle.Reset();
+
+	if (World)
+	{
+		CachedSubsystem = World->GetSubsystem<URammsUISubsystem>();
+		return CachedSubsystem.Get();
+	}
+
+	CachedSubsystem.Reset();
+	return nullptr;
+}
+
+TArray<URammsStatusPanel*> URammsRemoteBridge::GetCachedPanels()
+{
+	// If world changed, GetCachedSubsystem already set bPanelCacheDirty
+	GetCachedSubsystem();
+
+	// Prune stale weak pointers
+	if (!bPanelCacheDirty)
+	{
+		for (int32 i = CachedPanels.Num() - 1; i >= 0; --i)
+		{
+			if (!CachedPanels[i].IsValid())
+			{
+				CachedPanels.RemoveAtSwap(i);
+				bPanelCacheDirty = true;
+			}
+		}
+	}
+
+	// Full rescan only when dirty (world change, stale ptr found, or first call)
+	if (bPanelCacheDirty)
+	{
+		CachedPanels.Reset();
+		for (TObjectIterator<URammsStatusPanel> It; It; ++It)
+		{
+			URammsStatusPanel* Panel = *It;
+			if (IsValid(Panel) && !Panel->HasAnyFlags(RF_ClassDefaultObject))
+			{
+				CachedPanels.Add(Panel);
+			}
+		}
+		bPanelCacheDirty = false;
+	}
+
+	// Build raw-pointer array for callers
+	TArray<URammsStatusPanel*> Result;
+	Result.Reserve(CachedPanels.Num());
+	for (const TWeakObjectPtr<URammsStatusPanel>& Weak : CachedPanels)
+	{
+		if (URammsStatusPanel* P = Weak.Get())
+		{
+			Result.Add(P);
+		}
+	}
+	return Result;
+}
+
+URammsUIStyle* URammsRemoteBridge::GetCachedStyle()
+{
+	if (CachedStyle.IsValid())
+	{
+		return CachedStyle.Get();
+	}
+
+	// One-time scan — style objects rarely change
+	for (TObjectIterator<URammsBaseWidget> It; It; ++It)
+	{
+		if (IsValid(*It) && !It->HasAnyFlags(RF_ClassDefaultObject))
+		{
+			URammsUIStyle* S = It->GetStyle();
+			if (S)
+			{
+				CachedStyle = S;
+				return S;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void URammsRemoteBridge::InvalidateCache()
+{
+	CachedSubsystem.Reset();
+	CachedWorld.Reset();
+	CachedPanels.Reset();
+	bPanelCacheDirty = true;
+	CachedStyle.Reset();
+	NotificationContainer.Reset();
+}
 
 // ── UI Widget Discovery ────────────────────────────────────────────
+// These are infrequent diagnostic calls — TObjectIterator is acceptable.
 
 TArray<FString> URammsRemoteBridge::GetAllRammsWidgetPaths()
 {
@@ -53,32 +183,18 @@ TArray<FString> URammsRemoteBridge::FindRammsWidgets(const FString& ClassNameFil
 	return Paths;
 }
 
-// ── StatusPanel helpers ────────────────────────────────────────────
-
-static TArray<URammsStatusPanel*> FindAllStatusPanels()
-{
-	TArray<URammsStatusPanel*> Panels;
-	for (TObjectIterator<URammsStatusPanel> It; It; ++It)
-	{
-		URammsStatusPanel* Panel = *It;
-		if (IsValid(Panel) && !Panel->HasAnyFlags(RF_ClassDefaultObject))
-		{
-			Panels.Add(Panel);
-		}
-	}
-	return Panels;
-}
+// ── Status Panel (cached) ──────────────────────────────────────────
 
 int32 URammsRemoteBridge::SetRobotMode(ERammsRobotMode Mode)
 {
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	for (URammsStatusPanel* Panel : Panels)
 	{
 		FRammsRobotState State = Panel->GetCachedRobotState();
 		State.Mode = Mode;
 		Panel->ApplyRemoteState(State);
 	}
-	if (URammsUISubsystem* Sub = GetUISubsystem())
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
 		Sub->UpdateRobotMode(Mode);
 	}
@@ -87,14 +203,14 @@ int32 URammsRemoteBridge::SetRobotMode(ERammsRobotMode Mode)
 
 int32 URammsRemoteBridge::SetBatteryLevel(float Level)
 {
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	for (URammsStatusPanel* Panel : Panels)
 	{
 		FRammsRobotState State = Panel->GetCachedRobotState();
 		State.BatteryLevel = FMath::Clamp(Level, 0.0f, 1.0f);
 		Panel->ApplyRemoteState(State);
 	}
-	if (URammsUISubsystem* Sub = GetUISubsystem())
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
 		Sub->UpdateBatteryLevel(Level);
 	}
@@ -103,15 +219,14 @@ int32 URammsRemoteBridge::SetBatteryLevel(float Level)
 
 int32 URammsRemoteBridge::SetSpeed(float SpeedMPS)
 {
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	for (URammsStatusPanel* Panel : Panels)
 	{
 		FRammsRobotState State = Panel->GetCachedRobotState();
-		// Set speed as forward velocity
 		State.LinearVelocity = FVector(SpeedMPS, 0.0f, 0.0f);
 		Panel->ApplyRemoteState(State);
 	}
-	if (URammsUISubsystem* Sub = GetUISubsystem())
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
 		Sub->UpdateSpeed(SpeedMPS);
 	}
@@ -120,7 +235,7 @@ int32 URammsRemoteBridge::SetSpeed(float SpeedMPS)
 
 int32 URammsRemoteBridge::SetEmergencyStop(bool bActive)
 {
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	for (URammsStatusPanel* Panel : Panels)
 	{
 		FRammsRobotState State = Panel->GetCachedRobotState();
@@ -131,7 +246,7 @@ int32 URammsRemoteBridge::SetEmergencyStop(bool bActive)
 		}
 		Panel->ApplyRemoteState(State);
 	}
-	if (URammsUISubsystem* Sub = GetUISubsystem())
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
 		Sub->UpdateEmergencyStop(bActive);
 	}
@@ -140,19 +255,15 @@ int32 URammsRemoteBridge::SetEmergencyStop(bool bActive)
 
 int32 URammsRemoteBridge::SetRobotState(FRammsRobotState State)
 {
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	for (URammsStatusPanel* Panel : Panels)
 	{
 		Panel->ApplyRemoteState(State);
 	}
 
-	// Also broadcast through the subsystem so any widget can subscribe
-	if (UWorld* World = GetPlayWorld())
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
-		if (URammsUISubsystem* Sub = World->GetSubsystem<URammsUISubsystem>())
-		{
-			Sub->BroadcastRobotStateChanged(State);
-		}
+		Sub->BroadcastRobotStateChanged(State);
 	}
 
 	return Panels.Num();
@@ -160,25 +271,19 @@ int32 URammsRemoteBridge::SetRobotState(FRammsRobotState State)
 
 bool URammsRemoteBridge::GetRobotState(FRammsRobotState& OutState)
 {
-	// Try to get state from the first StatusPanel
-	TArray<URammsStatusPanel*> Panels = FindAllStatusPanels();
+	// Use cached panels — no TObjectIterator scan
+	TArray<URammsStatusPanel*> Panels = GetCachedPanels();
 	if (Panels.Num() > 0)
 	{
 		OutState = Panels[0]->GetCachedRobotState();
 		return true;
 	}
 
-	// Try to find a state provider via object iteration
-	for (TObjectIterator<UObject> It; It; ++It)
+	// Fall back to subsystem's cached robot state
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
-		if (It->GetClass()->ImplementsInterface(URammsStateProvider::StaticClass()))
-		{
-			IRammsStateProvider* Provider = Cast<IRammsStateProvider>(*It);
-			if (Provider)
-			{
-				return Provider->GetRobotState(OutState);
-			}
-		}
+		OutState = Sub->GetCachedRobotState();
+		return true;
 	}
 
 	return false;
@@ -186,47 +291,8 @@ bool URammsRemoteBridge::GetRobotState(FRammsRobotState& OutState)
 
 // ── Notifications ──────────────────────────────────────────────────
 
-// Helper: get the first play world
-static UWorld* GetPlayWorld()
-{
-	if (!GEngine)
-		return nullptr;
-
-	for (const FWorldContext& Context : GEngine->GetWorldContexts())
-	{
-		if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
-		{
-			return Context.World();
-		}
-	}
-	for (const FWorldContext& Context : GEngine->GetWorldContexts())
-	{
-		if (Context.WorldType == EWorldType::Editor)
-		{
-			return Context.World();
-		}
-	}
-	return nullptr;
-}
-
-// Helper: get the style from any existing RAMMS widget
-static URammsUIStyle* GetExistingStyle()
-{
-	for (TObjectIterator<URammsBaseWidget> It; It; ++It)
-	{
-		if (IsValid(*It) && !It->HasAnyFlags(RF_ClassDefaultObject))
-		{
-			URammsUIStyle* S = It->GetStyle();
-			if (S)
-				return S;
-		}
-	}
-	return nullptr;
-}
-
 URammsNotificationContainer* URammsRemoteBridge::GetOrCreateContainer()
 {
-	// Return existing container if still valid and in viewport
 	if (NotificationContainer.IsValid() && NotificationContainer->IsInViewport())
 	{
 		return NotificationContainer.Get();
@@ -240,14 +306,11 @@ URammsNotificationContainer* URammsRemoteBridge::GetOrCreateContainer()
 	if (!PC)
 		return nullptr;
 
-	// Create the container widget
 	URammsNotificationContainer* Container = CreateWidget<URammsNotificationContainer>(PC);
 	if (!Container)
 		return nullptr;
 
-	// Add to viewport at high z-order — container is full-screen with internal right-alignment
 	Container->AddToViewport(100);
-
 	NotificationContainer = Container;
 
 	UE_LOG(LogTemp, Log, TEXT("ShowNotification: Created notification container"));
@@ -272,26 +335,23 @@ bool URammsRemoteBridge::ShowNotification(const FString& Message,
 	if (!PC)
 		return false;
 
-	// Create the notification widget
 	URammsNotificationWidget* Notification = CreateWidget<URammsNotificationWidget>(PC);
 	if (!Notification)
 		return false;
 
-	// Apply style
-	URammsUIStyle* ExistingStyle = GetExistingStyle();
+	// Use cached style instead of TObjectIterator scan
+	URammsUIStyle* ExistingStyle = GetCachedStyle();
 	if (ExistingStyle)
 	{
 		Notification->SetStyle(ExistingStyle);
 	}
 
-	// Set content before adding to container (avoids double SlideIn from NativeConstruct)
 	Notification->SetNotificationContent(
 		FText::FromString(Message),
 		Level,
 		Duration,
 		Title.IsEmpty() ? FText() : FText::FromString(Title));
 
-	// Add to the container's vertical box
 	Container->AddNotification(Notification);
 
 	UE_LOG(LogTemp, Log, TEXT("ShowNotification: '%s' (Level=%d, Duration=%.1f)"),
@@ -307,17 +367,11 @@ int32 URammsRemoteBridge::DismissAllNotifications()
 	return NotificationContainer->DismissAll();
 }
 
-// ── Key-Value Properties ──────────────────────────────────────────
-
-static URammsUISubsystem* GetUISubsystem()
-{
-	UWorld* World = GetPlayWorld();
-	return World ? World->GetSubsystem<URammsUISubsystem>() : nullptr;
-}
+// ── Key-Value Properties (cached subsystem) ───────────────────────
 
 bool URammsRemoteBridge::SetProperty(FName Key, const FString& Value)
 {
-	URammsUISubsystem* Sub = GetUISubsystem();
+	URammsUISubsystem* Sub = GetCachedSubsystem();
 	if (!Sub)
 		return false;
 
@@ -327,7 +381,7 @@ bool URammsRemoteBridge::SetProperty(FName Key, const FString& Value)
 
 bool URammsRemoteBridge::SetProperties(const TMap<FName, FString>& Properties)
 {
-	URammsUISubsystem* Sub = GetUISubsystem();
+	URammsUISubsystem* Sub = GetCachedSubsystem();
 	if (!Sub)
 		return false;
 
@@ -337,19 +391,19 @@ bool URammsRemoteBridge::SetProperties(const TMap<FName, FString>& Properties)
 
 FString URammsRemoteBridge::GetProperty(FName Key)
 {
-	URammsUISubsystem* Sub = GetUISubsystem();
+	URammsUISubsystem* Sub = GetCachedSubsystem();
 	return Sub ? Sub->GetProperty(Key) : FString();
 }
 
 TArray<FName> URammsRemoteBridge::GetAllPropertyKeys()
 {
-	URammsUISubsystem* Sub = GetUISubsystem();
+	URammsUISubsystem* Sub = GetCachedSubsystem();
 	return Sub ? Sub->GetAllPropertyKeys() : TArray<FName>();
 }
 
 bool URammsRemoteBridge::RemoveProperty(FName Key)
 {
-	URammsUISubsystem* Sub = GetUISubsystem();
+	URammsUISubsystem* Sub = GetCachedSubsystem();
 	if (!Sub || !Sub->HasProperty(Key))
 		return false;
 
