@@ -117,12 +117,25 @@ TArray<URammsStatusPanel*> URammsRemoteBridge::GetCachedPanels()
 
 URammsUIStyle* URammsRemoteBridge::GetCachedStyle()
 {
+	// Always source the style from the subsystem's active theme so we
+	// automatically pick up SetTheme() changes without a manual cache
+	// invalidation.
+	if (URammsUISubsystem* Sub = GetCachedSubsystem())
+	{
+		URammsUIStyle* Theme = Sub->GetTheme();
+		if (Theme)
+		{
+			CachedStyle = Theme;
+			return Theme;
+		}
+	}
+
+	// Fallback: scan widgets (e.g. if subsystem has no theme set yet)
 	if (CachedStyle.IsValid())
 	{
 		return CachedStyle.Get();
 	}
 
-	// One-time scan — style objects rarely change
 	for (TObjectIterator<URammsBaseWidget> It; It; ++It)
 	{
 		if (IsValid(*It) && !It->HasAnyFlags(RF_ClassDefaultObject))
@@ -279,11 +292,16 @@ bool URammsRemoteBridge::GetRobotState(FRammsRobotState& OutState)
 		return true;
 	}
 
-	// Fall back to subsystem's cached robot state
+	// Fall back to subsystem's cached robot state — but only if a state
+	// has actually been broadcast.  Otherwise return false to honour the
+	// "no provider found" contract.
 	if (URammsUISubsystem* Sub = GetCachedSubsystem())
 	{
-		OutState = Sub->GetCachedRobotState();
-		return true;
+		if (Sub->HasRobotState())
+		{
+			OutState = Sub->GetCachedRobotState();
+			return true;
+		}
 	}
 
 	return false;
