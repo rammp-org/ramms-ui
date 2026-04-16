@@ -12,6 +12,7 @@
 class URammsStatusPanel;
 class URammsUISubsystem;
 class URammsUIStyle;
+class UWorld;
 
 /**
  * Static function library for Remote Control API integration (UI-specific).
