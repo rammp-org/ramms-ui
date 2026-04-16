@@ -50,6 +50,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
 	TObjectPtr<UTexture2D> ConfirmIcon;
 
+	/** When true, the style's IconTint is applied to the Exit icon.
+	 *  Disable for full-color images that should not be tinted. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
+	bool bApplyExitIconTint = true;
+
+	/** When true, the style's IconTint is applied to the Cancel icon. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
+	bool bApplyCancelIconTint = true;
+
+	/** When true, the style's IconTint is applied to the Confirm icon. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task|Icons")
+	bool bApplyConfirmIconTint = true;
+
 	// Widget references (Transient — rebuilt programmatically)
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;

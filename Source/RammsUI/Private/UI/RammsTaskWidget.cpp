@@ -73,6 +73,7 @@ void URammsTaskWidget::BuildWidgetTree()
 	CancelButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("CancelBtn"));
 	CancelButton->SetLabelText(FText::FromString(TEXT("Cancel")));
 	CancelButton->SetImageSize(ButtonImageSize);
+	CancelButton->SetApplyIconTint(bApplyCancelIconTint);
 	if (CancelIcon)
 		CancelButton->SetButtonImage(CancelIcon);
 	if (Style)
@@ -91,6 +92,7 @@ void URammsTaskWidget::BuildWidgetTree()
 	ExitButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ExitBtn"));
 	ExitButton->SetLabelText(FText::FromString(TEXT("Exit")));
 	ExitButton->SetImageSize(ButtonImageSize);
+	ExitButton->SetApplyIconTint(bApplyExitIconTint);
 	if (ExitIcon)
 		ExitButton->SetButtonImage(ExitIcon);
 	if (Style)
@@ -109,6 +111,7 @@ void URammsTaskWidget::BuildWidgetTree()
 	ConfirmButton = WidgetTree->ConstructWidget<URammsImageButton>(URammsImageButton::StaticClass(), TEXT("ConfirmBtn"));
 	ConfirmButton->SetLabelText(FText::FromString(TEXT("Confirm")));
 	ConfirmButton->SetImageSize(ButtonImageSize);
+	ConfirmButton->SetApplyIconTint(bApplyConfirmIconTint);
 	if (ConfirmIcon)
 		ConfirmButton->SetButtonImage(ConfirmIcon);
 	if (Style)
@@ -206,18 +209,21 @@ void URammsTaskWidget::SynchronizeProperties()
 		if (ExitIcon)
 			ExitButton->SetButtonImage(ExitIcon);
 		ExitButton->SetImageSize(ButtonImageSize);
+		ExitButton->SetApplyIconTint(bApplyExitIconTint);
 	}
 	if (CancelButton)
 	{
 		if (CancelIcon)
 			CancelButton->SetButtonImage(CancelIcon);
 		CancelButton->SetImageSize(ButtonImageSize);
+		CancelButton->SetApplyIconTint(bApplyCancelIconTint);
 	}
 	if (ConfirmButton)
 	{
 		if (ConfirmIcon)
 			ConfirmButton->SetButtonImage(ConfirmIcon);
 		ConfirmButton->SetImageSize(ButtonImageSize);
+		ConfirmButton->SetApplyIconTint(bApplyConfirmIconTint);
 		ConfirmButton->SetVisibility(bShowConfirmButton
 				? ESlateVisibility::Visible
 				: ESlateVisibility::Collapsed);
