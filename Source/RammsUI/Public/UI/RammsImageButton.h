@@ -155,6 +155,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Layout")
 	void SetCustomSize(FVector2D NewSize);
 
+	/** Enable or disable style-driven icon tinting.
+	 *  Disable for full-color / photographic images that should not be tinted. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetApplyIconTint(bool bApply);
+
 protected:
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;

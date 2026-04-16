@@ -276,6 +276,14 @@ void URammsImageButton::SetCustomSize(FVector2D NewSize)
 	ApplySizeOverrides();
 }
 
+void URammsImageButton::SetApplyIconTint(bool bApply)
+{
+	if (bApplyIconTint == bApply)
+		return;
+	bApplyIconTint = bApply;
+	UpdateVisualState();
+}
+
 void URammsImageButton::ApplySizeOverrides()
 {
 	if (!RootSizeBox)
