@@ -101,7 +101,7 @@ TArray<URammsStatusPanel*> URammsRemoteBridge::GetCachedPanels()
 				CachedPanels.Add(Panel);
 			}
 		}
-		bPanelCacheDirty = (CachedPanels.Num() == 0);
+		bPanelCacheDirty = false;
 	}
 
 	// Build raw-pointer array for callers
