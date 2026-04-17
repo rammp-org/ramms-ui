@@ -67,11 +67,25 @@ void URammsBoundingBoxOverlay::ApplyStyle_Implementation()
 	InvalidateLayoutAndVolatility();
 }
 
+// ── Helpers ──────────────────────────────────────────────────────
+
+static const FSlateBrush* GetCachedWhiteBrush()
+{
+	static const FSlateBrush* Brush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+	return Brush;
+}
+
 // ── Effective Line Thickness ─────────────────────────────────────
 
 float URammsBoundingBoxOverlay::GetEffectiveLineThickness() const
 {
-	// Style override takes priority when configured (> 0)
+	// Per-widget override takes priority when explicitly changed from class default
+	const float CDOThickness = GetClass()->GetDefaultObject<URammsBoundingBoxOverlay>()->LineThickness;
+	if (!FMath::IsNearlyEqual(LineThickness, CDOThickness))
+	{
+		return LineThickness;
+	}
+	// Fall back to style when configured (> 0)
 	if (Style && Style->Interaction.BoundingBoxLineThickness > 0.0f)
 	{
 		return Style->Interaction.BoundingBoxLineThickness;
@@ -325,29 +339,43 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 	const float X1 = (Box.Position.X + Box.Size.X) * GeomSize.X;
 	const float Y1 = (Box.Position.Y + Box.Size.Y) * GeomSize.Y;
 
+	const float BoxW = X1 - X0;
+	const float BoxH = Y1 - Y0;
+
+	// Early-out: box too small to meaningfully outline
+	if (BoxW < 1.0f && BoxH < 1.0f)
+	{
+		return;
+	}
+
 	// Draw 4 filled rectangles forming the outline (perfectly joined corners).
 	// Left/right edges span full height including corners; top/bottom fill between.
-	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+	const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
 
 	// Left edge (full height)
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(T, Y1 - Y0 + T), FSlateLayoutTransform(FVector2D(X0 - HalfT, Y0 - HalfT))),
+		Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X0 - HalfT, Y0 - HalfT))),
 		WhiteBrush, ESlateDrawEffect::None, BoxColor);
 
 	// Right edge (full height)
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(T, Y1 - Y0 + T), FSlateLayoutTransform(FVector2D(X1 - HalfT, Y0 - HalfT))),
+		Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X1 - HalfT, Y0 - HalfT))),
 		WhiteBrush, ESlateDrawEffect::None, BoxColor);
 
-	// Top edge (between left and right)
-	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(X1 - X0 - T, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y0 - HalfT))),
-		WhiteBrush, ESlateDrawEffect::None, BoxColor);
+	// Top/bottom edges fill between left and right (width clamped to >= 0)
+	const float InnerW = FMath::Max(0.0f, BoxW - T);
+	if (InnerW > 0.0f)
+	{
+		// Top edge
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+			Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y0 - HalfT))),
+			WhiteBrush, ESlateDrawEffect::None, BoxColor);
 
-	// Bottom edge (between left and right)
-	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(X1 - X0 - T, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y1 - HalfT))),
-		WhiteBrush, ESlateDrawEffect::None, BoxColor);
+		// Bottom edge
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+			Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y1 - HalfT))),
+			WhiteBrush, ESlateDrawEffect::None, BoxColor);
+	}
 
 	// Label
 	if (bShowLabels && !Box.Label.IsEmpty())
@@ -400,7 +428,7 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 
 	// Fill corners with small squares to cover line-join gaps
 	{
-		const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+		const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
 		const float		   HalfT = T * 0.5f;
 		for (int32 i = 0; i < 4; ++i)
 		{
@@ -457,7 +485,7 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 
 	// Fill corners with small squares to cover line-join gaps
 	{
-		const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+		const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
 		const float		   HalfT = T * 0.5f;
 		for (int32 i = 0; i < NumVerts; ++i)
 		{

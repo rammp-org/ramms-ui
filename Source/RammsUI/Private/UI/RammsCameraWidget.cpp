@@ -1761,6 +1761,19 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 				BBoxOverlay->ClearDetections();
 			}
 		}
+
+		// Always re-apply line thickness (0 = reset to overlay class default)
+		if (DetectionLineThickness > 0.0f)
+		{
+			BBoxOverlay->LineThickness = DetectionLineThickness;
+		}
+		else
+		{
+			BBoxOverlay->LineThickness = BBoxOverlay->GetClass()
+											 ->GetDefaultObject<URammsBoundingBoxOverlay>()
+											 ->LineThickness;
+		}
+
 		// Re-subscribe (safe if already subscribed — uses AddUniqueDynamic)
 		if (BBoxOverlay->bAutoSubscribe)
 		{
