@@ -1710,9 +1710,11 @@ void URammsCameraWidget::ApplyDetectionLineThicknessToOverlay()
 	if (DetectionLineThickness > 0.0f)
 	{
 		BBoxOverlay->LineThickness = DetectionLineThickness;
+		BBoxOverlay->bOverrideLineThickness = true;
 	}
 	else
 	{
+		BBoxOverlay->bOverrideLineThickness = false;
 		BBoxOverlay->LineThickness = BBoxOverlay->GetClass()
 										 ->GetDefaultObject<URammsBoundingBoxOverlay>()
 										 ->LineThickness;

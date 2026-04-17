@@ -41,8 +41,12 @@ public:
 
 	/** Line thickness for box outlines (in pixels) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance",
-		meta = (ClampMin = "0.5", ClampMax = "10.0"))
+		meta = (ClampMin = "0.5", ClampMax = "10.0", EditCondition = "bOverrideLineThickness"))
 	float LineThickness = 2.0f;
+
+	/** When true, LineThickness overrides the style's BoundingBoxLineThickness */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
+	bool bOverrideLineThickness = false;
 
 	/** Show label text above each box */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
