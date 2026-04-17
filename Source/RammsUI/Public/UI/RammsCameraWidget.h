@@ -251,7 +251,7 @@ protected:
 	float DetectionLifetime = 0.0f;
 
 	/** Line thickness for bounding-box outlines (in pixels).
-	 *  Forwarded to the bounding box overlay's LineThickness. 0 = use overlay default. */
+	 *  Forwarded to the bounding box overlay's LineThickness. 0 = no per-camera override; allow overlay/style defaults to apply. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection",
 		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "10.0"))
 	float DetectionLineThickness = 0.0f;
