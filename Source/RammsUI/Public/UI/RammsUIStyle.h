@@ -489,6 +489,12 @@ struct FRammsInteractionStyle
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fonts")
 	FSlateFontInfo BoundingBoxLabelFont;
 
+	/** Line thickness for bounding-box / polygon outlines (in pixels).
+	 *  When 0 the overlay falls back to its per-widget LineThickness. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance",
+		meta = (ClampMin = "0.0", ClampMax = "10.0"))
+	float BoundingBoxLineThickness = 0.0f;
+
 	/** Helper: return BoundingBoxLabelFont if configured (Size > 0), else nullptr. */
 	const FSlateFontInfo* GetBoundingBoxLabelFont() const
 	{
