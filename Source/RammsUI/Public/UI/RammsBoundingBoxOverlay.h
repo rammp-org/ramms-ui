@@ -39,14 +39,14 @@ class RAMMSUI_API URammsBoundingBoxOverlay : public URammsBaseWidget
 public:
 	// ── Configuration ───────────────────────────────────────────
 
+	/** When true, LineThickness overrides the style's BoundingBoxLineThickness */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
+	bool bOverrideLineThickness = false;
+
 	/** Line thickness for box outlines (in pixels) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance",
 		meta = (ClampMin = "0.5", ClampMax = "10.0", EditCondition = "bOverrideLineThickness"))
 	float LineThickness = 2.0f;
-
-	/** When true, LineThickness overrides the style's BoundingBoxLineThickness */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
-	bool bOverrideLineThickness = false;
 
 	/** Show label text above each box */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
