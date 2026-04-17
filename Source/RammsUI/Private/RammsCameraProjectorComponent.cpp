@@ -71,8 +71,8 @@ void URammsCameraProjectorComponent::EnsureDecalCreated()
 
 	DecalComponent = NewObject<UDecalComponent>(GetOwner());
 	DecalComponent->SetupAttachment(this);
-	DecalComponent->SetFadeScreenSize(0.0f); // never fade by screen size
 	DecalComponent->RegisterComponent();
+	DecalComponent->SetFadeScreenSize(0.0f); // never fade by screen size
 
 	MaterialInstance = UMaterialInstanceDynamic::Create(ProjectionMaterial, this);
 	DecalComponent->SetDecalMaterial(MaterialInstance);
@@ -122,9 +122,6 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	// DecalSize = half-extents (X=depth, Y=width, Z=height)
 	const float InflatedHalfDepth = HalfDepth * Inflate;
 	DecalComponent->DecalSize = FVector(InflatedHalfDepth, HalfWidth * Inflate, HalfHeight * Inflate);
-
-	// Offset the decal so the near face starts at the camera position
-	DecalComponent->SetRelativeLocation(FVector(InflatedHalfDepth, 0.0f, 0.0f));
 
 	// DecalSize is a raw member — manually dirty the render state so the
 	// render proxy and culling bounds are recalculated.
