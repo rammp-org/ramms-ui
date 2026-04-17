@@ -91,10 +91,12 @@ TArray<URammsStatusPanel*> URammsRemoteBridge::GetCachedPanels()
 	if (bPanelCacheDirty)
 	{
 		CachedPanels.Reset();
+		UWorld* World = CachedWorld.Get();
 		for (TObjectIterator<URammsStatusPanel> It; It; ++It)
 		{
 			URammsStatusPanel* Panel = *It;
-			if (IsValid(Panel) && !Panel->HasAnyFlags(RF_ClassDefaultObject))
+			if (IsValid(Panel) && !Panel->HasAnyFlags(RF_ClassDefaultObject)
+				&& (!World || Panel->GetWorld() == World))
 			{
 				CachedPanels.Add(Panel);
 			}
@@ -128,17 +130,22 @@ URammsUIStyle* URammsRemoteBridge::GetCachedStyle()
 			CachedStyle = Theme;
 			return Theme;
 		}
+		// Theme was explicitly cleared — don't use stale cache
+		CachedStyle.Reset();
+		return nullptr;
 	}
 
-	// Fallback: scan widgets (e.g. if subsystem has no theme set yet)
+	// No subsystem available — fall back to cached or widget scan
 	if (CachedStyle.IsValid())
 	{
 		return CachedStyle.Get();
 	}
 
+	UWorld* World = CachedWorld.Get();
 	for (TObjectIterator<URammsBaseWidget> It; It; ++It)
 	{
-		if (IsValid(*It) && !It->HasAnyFlags(RF_ClassDefaultObject))
+		if (IsValid(*It) && !It->HasAnyFlags(RF_ClassDefaultObject)
+			&& (!World || It->GetWorld() == World))
 		{
 			URammsUIStyle* S = It->GetStyle();
 			if (S)
