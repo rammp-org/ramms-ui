@@ -30,6 +30,11 @@ struct RAMMSUI_API FRammsTaskIconMapping
 	/** Icon texture for the button. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
 	TObjectPtr<UTexture2D> Icon;
+
+	/** When true, the style's IconTint is applied to this icon.
+	 *  Disable for full-color / photographic images that should not be tinted. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
+	bool bApplyIconTint = true;
 };
 
 /**
@@ -55,6 +60,11 @@ struct RAMMSUI_API FRammsTaskDefinition
 	/** Whether this task button is enabled. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
 	bool bEnabled = true;
+
+	/** When true, the style's IconTint is applied to this button's image.
+	 *  Disable for full-color / photographic images that should not be tinted. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Task")
+	bool bApplyIconTint = true;
 };
 
 /**

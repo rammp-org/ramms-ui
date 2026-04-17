@@ -9,6 +9,11 @@
 #include "UI/RammsNotificationContainer.h"
 #include "RammsRemoteBridge.generated.h"
 
+class URammsStatusPanel;
+class URammsUISubsystem;
+class URammsUIStyle;
+class UWorld;
+
 /**
  * Static function library for Remote Control API integration (UI-specific).
  * Provides functions callable via PUT /remote/object/call on the CDO path:
@@ -16,8 +21,9 @@
  *
  * For generic actor/component discovery, use URammsCoreBridge in RammsCore.
  *
- * These use TObjectIterator to find runtime widget instances without needing
- * a world context, making them accessible from the Remote Control HTTP API.
+ * Caches subsystem and widget pointers to avoid TObjectIterator heap scans
+ * on every call (called at 10+ Hz from the Python bridge).  Caches are
+ * lazily populated on first use and re-validated when stale.
  */
 UCLASS()
 class RAMMSUI_API URammsRemoteBridge : public UBlueprintFunctionLibrary
@@ -134,10 +140,41 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
 	static bool RemoveProperty(FName Key);
 
+	/**
+	 * Invalidate all cached pointers. Call when the play world changes
+	 * or widgets are rebuilt (e.g., PIE restart).
+	 */
+	static void InvalidateCache();
+
 private:
 	/** Lazily-created viewport container for notifications */
 	static TWeakObjectPtr<URammsNotificationContainer> NotificationContainer;
 
 	/** Get or create the notification container widget */
 	static URammsNotificationContainer* GetOrCreateContainer();
+
+	// ── Cached pointers (avoid TObjectIterator per call) ─────────
+
+	/** Cached subsystem pointer — validated via weak world reference */
+	static TWeakObjectPtr<URammsUISubsystem> CachedSubsystem;
+	static TWeakObjectPtr<UWorld>			 CachedWorld;
+
+	/** Cached status panels — pruned of stale entries on each access */
+	static TArray<TWeakObjectPtr<URammsStatusPanel>> CachedPanels;
+	static bool										 bPanelCacheDirty;
+
+	/** Cached style pointer for notifications */
+	static TWeakObjectPtr<URammsUIStyle> CachedStyle;
+
+	/** Get the play world (cheap — iterates GEngine world contexts) */
+	static UWorld* GetPlayWorld();
+
+	/** Get or refresh the cached subsystem */
+	static URammsUISubsystem* GetCachedSubsystem();
+
+	/** Get valid cached panels, refreshing if needed */
+	static TArray<URammsStatusPanel*> GetCachedPanels();
+
+	/** Get a cached style pointer */
+	static URammsUIStyle* GetCachedStyle();
 };

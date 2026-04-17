@@ -137,7 +137,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		CollapseBtnSizeBox->SetMinDesiredWidth(32.0f);
 		CollapseBtnSizeBox->SetMinDesiredHeight(32.0f);
 		CollapseButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CollapseButton"));
-		CollapseButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		CollapseButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 		CollapseBtnSizeBox->AddChild(CollapseButton);
 		UHorizontalBoxSlot* CollapseBtnSlot = ButtonRow->AddChildToHorizontalBox(CollapseBtnSizeBox);
 		if (CollapseBtnSlot)
@@ -149,6 +149,7 @@ void URammsCameraWidget::BuildWidgetTree()
 
 		CollapseIcon = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CollapseIcon"));
 		CollapseIcon->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		CollapseIcon->SetJustification(ETextJustify::Center);
 		CollapseButton->AddChild(CollapseIcon);
 
 		// Camera label inline (fills remaining space — visible in wide mode)
@@ -162,6 +163,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		{
 			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			LabelSlot->SetVerticalAlignment(VAlign_Center);
+			LabelSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
 		}
 
 		// View mode toggle button — wrapped in SizeBox for touch target
@@ -169,7 +171,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
 		ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
-		ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		ViewModeButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 		ViewModeBtnSizeBox->AddChild(ViewModeButton);
 		UHorizontalBoxSlot* ViewModeBtnSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 		if (ViewModeBtnSlot)
@@ -189,7 +191,7 @@ void URammsCameraWidget::BuildWidgetTree()
 		OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
 		OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 		OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
-		OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		OptionButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 		OptionBtnSizeBox->AddChild(OptionButton);
 		UHorizontalBoxSlot* OptBtnSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 		if (OptBtnSlot)
@@ -204,12 +206,11 @@ void URammsCameraWidget::BuildWidgetTree()
 		OptionButton->AddChild(OptionLabel);
 		OptionBtnSizeBox->SetVisibility(ESlateVisibility::Collapsed);
 
-		// Display mode cycle button (rightmost) — wrapped in SizeBox
 		DisplayModeBtnSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("DisplayModeBtnSizeBox"));
 		DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
 		DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 		DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
-		DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		DisplayModeCycleButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 		DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
 		UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 		if (CycleBtnSlot)
@@ -227,7 +228,10 @@ void URammsCameraWidget::BuildWidgetTree()
 		DisplayModeCycleLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 10));
 		UOverlaySlot* LblSlot = CycleBtnOverlay->AddChildToOverlay(DisplayModeCycleLabel);
 		if (LblSlot)
+		{
 			LblSlot->SetHorizontalAlignment(HAlign_Center);
+			LblSlot->SetVerticalAlignment(VAlign_Center);
+		}
 
 		DisplayModeCycleImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("DisplayModeCycleImage"));
 		DisplayModeCycleImage->SetVisibility(ESlateVisibility::Collapsed);
@@ -434,6 +438,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			{
 				LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 				LabelSlot->SetVerticalAlignment(VAlign_Center);
+				LabelSlot->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
 			}
 
 			// View mode button in non-collapsible title bar — wrapped in SizeBox
@@ -441,7 +446,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			ViewModeBtnSizeBox->SetMinDesiredWidth(32.0f);
 			ViewModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			ViewModeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ViewModeButton"));
-			ViewModeButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			ViewModeButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 			ViewModeBtnSizeBox->AddChild(ViewModeButton);
 			UHorizontalBoxSlot* VMSlot = ButtonRow->AddChildToHorizontalBox(ViewModeBtnSizeBox);
 			if (VMSlot)
@@ -461,7 +466,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			OptionBtnSizeBox->SetMinDesiredWidth(32.0f);
 			OptionBtnSizeBox->SetMinDesiredHeight(32.0f);
 			OptionButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("OptionButton"));
-			OptionButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			OptionButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 			OptionBtnSizeBox->AddChild(OptionButton);
 			UHorizontalBoxSlot* OptSlot = ButtonRow->AddChildToHorizontalBox(OptionBtnSizeBox);
 			if (OptSlot)
@@ -481,7 +486,7 @@ void URammsCameraWidget::BuildWidgetTree()
 			DisplayModeBtnSizeBox->SetMinDesiredWidth(32.0f);
 			DisplayModeBtnSizeBox->SetMinDesiredHeight(32.0f);
 			DisplayModeCycleButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("DisplayModeCycleButton"));
-			DisplayModeCycleButton->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+			DisplayModeCycleButton->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
 			DisplayModeBtnSizeBox->AddChild(DisplayModeCycleButton);
 			UHorizontalBoxSlot* CycleBtnSlot = ButtonRow->AddChildToHorizontalBox(DisplayModeBtnSizeBox);
 			if (CycleBtnSlot)
@@ -1698,6 +1703,24 @@ int32 URammsCameraWidget::GetEffectiveZOrder() const
 
 // ── Bounding Box Overlay ─────────────────────────────────────────
 
+void URammsCameraWidget::ApplyDetectionLineThicknessToOverlay()
+{
+	if (!BBoxOverlay)
+		return;
+	if (DetectionLineThickness > 0.0f)
+	{
+		BBoxOverlay->LineThickness = DetectionLineThickness;
+		BBoxOverlay->bOverrideLineThickness = true;
+	}
+	else
+	{
+		BBoxOverlay->bOverrideLineThickness = false;
+		BBoxOverlay->LineThickness = BBoxOverlay->GetClass()
+										 ->GetDefaultObject<URammsBoundingBoxOverlay>()
+										 ->LineThickness;
+	}
+}
+
 void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
 	if (!BBoxOverlay && ImageContainerOverlay)
@@ -1717,6 +1740,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 
 			// Forward lifetime setting
 			BBoxOverlay->DetectionLifetime = DetectionLifetime;
+
+			// Forward line thickness override
+			ApplyDetectionLineThicknessToOverlay();
 
 			// Set pane count based on current view mode
 			BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
@@ -1750,6 +1776,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 				BBoxOverlay->ClearDetections();
 			}
 		}
+
+		ApplyDetectionLineThicknessToOverlay();
+
 		// Re-subscribe (safe if already subscribed — uses AddUniqueDynamic)
 		if (BBoxOverlay->bAutoSubscribe)
 		{
