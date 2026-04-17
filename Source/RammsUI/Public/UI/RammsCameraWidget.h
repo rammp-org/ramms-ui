@@ -624,6 +624,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
 	void HideBoundingBoxOverlay();
 
+	/** Apply DetectionLineThickness to the overlay (0 = reset to class default) */
+	void ApplyDetectionLineThicknessToOverlay();
+
 	/** Set detections directly on the overlay (creates overlay if needed) */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
 	void SetDetections(const TArray<FRammsBoundingBox>& InBoxes);

@@ -331,7 +331,6 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 	const FLinearColor BoxColor = ResolveBoxColor(Box, Index);
 	const FVector2D	   GeomSize = Geom.GetLocalSize();
 	const float		   T = GetEffectiveLineThickness();
-	const float		   HalfT = T * 0.5f;
 
 	// Convert normalized coords to local pixel coords
 	const float X0 = Box.Position.X * GeomSize.X;
@@ -348,33 +347,47 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 		return;
 	}
 
-	// Draw 4 filled rectangles forming the outline (perfectly joined corners).
-	// Left/right edges span full height including corners; top/bottom fill between.
-	const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
+	// Thin lines: single MakeLines call (1 draw element, gaps invisible at ≤ 2px)
+	// Thick lines: 4 MakeBox filled rectangles for perfectly joined corners
+	static constexpr float ThickThreshold = 2.0f;
 
-	// Left edge (full height)
-	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X0 - HalfT, Y0 - HalfT))),
-		WhiteBrush, ESlateDrawEffect::None, BoxColor);
-
-	// Right edge (full height)
-	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-		Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X1 - HalfT, Y0 - HalfT))),
-		WhiteBrush, ESlateDrawEffect::None, BoxColor);
-
-	// Top/bottom edges fill between left and right (width clamped to >= 0)
-	const float InnerW = FMath::Max(0.0f, BoxW - T);
-	if (InnerW > 0.0f)
+	if (T <= ThickThreshold)
 	{
-		// Top edge
+		ScratchPoints.SetNumUninitialized(5);
+		ScratchPoints[0] = FVector2D(X0, Y0);
+		ScratchPoints[1] = FVector2D(X1, Y0);
+		ScratchPoints[2] = FVector2D(X1, Y1);
+		ScratchPoints[3] = FVector2D(X0, Y1);
+		ScratchPoints[4] = ScratchPoints[0]; // Close
+		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
+			ScratchPoints, ESlateDrawEffect::None, BoxColor, true, T);
+	}
+	else
+	{
+		const float		   HalfT = T * 0.5f;
+		const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
+
+		// Left edge (full height)
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-			Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y0 - HalfT))),
+			Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X0 - HalfT, Y0 - HalfT))),
 			WhiteBrush, ESlateDrawEffect::None, BoxColor);
 
-		// Bottom edge
+		// Right edge (full height)
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-			Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y1 - HalfT))),
+			Geom.ToPaintGeometry(FVector2D(T, BoxH + T), FSlateLayoutTransform(FVector2D(X1 - HalfT, Y0 - HalfT))),
 			WhiteBrush, ESlateDrawEffect::None, BoxColor);
+
+		// Top/bottom edges fill between left and right (width clamped to >= 0)
+		const float InnerW = FMath::Max(0.0f, BoxW - T);
+		if (InnerW > 0.0f)
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+				Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y0 - HalfT))),
+				WhiteBrush, ESlateDrawEffect::None, BoxColor);
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+				Geom.ToPaintGeometry(FVector2D(InnerW, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y1 - HalfT))),
+				WhiteBrush, ESlateDrawEffect::None, BoxColor);
+		}
 	}
 
 	// Label
@@ -426,7 +439,9 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
 		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, T);
 
-	// Fill corners with small squares to cover line-join gaps
+	// Fill corners with small squares to cover line-join gaps (only needed for thick lines)
+	static constexpr float ThickThreshold = 2.0f;
+	if (T > ThickThreshold)
 	{
 		const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
 		const float		   HalfT = T * 0.5f;
@@ -483,7 +498,9 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
 		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, T);
 
-	// Fill corners with small squares to cover line-join gaps
+	// Fill corners with small squares to cover line-join gaps (only needed for thick lines)
+	static constexpr float ThickThreshold = 2.0f;
+	if (T > ThickThreshold)
 	{
 		const FSlateBrush* WhiteBrush = GetCachedWhiteBrush();
 		const float		   HalfT = T * 0.5f;
@@ -549,7 +566,7 @@ void URammsBoundingBoxOverlay::DrawLabel(const FRammsBoundingBox& Box, const FLi
 	FLinearColor BgColor(0.0f, 0.0f, 0.0f, LabelBackgroundOpacity);
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
 		Geom.ToPaintGeometry(FVector2D(BgWidth, BgHeight), FSlateLayoutTransform(BgPos)),
-		FCoreStyle::Get().GetBrush("GenericWhiteBox"),
+		GetCachedWhiteBrush(),
 		ESlateDrawEffect::None, BgColor);
 
 	// Draw text
@@ -568,6 +585,6 @@ void URammsBoundingBoxOverlay::DrawCentroid(const FVector2D& Center, const FLine
 	// Draw a small filled square as centroid marker
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
 		Geom.ToPaintGeometry(DotSize, FSlateLayoutTransform(DotPos)),
-		FCoreStyle::Get().GetBrush("GenericWhiteBox"),
+		GetCachedWhiteBrush(),
 		ESlateDrawEffect::None, BoxColor);
 }
