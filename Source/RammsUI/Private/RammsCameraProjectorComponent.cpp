@@ -123,14 +123,6 @@ void URammsCameraProjectorComponent::UpdateDecalSize()
 	const float InflatedHalfDepth = HalfDepth * Inflate;
 	DecalComponent->DecalSize = FVector(InflatedHalfDepth, HalfWidth * Inflate, HalfHeight * Inflate);
 
-	// Log the decal size
-	// UE_LOG(LogRammsPGM, Log, TEXT("Updated Decal Size: HalfDepth=%.1f HalfWidth=%.1f HalfHeight=%.1f InflatedHalfDepth=%.1f"),
-	//     HalfDepth, HalfWidth, HalfHeight, InflatedHalfDepth);
-	// UE_LOG(LogRammsPGM, Log, TEXT("DecalSize set to: %s"), *DecalComponent->DecalSize.ToString());
-
-	// // Offset the decal so the near face starts at the camera position
-	// DecalComponent->SetRelativeLocation(FVector(InflatedHalfDepth, 0.0f, 0.0f));
-
 	// DecalSize is a raw member — manually dirty the render state so the
 	// render proxy and culling bounds are recalculated.
 	DecalComponent->MarkRenderStateDirty();
