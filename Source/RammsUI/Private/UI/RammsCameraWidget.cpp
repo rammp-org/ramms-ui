@@ -1703,6 +1703,24 @@ int32 URammsCameraWidget::GetEffectiveZOrder() const
 
 // ── Bounding Box Overlay ─────────────────────────────────────────
 
+void URammsCameraWidget::ApplyDetectionLineThicknessToOverlay()
+{
+	if (!BBoxOverlay)
+		return;
+	if (DetectionLineThickness > 0.0f)
+	{
+		BBoxOverlay->LineThickness = DetectionLineThickness;
+		BBoxOverlay->bOverrideLineThickness = true;
+	}
+	else
+	{
+		BBoxOverlay->bOverrideLineThickness = false;
+		BBoxOverlay->LineThickness = BBoxOverlay->GetClass()
+										 ->GetDefaultObject<URammsBoundingBoxOverlay>()
+										 ->LineThickness;
+	}
+}
+
 void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
 	if (!BBoxOverlay && ImageContainerOverlay)
@@ -1722,6 +1740,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 
 			// Forward lifetime setting
 			BBoxOverlay->DetectionLifetime = DetectionLifetime;
+
+			// Forward line thickness override
+			ApplyDetectionLineThicknessToOverlay();
 
 			// Set pane count based on current view mode
 			BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
@@ -1755,6 +1776,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 				BBoxOverlay->ClearDetections();
 			}
 		}
+
+		ApplyDetectionLineThicknessToOverlay();
+
 		// Re-subscribe (safe if already subscribed — uses AddUniqueDynamic)
 		if (BBoxOverlay->bAutoSubscribe)
 		{
