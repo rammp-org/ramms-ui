@@ -67,6 +67,18 @@ void URammsBoundingBoxOverlay::ApplyStyle_Implementation()
 	InvalidateLayoutAndVolatility();
 }
 
+// ── Effective Line Thickness ─────────────────────────────────────
+
+float URammsBoundingBoxOverlay::GetEffectiveLineThickness() const
+{
+	// Style override takes priority when configured (> 0)
+	if (Style && Style->Interaction.BoundingBoxLineThickness > 0.0f)
+	{
+		return Style->Interaction.BoundingBoxLineThickness;
+	}
+	return LineThickness;
+}
+
 void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -304,6 +316,8 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 {
 	const FLinearColor BoxColor = ResolveBoxColor(Box, Index);
 	const FVector2D	   GeomSize = Geom.GetLocalSize();
+	const float		   T = GetEffectiveLineThickness();
+	const float		   HalfT = T * 0.5f;
 
 	// Convert normalized coords to local pixel coords
 	const float X0 = Box.Position.X * GeomSize.X;
@@ -311,16 +325,29 @@ void URammsBoundingBoxOverlay::DrawRectBox(const FRammsBoundingBox& Box, int32 I
 	const float X1 = (Box.Position.X + Box.Size.X) * GeomSize.X;
 	const float Y1 = (Box.Position.Y + Box.Size.Y) * GeomSize.Y;
 
-	// Draw 4 lines forming the rectangle
-	ScratchPoints.SetNumUninitialized(5);
-	ScratchPoints[0] = FVector2D(X0, Y0);
-	ScratchPoints[1] = FVector2D(X1, Y0);
-	ScratchPoints[2] = FVector2D(X1, Y1);
-	ScratchPoints[3] = FVector2D(X0, Y1);
-	ScratchPoints[4] = FVector2D(X0, Y0);
+	// Draw 4 filled rectangles forming the outline (perfectly joined corners).
+	// Left/right edges span full height including corners; top/bottom fill between.
+	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
 
-	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+	// Left edge (full height)
+	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+		Geom.ToPaintGeometry(FVector2D(T, Y1 - Y0 + T), FSlateLayoutTransform(FVector2D(X0 - HalfT, Y0 - HalfT))),
+		WhiteBrush, ESlateDrawEffect::None, BoxColor);
+
+	// Right edge (full height)
+	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+		Geom.ToPaintGeometry(FVector2D(T, Y1 - Y0 + T), FSlateLayoutTransform(FVector2D(X1 - HalfT, Y0 - HalfT))),
+		WhiteBrush, ESlateDrawEffect::None, BoxColor);
+
+	// Top edge (between left and right)
+	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+		Geom.ToPaintGeometry(FVector2D(X1 - X0 - T, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y0 - HalfT))),
+		WhiteBrush, ESlateDrawEffect::None, BoxColor);
+
+	// Bottom edge (between left and right)
+	FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+		Geom.ToPaintGeometry(FVector2D(X1 - X0 - T, T), FSlateLayoutTransform(FVector2D(X0 + HalfT, Y1 - HalfT))),
+		WhiteBrush, ESlateDrawEffect::None, BoxColor);
 
 	// Label
 	if (bShowLabels && !Box.Label.IsEmpty())
@@ -342,6 +369,7 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 {
 	const FLinearColor BoxColor = ResolveBoxColor(Box, Index);
 	const FVector2D	   GeomSize = Geom.GetLocalSize();
+	const float		   T = GetEffectiveLineThickness();
 
 	// Compute rotated corners
 	const FVector2D Center = Box.GetCenter() * GeomSize;
@@ -368,7 +396,20 @@ void URammsBoundingBoxOverlay::DrawRotatedRectBox(const FRammsBoundingBox& Box, 
 	ScratchPoints[4] = ScratchPoints[0]; // Close
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, T);
+
+	// Fill corners with small squares to cover line-join gaps
+	{
+		const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+		const float		   HalfT = T * 0.5f;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+				Geom.ToPaintGeometry(FVector2D(T, T),
+					FSlateLayoutTransform(ScratchPoints[i] - FVector2D(HalfT, HalfT))),
+				WhiteBrush, ESlateDrawEffect::None, BoxColor);
+		}
+	}
 
 	// Label at top-left corner
 	if (bShowLabels && !Box.Label.IsEmpty())
@@ -392,8 +433,10 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 
 	const FLinearColor BoxColor = ResolveBoxColor(Box, Index);
 	const FVector2D	   GeomSize = Geom.GetLocalSize();
+	const float		   T = GetEffectiveLineThickness();
+	const int32		   NumVerts = Box.PolygonPoints.Num();
 
-	ScratchPoints.Reset(Box.PolygonPoints.Num() + 1);
+	ScratchPoints.Reset(NumVerts + 1);
 	FVector2D MinPt(FLT_MAX, FLT_MAX);
 
 	for (const FVector2D& Pt : Box.PolygonPoints)
@@ -410,7 +453,20 @@ void URammsBoundingBoxOverlay::DrawPolygonBox(const FRammsBoundingBox& Box, int3
 	}
 
 	FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geom.ToPaintGeometry(),
-		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, LineThickness);
+		ScratchPoints, ESlateDrawEffect::None, BoxColor, true, T);
+
+	// Fill corners with small squares to cover line-join gaps
+	{
+		const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush("GenericWhiteBox");
+		const float		   HalfT = T * 0.5f;
+		for (int32 i = 0; i < NumVerts; ++i)
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+				Geom.ToPaintGeometry(FVector2D(T, T),
+					FSlateLayoutTransform(ScratchPoints[i] - FVector2D(HalfT, HalfT))),
+				WhiteBrush, ESlateDrawEffect::None, BoxColor);
+		}
+	}
 
 	if (bShowLabels && !Box.Label.IsEmpty())
 	{

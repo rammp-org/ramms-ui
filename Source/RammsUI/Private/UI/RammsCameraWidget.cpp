@@ -1723,6 +1723,12 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			// Forward lifetime setting
 			BBoxOverlay->DetectionLifetime = DetectionLifetime;
 
+			// Forward line thickness override
+			if (DetectionLineThickness > 0.0f)
+			{
+				BBoxOverlay->LineThickness = DetectionLineThickness;
+			}
+
 			// Set pane count based on current view mode
 			BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
 

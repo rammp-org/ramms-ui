@@ -224,4 +224,7 @@ private:
 
 	/** Ensure CachedLabelFont is up to date */
 	void EnsureLabelFont() const;
+
+	/** Resolve the effective line thickness (style override > per-widget) */
+	float GetEffectiveLineThickness() const;
 };

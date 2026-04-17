@@ -250,6 +250,12 @@ protected:
 		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "60.0"))
 	float DetectionLifetime = 0.0f;
 
+	/** Line thickness for bounding-box outlines (in pixels).
+	 *  Forwarded to the bounding box overlay's LineThickness. 0 = use overlay default. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection",
+		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "10.0"))
+	float DetectionLineThickness = 0.0f;
+
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	bool bMaintainAspectRatio = true;
