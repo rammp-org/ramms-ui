@@ -3386,6 +3386,12 @@ void URammsCameraWidget::UpdateDisplayedImages()
 				}
 				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
+			else if (CameraImage && !CurrentDataTexture)
+			{
+				// Data texture expired/cleared — reset to placeholder appearance
+				CameraImage->SetBrushFromTexture(nullptr);
+				CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+			}
 			break;
 
 		case ERammsCameraViewMode::SideBySide:
@@ -3406,6 +3412,12 @@ void URammsCameraWidget::UpdateDisplayedImages()
 					SetImageBrushFromTexture(DataImage, CurrentDataTexture);
 				}
 				DataImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			else if (DataImage && !CurrentDataTexture)
+			{
+				// Data texture expired/cleared — reset to placeholder appearance
+				DataImage->SetBrushFromTexture(nullptr);
+				DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 			}
 			break;
 
