@@ -807,6 +807,20 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		}
 	}
 
+	// Data texture lifetime expiry — clear stale data when no new frames arrive
+	if (DataTextureLifetime > 0.0f && CurrentDataTexture)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			const double Now = World->GetTimeSeconds();
+			if (Now - LastDataTextureTime >= DataTextureLifetime)
+			{
+				CurrentDataTexture = nullptr;
+				UpdateDisplayedImages();
+			}
+		}
+	}
+
 	// Display mode transition animation (smooth size/position interpolation)
 	if (bDisplayModeTransitioning)
 	{
@@ -1165,6 +1179,13 @@ void URammsCameraWidget::SetTexture(UTexture* Texture)
 void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 {
 	CurrentDataTexture = Texture;
+	if (Texture)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			LastDataTextureTime = World->GetTimeSeconds();
+		}
+	}
 	UpdateDisplayedImages();
 }
 
@@ -2034,6 +2055,10 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	else if (InStreamID == DataStreamID)
 	{
 		CurrentDataTexture = Texture;
+		if (UWorld* World = GetWorld())
+		{
+			LastDataTextureTime = World->GetTimeSeconds();
+		}
 
 		// Auto-detect depth format and refresh material params from provider
 		// using lightweight accessors (avoids full FRammsCameraStreamInfo copy).
@@ -3361,6 +3386,12 @@ void URammsCameraWidget::UpdateDisplayedImages()
 				}
 				CameraImage->SetColorAndOpacity(FLinearColor::White);
 			}
+			else if (CameraImage && !CurrentDataTexture)
+			{
+				// Data texture expired/cleared — reset to placeholder appearance
+				CameraImage->SetBrushFromTexture(nullptr);
+				CameraImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
+			}
 			break;
 
 		case ERammsCameraViewMode::SideBySide:
@@ -3381,6 +3412,12 @@ void URammsCameraWidget::UpdateDisplayedImages()
 					SetImageBrushFromTexture(DataImage, CurrentDataTexture);
 				}
 				DataImage->SetColorAndOpacity(FLinearColor::White);
+			}
+			else if (DataImage && !CurrentDataTexture)
+			{
+				// Data texture expired/cleared — reset to placeholder appearance
+				DataImage->SetBrushFromTexture(nullptr);
+				DataImage->SetColorAndOpacity(FLinearColor(0.05f, 0.05f, 0.05f, 1.0f));
 			}
 			break;
 
