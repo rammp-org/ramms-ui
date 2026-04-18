@@ -137,6 +137,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float OverlayBlendAlpha = 0.4f;
 
+	/**
+	 * Auto-clear the data texture after this many seconds of no new data frames.
+	 * Prevents stale data display when data streaming stops but camera streaming continues.
+	 * 0 = never auto-clear (default).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera",
+		meta = (ClampMin = "0.0", ClampMax = "60.0"))
+	float DataTextureLifetime = 0.0f;
+
 	/** Display mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
 	ERammsCameraDisplayMode DisplayMode = ERammsCameraDisplayMode::Corner;
@@ -348,6 +357,9 @@ protected:
 	/** Current data texture (e.g. depth, mask, flow — UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture> CurrentDataTexture;
+
+	/** World time when data texture was last updated (for lifetime expiry) */
+	double LastDataTextureTime = 0.0;
 
 	/** Second image widget for side-by-side data display */
 	UPROPERTY(Transient)

@@ -807,6 +807,20 @@ void URammsCameraWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		}
 	}
 
+	// Data texture lifetime expiry — clear stale data when no new frames arrive
+	if (DataTextureLifetime > 0.0f && CurrentDataTexture)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			const double Now = World->GetTimeSeconds();
+			if (Now - LastDataTextureTime >= DataTextureLifetime)
+			{
+				CurrentDataTexture = nullptr;
+				UpdateDisplayedImages();
+			}
+		}
+	}
+
 	// Display mode transition animation (smooth size/position interpolation)
 	if (bDisplayModeTransitioning)
 	{
@@ -1165,6 +1179,13 @@ void URammsCameraWidget::SetTexture(UTexture* Texture)
 void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 {
 	CurrentDataTexture = Texture;
+	if (Texture)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			LastDataTextureTime = World->GetTimeSeconds();
+		}
+	}
 	UpdateDisplayedImages();
 }
 
@@ -2034,6 +2055,10 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	else if (InStreamID == DataStreamID)
 	{
 		CurrentDataTexture = Texture;
+		if (UWorld* World = GetWorld())
+		{
+			LastDataTextureTime = World->GetTimeSeconds();
+		}
 
 		// Auto-detect depth format and refresh material params from provider
 		// using lightweight accessors (avoids full FRammsCameraStreamInfo copy).
