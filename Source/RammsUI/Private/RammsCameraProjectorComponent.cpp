@@ -1163,7 +1163,7 @@ void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 
 	if (DecalComponent)
 	{
-		DecalComponent->SetVisibility(bEnabled);
+		DecalComponent->SetVisibility(bProjectionEnabled && !bEnablePGM);
 	}
 
 	if (ProcMeshComponent)
@@ -1175,6 +1175,11 @@ void URammsCameraProjectorComponent::SetProjectionEnabled(bool bEnabled)
 void URammsCameraProjectorComponent::SetPGMEnabled(bool bEnabled)
 {
 	bEnablePGM = bEnabled;
+
+	if (DecalComponent)
+	{
+		DecalComponent->SetVisibility(bProjectionEnabled && !bEnablePGM);
+	}
 
 	if (ProcMeshComponent)
 	{
