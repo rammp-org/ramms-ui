@@ -36,13 +36,19 @@ struct RAMMSCONTROL_API FRammsControlInputBinding
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Binding")
 	ERammsControlInputMode Mode = ERammsControlInputMode::Axis;
 
-	/** Control fed by the action's value (its X for a 2-D action). */
+	/** Control fed by the action's value (its X for a 2-D / 3-D action). May be
+	 *  a wildcard ("linkage.*.height", "motor.*_front_crank"): every control on
+	 *  the surface whose Id matches is driven. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Binding")
 	FName ControlId;
 
-	/** For a 2-D action: the control fed by its Y. */
+	/** For a 2-D / 3-D action: the control(s) fed by its Y. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Binding")
 	FName ControlIdY;
+
+	/** For a 3-D action: the control(s) fed by its Z. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Binding")
+	FName ControlIdZ;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Binding")
 	float Scale = 1.0f;
