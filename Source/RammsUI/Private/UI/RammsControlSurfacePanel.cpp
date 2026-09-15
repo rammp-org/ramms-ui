@@ -237,10 +237,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 			continue;
 		}
 		// A pair of Continuous axes -> joystick (the lower-Order axis is vertical).
-		if (Axis.Kind == ERammsControlKind::Continuous && !Axis.PairedAxis.IsNone())
+		if (Axis.Kind == ERammsControlKind::Continuous && !Axis.bReadOnly && !Axis.PairedAxis.IsNone())
 		{
 			const FRammsControlAxis* Pair = Axes.FindByPredicate([&Axis](const FRammsControlAxis& A) { return A.Id == Axis.PairedAxis; });
-			if (Pair && Pair->Kind == ERammsControlKind::Continuous && !Consumed.Contains(Pair->Id))
+			if (Pair && Pair->Kind == ERammsControlKind::Continuous && !Pair->bReadOnly && !Consumed.Contains(Pair->Id))
 			{
 				const FRammsControlAxis& Vertical = (Axis.Order <= Pair->Order) ? Axis : *Pair;
 				const FRammsControlAxis& Horizontal = (&Vertical == &Axis) ? *Pair : Axis;

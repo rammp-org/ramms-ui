@@ -136,6 +136,10 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 	if (Axis.IsAction())
 	{
 		ActionButton = CreateWidget<URammsButton>(this);
+		if (Style)
+		{
+			ActionButton->SetStyle(Style); // nested user widget: outside our tree, styled by hand
+		}
 		ActionButton->SetText(Label);
 		ActionButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnActionClicked);
 		UHorizontalBoxSlot* BoxSlot = RootBox->AddChildToHorizontalBox(ActionButton);
@@ -144,7 +148,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			BoxSlot->SetPadding(FMargin(0.0f, 2.0f));
 		}
 	}
-	else if (Axis.Kind == ERammsControlKind::Continuous)
+	else if (Axis.Kind == ERammsControlKind::Continuous && !Axis.bReadOnly)
 	{
 		// Rate axis: label, live value, hold buttons.
 		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateLabel"));
@@ -207,6 +211,10 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		// "defer to the backend") still needs slider limits: a display range by
 		// units, which only shapes the slider — the sink does not clamp to it.
 		AxisControl = CreateWidget<URammsAxisControl>(this);
+		if (Style)
+		{
+			AxisControl->SetStyle(Style); // nested user widget: outside our tree, styled by hand
+		}
 		FRammsAxisConfig Config;
 		Config.Label = Label;
 		Config.IconSize = FVector2D::ZeroVector; // no icon: don't reserve the box
@@ -407,6 +415,14 @@ void URammsControlRow::ApplyStyle_Implementation()
 	if (!Style)
 	{
 		return;
+	}
+	if (AxisControl)
+	{
+		AxisControl->SetStyle(Style);
+	}
+	if (ActionButton)
+	{
+		ActionButton->SetStyle(Style);
 	}
 	if (LiveLabel)
 	{

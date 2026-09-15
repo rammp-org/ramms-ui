@@ -141,3 +141,22 @@ void URammsSurfaceJoystick::SetRadii(float InJoystickRadius, float InThumbRadius
 	}
 	JoystickCenter = FVector2D(JoystickRadius, JoystickRadius);
 }
+
+FReply URammsSurfaceJoystick::NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	return NativeOnMouseButtonDown(InGeometry, InGestureEvent);
+}
+
+FReply URammsSurfaceJoystick::NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	return NativeOnMouseMove(InGeometry, InGestureEvent);
+}
+
+FReply URammsSurfaceJoystick::NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	// Also covers a cancelled touch: the base's release recentres and the
+	// released delegate lets the axes go.
+	const FReply Reply = NativeOnMouseButtonUp(InGeometry, InGestureEvent);
+	Release();
+	return Reply;
+}

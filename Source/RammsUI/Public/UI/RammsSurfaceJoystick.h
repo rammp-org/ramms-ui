@@ -66,6 +66,13 @@ public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
+	// Real touch (a tablet, the Pixel Streaming page) arrives through the touch
+	// overrides; route it to the base joystick's pointer handling so a finger
+	// drives and releases the axes exactly like the mouse.
+	virtual FReply NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
+	virtual FReply NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
+	virtual FReply NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
+
 private:
 	UFUNCTION()
 	void HandleValue(FVector2D Value);
