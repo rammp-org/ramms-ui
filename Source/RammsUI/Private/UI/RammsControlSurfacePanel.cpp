@@ -221,6 +221,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 		GroupSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
 	}
 	Groups.Add(Container);
+	if (Style)
+	{
+		Container->SetStyle(Style); // created after construction: propagate explicitly
+	}
 
 	TSet<FName> Consumed;
 	for (const FRammsControlAxis& Axis : Axes)
@@ -242,6 +246,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				Joystick->SetRadii(JoystickRadius, JoystickRadius * 0.35f);
 				Joystick->Source = Source;
 				Joystick->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
+				if (Style)
+				{
+					Joystick->SetStyle(Style);
+				}
 
 				UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "JoystickCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
@@ -258,6 +266,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 			}
 		}
 		URammsControlRow* Row = CreateWidget<URammsControlRow>(this);
+		if (Style)
+		{
+			Row->SetStyle(Style);
+		}
 		Row->Setup(TargetSurface, Axis, Source);
 		Container->AddContentChild(Row);
 		Rows.Add(Row);
@@ -339,6 +351,29 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 	{
 		TitleText->SetFont(Style->Typography.HeadingMedium);
 		TitleText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
+	// The groups, rows and joysticks are created at runtime, outside this
+	// widget's tree: hand them the style directly.
+	for (URammsCollapsibleContainer* Group : Groups)
+	{
+		if (Group)
+		{
+			Group->SetStyle(Style);
+		}
+	}
+	for (URammsControlRow* Row : Rows)
+	{
+		if (Row)
+		{
+			Row->SetStyle(Style);
+		}
+	}
+	for (URammsSurfaceJoystick* Joystick : Joysticks)
+	{
+		if (Joystick)
+		{
+			Joystick->SetStyle(Style);
+		}
 	}
 }
 

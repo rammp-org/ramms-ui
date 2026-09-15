@@ -4,6 +4,14 @@
 #include "RammsControlSink.h"
 #include "RammsUISubsystem.h"
 
+URammsSurfaceJoystick::URammsSurfaceJoystick(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	// The base joystick also drives a legacy IRammsRobotController it finds
+	// by itself; this one talks to the control sink only.
+	bAutoFindRobotController = false;
+}
+
 void URammsSurfaceJoystick::NativeConstruct()
 {
 	Super::NativeConstruct();

@@ -95,8 +95,23 @@ UButton* URammsControlRow::MakeHoldButton(const TCHAR* Name, const TCHAR* Label,
 	return Button;
 }
 
+void URammsControlRow::NativeDestruct()
+{
+	// Torn down (panel rebuild, HUD destroyed) with a hold button down: let
+	// the axis go, or the sink keeps it owned by this source.
+	if (bHoldActive)
+	{
+		ReleaseAxis();
+	}
+	Super::NativeDestruct();
+}
+
 void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, ERammsControlSource InSource)
 {
+	if (bHoldActive)
+	{
+		ReleaseAxis(); // rebinding while held: release the old control first
+	}
 	Sink = InSink;
 	Axis = InAxis;
 	Source = InSource;
@@ -223,6 +238,7 @@ void URammsControlRow::SetAxis(float Value)
 
 void URammsControlRow::ReleaseAxis()
 {
+	bHoldActive = false;
 	if (Sink && Sink->GetClass()->ImplementsInterface(URammsControlSink::StaticClass()))
 	{
 		IRammsControlSink::Execute_ReleaseAxis(Sink, Axis.Id, Source);
@@ -247,6 +263,7 @@ void URammsControlRow::OnActionClicked()
 
 void URammsControlRow::OnPlusPressed()
 {
+	bHoldActive = true;
 	SetAxis(HoldValue);
 }
 
@@ -257,6 +274,7 @@ void URammsControlRow::OnPlusReleased()
 
 void URammsControlRow::OnMinusPressed()
 {
+	bHoldActive = true;
 	SetAxis(-HoldValue);
 }
 
@@ -305,7 +323,14 @@ void URammsControlRow::SimulateAction()
 
 void URammsControlRow::SimulateHold(bool bPlus)
 {
-	bPlus ? OnPlusPressed() : OnMinusPressed();
+	if (bPlus)
+	{
+		OnPlusPressed();
+	}
+	else
+	{
+		OnMinusPressed();
+	}
 }
 
 void URammsControlRow::SimulateRelease()

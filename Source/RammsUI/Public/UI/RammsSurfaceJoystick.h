@@ -23,6 +23,8 @@ class RAMMSUI_API URammsSurfaceJoystick : public URammsJoystickWidget
 	GENERATED_BODY()
 
 public:
+	URammsSurfaceJoystick(const FObjectInitializer& ObjectInitializer);
+
 	/** Object implementing IRammsControlSink; auto-found when null. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
 	TObjectPtr<UObject> TargetSink;

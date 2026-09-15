@@ -42,7 +42,7 @@ public:
 	FName GetControlId() const { return Axis.Id; }
 
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
-	const FRammsControlAxis& GetAxis() const { return Axis; }
+	FRammsControlAxis GetAxis() const { return Axis; }
 
 	// --- Scripted interaction (tests, demos, remote UIs) -----------------------
 
@@ -71,6 +71,7 @@ public:
 	float ReadbackHoldOff = 0.75f;
 
 	virtual void ApplyStyle_Implementation() override;
+	virtual void NativeDestruct() override;
 
 protected:
 	virtual void	 BuildWidgetTree() override;
@@ -106,6 +107,8 @@ private:
 	ERammsControlSource Source = ERammsControlSource::Touch;
 	double				LastUserInputTime = -1000.0;
 	bool				bRefreshing = false;
+	/** A hold button is down: the axis is ours until released (or we go away). */
+	bool				bHoldActive = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> RootBox;
