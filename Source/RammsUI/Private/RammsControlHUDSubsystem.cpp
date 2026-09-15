@@ -169,6 +169,23 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 	}
 	Host->AddToPlayerScreen(10);
 	Host->TransitionToLayout(FName("Sim"), false);
+
+	// Make the HUD reachable: the game viewport otherwise captures the mouse
+	// (game-only input mode, hidden cursor), and the engine's virtual joystick
+	// (DefaultTouchInterface, shown whenever the mouse fakes touch in PIE)
+	// sits above every widget and swallows presses.
+	if (!Settings || Settings->bReplaceEngineTouchInterface)
+	{
+		Controller->ActivateTouchInterface(nullptr);
+	}
+	if (!Settings || Settings->bGameAndUIInputMode)
+	{
+		FInputModeGameAndUI Mode;
+		Mode.SetHideCursorDuringCapture(false);
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Controller->SetInputMode(Mode);
+		Controller->bShowMouseCursor = true;
+	}
 	UE_LOG(LogTemp, Log, TEXT("[RammsControlHUD] spawned for %s (layout %s)"), *Controller->GetName(), *LayoutClass->GetName());
 	return true;
 }
