@@ -171,15 +171,62 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		PlusButton->OnPressed.AddUniqueDynamic(this, &URammsControlRow::OnPlusPressed);
 		PlusButton->OnReleased.AddUniqueDynamic(this, &URammsControlRow::OnPlusReleased);
 	}
+	else if (Axis.bReadOnly)
+	{
+		// Readback-only state: label + live value, nothing to drag.
+		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadLabel"));
+		RateLabel->SetText(Label);
+		UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel);
+		if (LabelSlot)
+		{
+			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		RateValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadValue"));
+		UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(RateValue);
+		if (ValueSlot)
+		{
+			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
+			ValueSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
 	else
 	{
-		// Position / Velocity target.
+		// Position / Velocity target. An unbounded axis (non-increasing range:
+		// "defer to the backend") still needs slider limits: a display range by
+		// units, which only shapes the slider — the sink does not clamp to it.
 		AxisControl = CreateWidget<URammsAxisControl>(this);
 		FRammsAxisConfig Config;
 		Config.Label = Label;
 		Config.IconSize = FVector2D::ZeroVector; // no icon: don't reserve the box
-		Config.MinValue = static_cast<float>(Axis.Range.X);
-		Config.MaxValue = static_cast<float>(Axis.Range.Y);
+		FVector2D Range = Axis.Range;
+		if (Range.X >= Range.Y)
+		{
+			switch (Axis.Units)
+			{
+				case ERammsControlUnits::Radians:
+					Range = FVector2D(-PI, PI);
+					break;
+				case ERammsControlUnits::Degrees:
+					Range = FVector2D(-180.0, 180.0);
+					break;
+				case ERammsControlUnits::Centimeters:
+					Range = FVector2D(-100.0, 100.0);
+					break;
+				case ERammsControlUnits::Meters:
+					Range = FVector2D(-1.0, 1.0);
+					break;
+				case ERammsControlUnits::RadiansPerSecond:
+				case ERammsControlUnits::CentimetersPerSecond:
+					Range = FVector2D(-10.0, 10.0);
+					break;
+				default:
+					Range = FVector2D(-1.0, 1.0);
+					break;
+			}
+		}
+		Config.MinValue = static_cast<float>(Range.X);
+		Config.MaxValue = static_cast<float>(Range.Y);
 		Config.DefaultValue = Axis.DefaultValue;
 		Config.Units = UnitsText();
 		Config.DecimalPlaces = Decimals();
@@ -212,7 +259,11 @@ void URammsControlRow::Refresh()
 		return;
 	}
 	const float Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
-	if (AxisControl)
+	if (Axis.bReadOnly && RateValue)
+	{
+		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%.2f %s"), Value, *UnitsText().ToString())));
+	}
+	else if (AxisControl)
 	{
 		// Display only. The guard drops any OnValueChanged the control might
 		// still raise for a programmatic update, so readback never becomes a

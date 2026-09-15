@@ -17,6 +17,11 @@ URammsControlHUDSettings::URammsControlHUDSettings()
 {
 	CategoryName = TEXT("Plugins");
 	SectionName = TEXT("Ramms Control HUD");
+	// The plugin's dark theme asset: its fonts carry the glyph fallbacks the
+	// widgets' icon characters (arrows, minus sign, reset) need. The
+	// code-built CreateDefaultDarkTheme uses bare FCoreStyle fonts, which
+	// render those as missing-glyph boxes.
+	Style = TSoftObjectPtr<URammsUIStyle>(FSoftObjectPath(TEXT("/RammsUI/UI/UI_DarkTheme.UI_DarkTheme")));
 }
 
 URammsControlHUDSubsystem* URammsControlHUDSubsystem::Get(const UObject* WorldContextObject)

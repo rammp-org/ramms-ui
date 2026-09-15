@@ -93,6 +93,12 @@ struct RAMMSCONTROL_API FRammsControlAxis
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
 	bool bReadback = true;
 
+	/** Readback-only: the value is reported but not commanded through this
+	 *  axis (a state such as gripper.closed; use its actions to change it).
+	 *  Sinks refuse SetAxis on it; panels render it as a value, not a slider. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
+	bool bReadOnly = false;
+
 	/** Sort key within the group. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
 	int32 Order = 0;
