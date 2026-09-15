@@ -44,6 +44,7 @@ void URammsControlSurfacePanel::BuildWidgetTree()
 	}
 
 	GroupsScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("GroupsScroll"));
+	GroupsScroll->SetConsumeMouseWheel(EConsumeMouseWheel::Never); // the panel handles the wheel itself (NativeOnMouseWheel)
 	UVerticalBoxSlot* ScrollSlot = MainVBox->AddChildToVerticalBox(GroupsScroll);
 	if (ScrollSlot)
 	{
@@ -213,6 +214,7 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 	URammsCollapsibleContainer* Container = CreateWidget<URammsCollapsibleContainer>(this);
 	Container->SetHeaderTitle(FText::FromName(Group));
 	Container->SetMaxContentHeight(0.0f); // size to content; the panel's own ScrollBox scrolls
+	Container->SetWheelConsumption(EConsumeMouseWheel::Never); // the wheel bubbles up to the panel, which scrolls the list
 	UVerticalBoxSlot* GroupSlot = GroupsVBox->AddChildToVerticalBox(Container);
 	if (GroupSlot)
 	{
@@ -338,4 +340,41 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 		TitleText->SetFont(Style->Typography.HeadingMedium);
 		TitleText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
+}
+
+float URammsControlSurfacePanel::GetScrollOffset() const
+{
+	return GroupsScroll ? GroupsScroll->GetScrollOffset() : 0.0f;
+}
+
+FVector2D URammsControlSurfacePanel::GetScrollExtent() const
+{
+	if (!GroupsScroll)
+	{
+		return FVector2D::ZeroVector;
+	}
+	return FVector2D(GroupsScroll->GetCachedGeometry().GetLocalSize().Y, GroupsScroll->GetScrollOffsetOfEnd());
+}
+
+void URammsControlSurfacePanel::SetScrollOffset(float Offset)
+{
+	if (GroupsScroll)
+	{
+		GroupsScroll->SetScrollOffset(FMath::Clamp(Offset, 0.0f, GroupsScroll->GetScrollOffsetOfEnd()));
+	}
+}
+
+FReply URammsControlSurfacePanel::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// The wheel anywhere over the panel scrolls the groups list (the nested
+	// scroll boxes and rows bubble it up here); it never reaches the game
+	// viewport, so it never zooms the camera.
+	if (GroupsScroll)
+	{
+		const float Before = GroupsScroll->GetScrollOffset();
+		SetScrollOffset(Before - InMouseEvent.GetWheelDelta() * WheelScrollStep);
+		UE_LOG(LogTemp, Verbose, TEXT("[ControlSurfacePanel] wheel %.2f: %.0f -> %.0f (end %.0f)"), InMouseEvent.GetWheelDelta(), Before, GroupsScroll->GetScrollOffset(), GroupsScroll->GetScrollOffsetOfEnd());
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseWheel(InGeometry, InMouseEvent);
 }

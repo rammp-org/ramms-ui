@@ -48,6 +48,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collapsible")
 	bool bIsExpanded = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collapsible")
+	EConsumeMouseWheel WheelConsumption = EConsumeMouseWheel::Always;
+
 	/** Animation to use for expand/collapse */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collapsible")
 	ERammsCollapseAnimation CollapseAnimation = ERammsCollapseAnimation::ScaleY;
@@ -164,6 +167,12 @@ public:
 	/** Set the header title */
 	UFUNCTION(BlueprintCallable, Category = "Collapsible")
 	void SetHeaderTitle(FText Title);
+
+	/** How the content scroll box treats the mouse wheel. Default Always (a
+	 *  standalone panel keeps the wheel); a container nested in a scrolling
+	 *  parent wants WhenScrollingPossible so the parent can scroll. */
+	UFUNCTION(BlueprintCallable, Category = "Collapsible")
+	void SetWheelConsumption(EConsumeMouseWheel Consumption);
 
 	/** Set the collapse animation type */
 	UFUNCTION(BlueprintCallable, Category = "Collapsible")

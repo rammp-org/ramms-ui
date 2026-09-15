@@ -260,7 +260,7 @@ void URammsCollapsibleContainer::SynchronizeProperties()
 	{
 		ContentScrollBox->SetScrollBarVisibility(
 			bEnableScrolling ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-		ContentScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Always);
+		ContentScrollBox->SetConsumeMouseWheel(WheelConsumption);
 	}
 
 	if (ContentSizeBox && !bIsAnimating)
@@ -330,7 +330,7 @@ void URammsCollapsibleContainer::NativeConstruct()
 
 	if (ContentScrollBox)
 	{
-		ContentScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Always);
+		ContentScrollBox->SetConsumeMouseWheel(WheelConsumption);
 		ContentScrollBox->SetScrollBarVisibility(
 			bEnableScrolling ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
@@ -822,4 +822,12 @@ void URammsCollapsibleContainer::OnToggleClicked()
 void URammsCollapsibleContainer::GetSlotNames(TArray<FName>& SlotNames) const
 {
 	SlotNames.Add(TEXT("ContentSlot"));
+}
+void URammsCollapsibleContainer::SetWheelConsumption(EConsumeMouseWheel Consumption)
+{
+	WheelConsumption = Consumption;
+	if (ContentScrollBox)
+	{
+		ContentScrollBox->SetConsumeMouseWheel(Consumption);
+	}
 }

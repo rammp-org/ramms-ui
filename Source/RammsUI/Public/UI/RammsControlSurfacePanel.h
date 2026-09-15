@@ -85,10 +85,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	int32 GetRowCount() const { return Rows.Num(); }
 
+	/** Vertical scroll position of the groups list (tests). */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	float GetScrollOffset() const;
+
+	/** Scrollable extent: X = the groups list's allotted height, Y = its scroll offset at the end (0 = nothing to scroll). */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FVector2D GetScrollExtent() const;
+
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void ApplyStyle_Implementation() override;
+
+	/** Pixels the groups list scrolls per wheel notch. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
+	float WheelScrollStep = 48.0f;
+
+	/** Scroll the groups list to an absolute offset (tests). */
+	UFUNCTION(BlueprintCallable, Category = "Control Surface")
+	void SetScrollOffset(float Offset);
 
 protected:
 	virtual void	 BuildWidgetTree() override;
