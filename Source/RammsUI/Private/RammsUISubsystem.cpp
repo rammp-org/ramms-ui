@@ -12,7 +12,90 @@ void URammsUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void URammsUISubsystem::Deinitialize()
 {
 	RegisteredControllers.Empty();
+	RegisteredControlSurfaces.Empty();
 	Super::Deinitialize();
+}
+
+// ── Control Surface Registry ──────────────────────────────────────
+
+void URammsUISubsystem::CleanupStaleControlSurfaces()
+{
+	RegisteredControlSurfaces.RemoveAll([](const TWeakObjectPtr<UObject>& Weak) { return !Weak.IsValid(); });
+}
+
+void URammsUISubsystem::RegisterControlSurface(UObject* Provider)
+{
+	if (!Provider)
+	{
+		return;
+	}
+	if (!Provider->GetClass()->ImplementsInterface(URammsControlSurfaceProvider::StaticClass()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("URammsUISubsystem::RegisterControlSurface: %s does not implement IRammsControlSurfaceProvider"), *Provider->GetName());
+		return;
+	}
+	CleanupStaleControlSurfaces();
+	if (RegisteredControlSurfaces.ContainsByPredicate([Provider](const TWeakObjectPtr<UObject>& W) { return W.Get() == Provider; }))
+	{
+		return;
+	}
+	RegisteredControlSurfaces.Add(Provider);
+	OnControlSurfaceRegistryChanged.Broadcast(Provider, true);
+	UE_LOG(LogTemp, Log, TEXT("URammsUISubsystem: Registered control surface '%s'"), *Provider->GetPathName());
+}
+
+void URammsUISubsystem::UnregisterControlSurface(UObject* Provider)
+{
+	if (!Provider)
+	{
+		return;
+	}
+	const int32 Removed = RegisteredControlSurfaces.RemoveAll([Provider](const TWeakObjectPtr<UObject>& W) { return W.Get() == Provider; });
+	CleanupStaleControlSurfaces();
+	if (Removed > 0)
+	{
+		OnControlSurfaceRegistryChanged.Broadcast(Provider, false);
+	}
+}
+
+UObject* URammsUISubsystem::FindControlSurface()
+{
+	CleanupStaleControlSurfaces();
+	return RegisteredControlSurfaces.Num() > 0 ? RegisteredControlSurfaces[0].Get() : nullptr;
+}
+
+UObject* URammsUISubsystem::FindControlSurfaceByRobotName(const FString& RobotName)
+{
+	CleanupStaleControlSurfaces();
+	for (const TWeakObjectPtr<UObject>& Weak : RegisteredControlSurfaces)
+	{
+		UObject* Provider = Weak.Get();
+		if (Provider && IRammsControlSurfaceProvider::Execute_GetControlSurface(Provider).RobotName.ToString() == RobotName)
+		{
+			return Provider;
+		}
+	}
+	return nullptr;
+}
+
+TArray<UObject*> URammsUISubsystem::GetAllControlSurfaces()
+{
+	CleanupStaleControlSurfaces();
+	TArray<UObject*> Out;
+	for (const TWeakObjectPtr<UObject>& Weak : RegisteredControlSurfaces)
+	{
+		if (UObject* Provider = Weak.Get())
+		{
+			Out.Add(Provider);
+		}
+	}
+	return Out;
+}
+
+int32 URammsUISubsystem::GetControlSurfaceCount()
+{
+	CleanupStaleControlSurfaces();
+	return RegisteredControlSurfaces.Num();
 }
 
 // ── Robot Controller Registry ─────────────────────────────────────
