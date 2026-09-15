@@ -44,6 +44,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FRammsControlAxis GetAxis() const { return Axis; }
 
+	/** The slider's value (the target it shows), for Position / Velocity rows. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	float GetTargetValue() const;
+
 	// --- Scripted interaction (tests, demos, remote UIs) -----------------------
 
 	/** As if the slider were moved to Value (Position / Velocity rows). */
@@ -115,11 +119,21 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<URammsAxisControl> AxisControl;
 	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> LiveLabel;
+	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> ActionButton;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RateLabel;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RateValue;
+	/** Position / Velocity rows: the live readback, separate from the slider's target. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> LiveValue;
+	/** A target has been commanded through this row (the slider shows it). */
+	bool bHasTarget = false;
+	/** The slider was seeded once from the live pose. */
+	bool bTargetSeeded = false;
+	void RefreshInternal(bool bPeriodic);
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> MinusButton;
 	UPROPERTY(Transient)

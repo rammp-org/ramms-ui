@@ -3,6 +3,8 @@
 #include "UI/RammsSurfaceJoystick.h"
 #include "RammsControlSink.h"
 #include "RammsUISubsystem.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 
 URammsSurfaceJoystick::URammsSurfaceJoystick(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -111,4 +113,31 @@ void URammsSurfaceJoystick::SimulateInput(FVector2D Value)
 void URammsSurfaceJoystick::SimulateRelease()
 {
 	Release();
+}
+
+void URammsSurfaceJoystick::SetRadii(float InJoystickRadius, float InThumbRadius)
+{
+	JoystickRadius = FMath::Max(InJoystickRadius, 1.0f);
+	ThumbRadius = FMath::Clamp(InThumbRadius, 1.0f, JoystickRadius);
+	// The base builds its canvas at construction with the radii of that
+	// moment; a later change must move the images too, or the widget's
+	// desired size and its hit maths disagree with what is drawn.
+	if (BackgroundImage)
+	{
+		if (UCanvasPanelSlot* BgSlot = Cast<UCanvasPanelSlot>(BackgroundImage->Slot))
+		{
+			BgSlot->SetPosition(FVector2D::ZeroVector);
+			BgSlot->SetSize(FVector2D(JoystickRadius * 2.0f, JoystickRadius * 2.0f));
+		}
+	}
+	if (ThumbImage)
+	{
+		if (UCanvasPanelSlot* ThumbSlot = Cast<UCanvasPanelSlot>(ThumbImage->Slot))
+		{
+			const float Offset = JoystickRadius - ThumbRadius;
+			ThumbSlot->SetPosition(FVector2D(Offset, Offset));
+			ThumbSlot->SetSize(FVector2D(ThumbRadius * 2.0f, ThumbRadius * 2.0f));
+		}
+	}
+	JoystickCenter = FVector2D(JoystickRadius, JoystickRadius);
 }

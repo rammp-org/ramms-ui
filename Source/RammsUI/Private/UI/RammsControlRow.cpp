@@ -11,6 +11,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 
 void URammsControlRow::BuildWidgetTree()
 {
@@ -30,6 +31,8 @@ void URammsControlRow::ResetCachedWidgets()
 	ActionButton = nullptr;
 	RateLabel = nullptr;
 	RateValue = nullptr;
+	LiveValue = nullptr;
+	LiveLabel = nullptr;
 	MinusButton = nullptr;
 	PlusButton = nullptr;
 	MinusLabel = nullptr;
@@ -242,35 +245,84 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		{
 			BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
+		// The slider and its value are the TARGET (set by the user, initialised
+		// from the live pose once); this column is the live readback, which
+		// keeps moving while the motor gets there.
+		if (Axis.bReadback)
+		{
+			UVerticalBox* Live = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("LiveColumn"));
+			LiveLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LiveLabel"));
+			LiveLabel->SetText(NSLOCTEXT("RammsUI", "LiveValueLabel", "live"));
+			LiveLabel->SetJustification(ETextJustify::Right);
+			LiveValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LiveValue"));
+			LiveValue->SetJustification(ETextJustify::Right);
+			Live->AddChildToVerticalBox(LiveLabel);
+			Live->AddChildToVerticalBox(LiveValue);
+			UHorizontalBoxSlot* LiveSlot = RootBox->AddChildToHorizontalBox(Live);
+			if (LiveSlot)
+			{
+				LiveSlot->SetPadding(FMargin(6.0f, 0.0f, 2.0f, 0.0f));
+				LiveSlot->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+		bHasTarget = false;
+		bTargetSeeded = false;
 	}
 	ApplyStyle();
-	Refresh();
+	RefreshInternal(/*bPeriodic*/ false);
 }
 
 void URammsControlRow::Refresh()
+{
+	RefreshInternal(/*bPeriodic*/ true);
+}
+
+void URammsControlRow::RefreshInternal(bool bPeriodic)
 {
 	if (!Sink || !Axis.bReadback || Axis.IsAction())
 	{
 		return;
 	}
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	if (Now - LastUserInputTime < ReadbackHoldOff)
-	{
-		return;
-	}
-	const float Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
+	const float	 Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
 	if (Axis.bReadOnly && RateValue)
 	{
 		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%.2f %s"), Value, *UnitsText().ToString())));
 	}
 	else if (AxisControl)
 	{
-		// Display only. The guard drops any OnValueChanged the control might
-		// still raise for a programmatic update, so readback never becomes a
-		// command (that loop would hold the axis and fight other drivers).
-		bRefreshing = true;
-		AxisControl->SetValue(Value);
-		bRefreshing = false;
+		// The slider is the target: seeded once from the live pose (on the first
+		// periodic refresh, after the base has real readings — not at build
+		// time, when it still reads zero) and then only moved by the user,
+		// while the live column follows the motor. The guard drops any
+		// OnValueChanged a programmatic update might raise, so readback never
+		// becomes a command (that loop would hold the axis and fight others).
+		float Target = 0.0f;
+		const bool bSinkHasTarget = IRammsControlSink::Execute_GetAxisTarget(Sink, Axis.Id, Target);
+		if (bSinkHasTarget)
+		{
+			// Whoever commanded it (this slider, a key, a script, autonomy):
+			// the slider shows the surface's target. Not while the user is on
+			// it, so a drag isn't yanked back before its command lands.
+			if (Now - LastUserInputTime >= ReadbackHoldOff)
+			{
+				bRefreshing = true;
+				AxisControl->SetValue(Target);
+				bRefreshing = false;
+			}
+			bTargetSeeded = true;
+		}
+		else if (!bTargetSeeded && bPeriodic)
+		{
+			bRefreshing = true;
+			AxisControl->SetValue(Value);
+			bRefreshing = false;
+			bTargetSeeded = true;
+		}
+		if (LiveValue)
+		{
+			LiveValue->SetText(FText::FromString(FString::Printf(TEXT("%.*f %s"), Decimals(), Value, *UnitsText().ToString())));
+		}
 	}
 	else if (RateValue)
 	{
@@ -300,6 +352,7 @@ void URammsControlRow::OnAxisValue(float NewValue)
 {
 	if (!bRefreshing)
 	{
+		bHasTarget = true; // the slider is a target from now on
 		SetAxis(NewValue);
 	}
 }
@@ -341,6 +394,16 @@ void URammsControlRow::ApplyStyle_Implementation()
 	{
 		return;
 	}
+	if (LiveLabel)
+	{
+		LiveLabel->SetFont(Style->Typography.Caption);
+		LiveLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+	if (LiveValue)
+	{
+		LiveValue->SetFont(Style->Typography.Body);
+		LiveValue->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
 	for (UTextBlock* Text : { RateLabel.Get(), MinusLabel.Get(), PlusLabel.Get() })
 	{
 		if (Text)
@@ -360,6 +423,7 @@ void URammsControlRow::ApplyStyle_Implementation()
 
 void URammsControlRow::SimulateValue(float Value)
 {
+	bHasTarget = true;
 	if (AxisControl)
 	{
 		AxisControl->SetValue(Value);
@@ -387,4 +451,9 @@ void URammsControlRow::SimulateHold(bool bPlus)
 void URammsControlRow::SimulateRelease()
 {
 	ReleaseAxis();
+}
+
+float URammsControlRow::GetTargetValue() const
+{
+	return AxisControl ? AxisControl->GetValue() : 0.0f;
 }

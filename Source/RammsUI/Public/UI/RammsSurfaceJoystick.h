@@ -50,13 +50,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetTarget(UObject* Sink, FName IdX, FName IdY);
 
-	/** Size before construction (the base keeps its radii protected). */
+	/** Resize the joystick (the base keeps its radii protected). Re-lays out
+	 *  the background and thumb when the widget tree already exists, so it
+	 *  works after CreateWidget too. */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
-	void SetRadii(float InJoystickRadius, float InThumbRadius)
-	{
-		JoystickRadius = InJoystickRadius;
-		ThumbRadius = InThumbRadius;
-	}
+	void SetRadii(float InJoystickRadius, float InThumbRadius);
 
 	/** Feed a value as if the thumb were there (tests, scripted demos). */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")

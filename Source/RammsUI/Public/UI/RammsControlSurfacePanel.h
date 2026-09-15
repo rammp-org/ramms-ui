@@ -103,6 +103,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
 	float WheelScrollStep = 48.0f;
 
+	/** Allotted / desired sizes of the groups and joysticks (tests, layout diagnostics). */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	TArray<FString> GetLayoutReport() const;
+
 	/** Scroll the groups list to an absolute offset (tests). */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetScrollOffset(float Offset);

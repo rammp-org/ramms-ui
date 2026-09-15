@@ -831,3 +831,14 @@ void URammsCollapsibleContainer::SetWheelConsumption(EConsumeMouseWheel Consumpt
 		ContentScrollBox->SetConsumeMouseWheel(Consumption);
 	}
 }
+
+void URammsCollapsibleContainer::SetScrollingEnabled(bool bEnabled)
+{
+	bEnableScrolling = bEnabled;
+	if (ContentScrollBox)
+	{
+		ContentScrollBox->SetScrollBarVisibility(bEnabled ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		ContentScrollBox->SetAlwaysShowScrollbar(bEnabled);
+		ContentScrollBox->SetAlwaysShowScrollbarTrack(bEnabled);
+	}
+}

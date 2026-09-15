@@ -10,6 +10,8 @@
 #include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
@@ -215,6 +217,7 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 	Container->SetHeaderTitle(FText::FromName(Group));
 	Container->SetMaxContentHeight(0.0f); // size to content; the panel's own ScrollBox scrolls
 	Container->SetWheelConsumption(EConsumeMouseWheel::Never); // the wheel bubbles up to the panel, which scrolls the list
+	Container->SetScrollingEnabled(false);						 // it sizes to its content; only the panel's list scrolls
 	UVerticalBoxSlot* GroupSlot = GroupsVBox->AddChildToVerticalBox(Container);
 	if (GroupSlot)
 	{
@@ -255,10 +258,23 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "JoystickCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
 				Caption->SetJustification(ETextJustify::Center);
 				Container->AddContentChild(Caption);
+				// The joystick's canvas positions its images absolutely, so give it
+				// a fixed box of its own size (plus a margin) in both dimensions and
+				// centre that in the row; otherwise the row is narrower / shorter than
+				// the circle and neighbours draw over it.
 				USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-				Box->SetHeightOverride(JoystickRadius * 2.0f + 8.0f);
+				const float BoxSize = JoystickRadius * 2.0f + 8.0f;
+				Box->SetWidthOverride(BoxSize);
+				Box->SetHeightOverride(BoxSize);
 				Box->AddChild(Joystick);
-				Container->AddContentChild(Box);
+				UHorizontalBox* Centre = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UHorizontalBoxSlot* CentreSlot = Centre->AddChildToHorizontalBox(Box))
+				{
+					CentreSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+					CentreSlot->SetHorizontalAlignment(HAlign_Center);
+					CentreSlot->SetPadding(FMargin(0.0f, 4.0f));
+				}
+				Container->AddContentChild(Centre);
 				Joysticks.Add(Joystick);
 				Consumed.Add(Axis.Id);
 				Consumed.Add(Pair->Id);
@@ -412,4 +428,26 @@ FReply URammsControlSurfacePanel::NativeOnMouseWheel(const FGeometry& InGeometry
 		return FReply::Handled();
 	}
 	return Super::NativeOnMouseWheel(InGeometry, InMouseEvent);
+}
+
+TArray<FString> URammsControlSurfacePanel::GetLayoutReport() const
+{
+	TArray<FString> Out;
+	for (const URammsCollapsibleContainer* Group : Groups)
+	{
+		if (Group)
+		{
+			const FVector2D Size = Group->GetCachedGeometry().GetLocalSize();
+			Out.Add(FString::Printf(TEXT("group %s: %.0f x %.0f (desired %.0f x %.0f)"), *Group->GetName(), Size.X, Size.Y, Group->GetDesiredSize().X, Group->GetDesiredSize().Y));
+		}
+	}
+	for (const URammsSurfaceJoystick* Joystick : Joysticks)
+	{
+		if (Joystick)
+		{
+			const FVector2D Size = Joystick->GetCachedGeometry().GetLocalSize();
+			Out.Add(FString::Printf(TEXT("joystick %s/%s: %.0f x %.0f (desired %.0f x %.0f)"), *Joystick->ControlIdY.ToString(), *Joystick->ControlIdX.ToString(), Size.X, Size.Y, Joystick->GetDesiredSize().X, Joystick->GetDesiredSize().Y));
+		}
+	}
+	return Out;
 }

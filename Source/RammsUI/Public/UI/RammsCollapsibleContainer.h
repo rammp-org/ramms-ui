@@ -174,6 +174,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Collapsible")
 	void SetWheelConsumption(EConsumeMouseWheel Consumption);
 
+	/** Enable / disable the content scroll box's own scrolling and its scrollbar.
+	 *  Off when the container sizes to its content inside a scrolling parent. */
+	UFUNCTION(BlueprintCallable, Category = "Collapsible")
+	void SetScrollingEnabled(bool bEnabled);
+
 	/** Set the collapse animation type */
 	UFUNCTION(BlueprintCallable, Category = "Collapsible")
 	void SetCollapseAnimation(ERammsCollapseAnimation Animation) { CollapseAnimation = Animation; }
