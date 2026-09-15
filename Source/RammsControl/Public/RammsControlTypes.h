@@ -98,7 +98,9 @@ struct RAMMSCONTROL_API FRammsControlAxis
 	int32 Order = 0;
 
 	/** Continuous axes that pair with another for a 2-D control (drive
-	 *  forward/turn as one joystick): the Id of the partner, NAME_None if none. */
+	 *  forward/turn as one joystick): the Id of the partner, NAME_None if none.
+	 *  Convention: of the two, the axis with the lower Order is the vertical
+	 *  (joystick Y / "forward") one, its partner the horizontal (X). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
 	FName PairedAxis;
 
