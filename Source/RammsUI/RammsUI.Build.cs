@@ -34,6 +34,7 @@ public class RammsUI : ModuleRules
 				"UMG", // For UUserWidget and UMG components
 				"Slate", "SlateCore", // For Slate/UMG styling (FSlateFontInfo, etc.)
 				"RammsStreaming", // Public: RammsStreamProtocol.h exposed via RammsStreamCameraBridge.h
+				"RammsControl", // control-surface model the panels render / drive
 				"ProceduralMeshComponent"
 				// ... add other public dependencies that you statically link with here ...
 			}
