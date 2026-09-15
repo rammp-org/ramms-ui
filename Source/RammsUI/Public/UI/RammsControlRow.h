@@ -70,6 +70,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
 	float HoldValue = 1.0f;
 
+	/** Fixed width of the changing-number columns (live readback, rate value),
+	 *  so a sign flip or an extra digit never re-lays out the row and panel. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
+	float ValueColumnWidth = 76.0f;
+
 	/** Seconds after a user edit during which readback leaves the widget alone. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
 	float ReadbackHoldOff = 0.75f;

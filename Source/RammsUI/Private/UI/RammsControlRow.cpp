@@ -156,8 +156,12 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			LabelSlot->SetVerticalAlignment(VAlign_Center);
 		}
 		RateValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateValue"));
-		RateValue->SetText(FText::FromString(TEXT("0.00")));
-		UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(RateValue);
+		RateValue->SetText(FText::FromString(TEXT("+0.00")));
+		RateValue->SetJustification(ETextJustify::Right);
+		USizeBox* RateBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RateBox"));
+		RateBox->SetWidthOverride(ValueColumnWidth);
+		RateBox->AddChild(RateValue);
+		UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(RateBox);
 		if (ValueSlot)
 		{
 			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
@@ -186,7 +190,11 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			LabelSlot->SetVerticalAlignment(VAlign_Center);
 		}
 		RateValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadValue"));
-		UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(RateValue);
+		RateValue->SetJustification(ETextJustify::Right);
+		USizeBox* ReadBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ReadBox"));
+		ReadBox->SetWidthOverride(ValueColumnWidth);
+		ReadBox->AddChild(RateValue);
+		UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(ReadBox);
 		if (ValueSlot)
 		{
 			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
@@ -258,7 +266,13 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			LiveValue->SetJustification(ETextJustify::Right);
 			Live->AddChildToVerticalBox(LiveLabel);
 			Live->AddChildToVerticalBox(LiveValue);
-			UHorizontalBoxSlot* LiveSlot = RootBox->AddChildToHorizontalBox(Live);
+			// Fixed width: the number's text changes every refresh (sign flips
+			// around zero, digit counts), and a changing desired width would
+			// re-layout the row, the group and the panel each time.
+			USizeBox* LiveBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("LiveBox"));
+			LiveBox->SetWidthOverride(ValueColumnWidth);
+			LiveBox->AddChild(Live);
+			UHorizontalBoxSlot* LiveSlot = RootBox->AddChildToHorizontalBox(LiveBox);
 			if (LiveSlot)
 			{
 				LiveSlot->SetPadding(FMargin(6.0f, 0.0f, 2.0f, 0.0f));
@@ -287,7 +301,7 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 	const float	 Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
 	if (Axis.bReadOnly && RateValue)
 	{
-		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%.2f %s"), Value, *UnitsText().ToString())));
+		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%+.*f %s"), Decimals(), Value, *UnitsText().ToString())));
 	}
 	else if (AxisControl)
 	{
@@ -321,12 +335,12 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 		}
 		if (LiveValue)
 		{
-			LiveValue->SetText(FText::FromString(FString::Printf(TEXT("%.*f %s"), Decimals(), Value, *UnitsText().ToString())));
+			LiveValue->SetText(FText::FromString(FString::Printf(TEXT("%+.*f %s"), Decimals(), Value, *UnitsText().ToString())));
 		}
 	}
 	else if (RateValue)
 	{
-		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%.2f"), Value)));
+		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%+.2f"), Value)));
 	}
 }
 
@@ -401,7 +415,7 @@ void URammsControlRow::ApplyStyle_Implementation()
 	}
 	if (LiveValue)
 	{
-		LiveValue->SetFont(Style->Typography.Body);
+		LiveValue->SetFont(Style->Typography.Monospace); // constant digit widths
 		LiveValue->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
 	}
 	for (UTextBlock* Text : { RateLabel.Get(), MinusLabel.Get(), PlusLabel.Get() })
@@ -414,7 +428,7 @@ void URammsControlRow::ApplyStyle_Implementation()
 	}
 	if (RateValue)
 	{
-		RateValue->SetFont(Style->Typography.Body);
+		RateValue->SetFont(Style->Typography.Monospace); // constant digit widths
 		RateValue->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
 	}
 }
