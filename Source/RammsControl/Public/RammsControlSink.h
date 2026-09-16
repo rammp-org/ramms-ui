@@ -52,7 +52,7 @@ public:
 	/** The control's current commanded target — a slider's value as opposed to
 	 *  the live readback of GetAxisValue. Not necessarily a value that passed
 	 *  through this sink: an implementation backed by controllers reports the
-	 *  target those are actually holding, including one set on them directly.
+	 *  target they are actually holding, including one set on them directly.
 	 *  False when there is no target: nothing commanded yet, or released. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Control")
 	bool GetAxisTarget(FName Id, float& OutTarget) const;
