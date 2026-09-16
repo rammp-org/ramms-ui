@@ -49,9 +49,11 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Control")
 	ERammsControlSource GetAxisOwner(FName Id) const;
 
-	/** The value last commanded through this sink for a control, from any
-	 *  source (a slider's target as opposed to the live readback). False when
-	 *  nothing has been commanded yet or the axis has been released. */
+	/** The control's current commanded target — a slider's value as opposed to
+	 *  the live readback of GetAxisValue. Not necessarily a value that passed
+	 *  through this sink: an implementation backed by controllers reports the
+	 *  target those are actually holding, including one set on them directly.
+	 *  False when there is no target: nothing commanded yet, or released. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Control")
 	bool GetAxisTarget(FName Id, float& OutTarget) const;
 };
