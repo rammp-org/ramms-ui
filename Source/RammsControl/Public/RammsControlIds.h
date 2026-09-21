@@ -50,6 +50,36 @@ namespace RammsControlIds
 		}
 	} // namespace Drive
 
+	/**
+	 * A 5-bar linkage positions its endpoint in a plane, so it offers two controls
+	 * per linkage rather than one. Ids are per instance -- a robot may carry
+	 * several -- so they are built from the component name, and the suffixes are
+	 * here so an input source can tell the two apart without rebuilding the Id.
+	 */
+	namespace Linkage
+	{
+		inline const TCHAR* HeightSuffix()
+		{
+			return TEXT(".height");
+		}
+		inline const TCHAR* TranslationSuffix()
+		{
+			return TEXT(".translation");
+		}
+
+		/** "linkage.<component>.height" -- endpoint height, cm. */
+		inline FName Height(const FString& Component)
+		{
+			return FName(*FString::Printf(TEXT("linkage.%s%s"), *Component, HeightSuffix()));
+		}
+
+		/** "linkage.<component>.translation" -- endpoint fore/aft, cm. */
+		inline FName Translation(const FString& Component)
+		{
+			return FName(*FString::Printf(TEXT("linkage.%s%s"), *Component, TranslationSuffix()));
+		}
+	} // namespace Linkage
+
 	/** Group names, for discovering per-instance controls off the surface. */
 	namespace Groups
 	{
