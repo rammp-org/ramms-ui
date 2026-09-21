@@ -78,6 +78,30 @@ namespace RammsControlIds
 		{
 			return FName(*FString::Printf(TEXT("linkage.%s%s"), *Component, TranslationSuffix()));
 		}
+
+		/**
+		 * Rate controls: normalised -1..1, integrated into the endpoint target
+		 * while held, the way a drive stick works. They command a DELTA and say
+		 * nothing about where the endpoint is -- the position controls above do
+		 * that. Paired, so the UI renders them as a single joystick.
+		 */
+		inline const TCHAR* JogUpSuffix()
+		{
+			return TEXT(".jog_up");
+		}
+		inline const TCHAR* JogForwardSuffix()
+		{
+			return TEXT(".jog_forward");
+		}
+
+		inline FName JogUp(const FString& Component)
+		{
+			return FName(*FString::Printf(TEXT("linkage.%s%s"), *Component, JogUpSuffix()));
+		}
+		inline FName JogForward(const FString& Component)
+		{
+			return FName(*FString::Printf(TEXT("linkage.%s%s"), *Component, JogForwardSuffix()));
+		}
 	} // namespace Linkage
 
 	/** Group names, for discovering per-instance controls off the surface. */
