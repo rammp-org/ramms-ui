@@ -1,0 +1,69 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+
+/**
+ * The shared control vocabulary: well-known Ids and group names that
+ * contributors advertise and input sources drive.
+ *
+ * This exists so an input source never has to know which controller class is
+ * on the robot. Keyboard teleop asking for Drive::Forward works against the
+ * differential drive today and a holonomic drive tomorrow, with no change in
+ * the teleop, because both advertise the same Id. That is the same property
+ * that lets the UI build itself from DescribeControlSurface.
+ *
+ * It lives in RammsControl rather than RammsCore because RammsControl owns the
+ * control types and is already a dependency of everything that speaks them --
+ * the controllers, the robot's surface component, and the input plugins.
+ *
+ * Functions rather than namespace-scope FName constants: an FName built during
+ * static initialisation runs before the name table is reliably up, and these
+ * are cheap enough that the difference never shows.
+ *
+ * Not every control can be a constant. Anything there can be more than one of
+ * is named per instance (a robot may carry several 5-bar linkages, each
+ * advertising "linkage.<component>.height"), so those are discovered from the
+ * surface by Group and Kind instead. Group names for that are here too.
+ */
+namespace RammsControlIds
+{
+	/** Base motion, in the robot's local frame. A drive controller advertises the
+	 *  subset it can actually do: differential drive has no Strafe. */
+	namespace Drive
+	{
+		/** Continuous, normalized -1..1. Forward positive. */
+		inline FName Forward()
+		{
+			return FName(TEXT("drive.forward"));
+		}
+		/** Continuous, normalized -1..1. Left positive (yaw rate). */
+		inline FName Turn()
+		{
+			return FName(TEXT("drive.turn"));
+		}
+		/** Continuous, normalized -1..1. Left positive. Holonomic bases only. */
+		inline FName Strafe()
+		{
+			return FName(TEXT("drive.strafe"));
+		}
+	} // namespace Drive
+
+	/** Group names, for discovering per-instance controls off the surface. */
+	namespace Groups
+	{
+		inline FName Drive()
+		{
+			return FName(TEXT("Drive"));
+		}
+		inline FName Linkage()
+		{
+			return FName(TEXT("Linkage"));
+		}
+		inline FName Motors()
+		{
+			return FName(TEXT("Motors"));
+		}
+	} // namespace Groups
+} // namespace RammsControlIds
