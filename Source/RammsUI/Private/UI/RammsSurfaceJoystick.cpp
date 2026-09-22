@@ -2,7 +2,7 @@
 
 #include "UI/RammsSurfaceJoystick.h"
 #include "RammsControlSink.h"
-#include "RammsUISubsystem.h"
+#include "RammsControlSurfaceRegistry.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
 
@@ -47,9 +47,9 @@ UObject* URammsSurfaceJoystick::ResolveSink()
 	}
 	if (UWorld* World = GetWorld())
 	{
-		if (URammsUISubsystem* UI = World->GetSubsystem<URammsUISubsystem>())
+		if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
 		{
-			UObject* Found = UI->FindControlSurface();
+			UObject* Found = Reg->FindControlSurface();
 			if (Found && Found->GetClass()->ImplementsInterface(URammsControlSink::StaticClass()))
 			{
 				TargetSink = Found;

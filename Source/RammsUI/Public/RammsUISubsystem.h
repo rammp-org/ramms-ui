@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Interfaces/IRammsRobotController.h"
-#include "RammsControlSurfaceProvider.h"
 #include "RammsUIEventTypes.h"
 #include "RammsDetectionTypes.h"
 #include "UI/RammsUIStyle.h"
@@ -21,6 +20,11 @@
  *
  * 2. **UI Event Bus** — Visualization and UI state events that cross the
  *    widget/actor boundary.  Any widget or actor can broadcast or subscribe.
+ *
+ * The control-surface registry used to be a third service here. It moved to
+ * URammsControlSurfaceRegistry in the RammsControl plugin: robots register
+ * with it, and depending on the UI plugin merely to be discoverable was the
+ * wrong way round.
  *
  * ## Access from C++
  *
@@ -101,40 +105,6 @@ public:
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnControllerRegistryChanged, AActor*, Actor, bool, bRegistered);
 	UPROPERTY(BlueprintAssignable, Category = "Ramms|Controllers")
 	FOnControllerRegistryChanged OnControllerRegistryChanged;
-
-	// ── Control Surface Registry ──────────────────────────────────
-	//
-	// Robots (their URammsRobotControlSurfaceComponent, in RammsCore) register
-	// the object that implements IRammsControlSurfaceProvider (+ usually
-	// IRammsControlSink) here on BeginPlay, so generic panels and input
-	// components find every controllable robot without naming it.
-
-	/** Register a control surface provider (must implement IRammsControlSurfaceProvider). */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Control Surfaces")
-	void RegisterControlSurface(UObject* Provider);
-
-	/** Unregister a control surface provider (call from EndPlay). */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Control Surfaces")
-	void UnregisterControlSurface(UObject* Provider);
-
-	/** First registered, still-valid control surface provider; nullptr if none. */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Control Surfaces")
-	UObject* FindControlSurface();
-
-	/** Registered provider whose surface's RobotName matches; nullptr if none. */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Control Surfaces")
-	UObject* FindControlSurfaceByRobotName(const FString& RobotName);
-
-	/** All registered, still-valid control surface providers. */
-	UFUNCTION(BlueprintCallable, Category = "Ramms|Control Surfaces")
-	TArray<UObject*> GetAllControlSurfaces();
-
-	UFUNCTION(BlueprintPure, Category = "Ramms|Control Surfaces")
-	int32 GetControlSurfaceCount();
-
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnControlSurfaceRegistryChanged, UObject*, Provider, bool, bRegistered);
-	UPROPERTY(BlueprintAssignable, Category = "Ramms|Control Surfaces")
-	FOnControlSurfaceRegistryChanged OnControlSurfaceRegistryChanged;
 
 	// ── UI Event Bus: Task Actions ────────────────────────────────
 
@@ -532,10 +502,6 @@ private:
 	/** Registered robot controllers (weak references to avoid preventing GC) */
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> RegisteredControllers;
-
-	/** Registered control surface providers (weak; robots unregister on EndPlay). */
-	TArray<TWeakObjectPtr<UObject>> RegisteredControlSurfaces;
-	void							CleanupStaleControlSurfaces();
 
 	/** Cached robot state from most recent broadcast */
 	FRammsRobotState CachedRobotState;
