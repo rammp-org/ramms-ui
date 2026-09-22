@@ -100,6 +100,13 @@ private:
 	void OnMinusPressed();
 	UFUNCTION()
 	void OnMinusReleased();
+	UFUNCTION()
+	void OnEnumPrevClicked();
+	UFUNCTION()
+	void OnEnumNextClicked();
+
+	/** Step an Enum control's index, wrapping, and send it. */
+	void StepEnum(int32 Delta);
 
 	void	 SetAxis(float Value);
 	void	 ReleaseAxis();
@@ -117,7 +124,7 @@ private:
 	double				LastUserInputTime = -1000.0;
 	bool				bRefreshing = false;
 	/** A hold button is down: the axis is ours until released (or we go away). */
-	bool				bHoldActive = false;
+	bool bHoldActive = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> RootBox;
@@ -131,6 +138,10 @@ private:
 	TObjectPtr<UTextBlock> RateLabel;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RateValue;
+
+	/** Shows the active choice of an Enum control. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> EnumValue;
 	/** Position / Velocity rows: the live readback, separate from the slider's target. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> LiveValue;
