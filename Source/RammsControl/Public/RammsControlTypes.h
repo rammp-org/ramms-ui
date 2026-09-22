@@ -21,6 +21,10 @@ enum class ERammsControlKind : uint8
 	Position   UMETA(DisplayName = "Position"),
 	Velocity   UMETA(DisplayName = "Velocity"),
 	Action	   UMETA(DisplayName = "Action"),
+	/** One of a fixed set of choices. The value is the index into
+	 *  FRammsControlAxis::EnumLabels, so it still travels as a float and every
+	 *  sink signature stays (FName, float). */
+	Enum	   UMETA(DisplayName = "Enum"),
 };
 
 /** Units of a control's value, for display and for input scaling. */
@@ -109,6 +113,14 @@ struct RAMMSCONTROL_API FRammsControlAxis
 	 *  (joystick Y / "forward") one, its partner the horizontal (X). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
 	FName PairedAxis;
+
+	/**
+	 * Choices for an Enum control, in index order. Empty for every other kind.
+	 * A panel renders these as a selector; the control's value is the index of
+	 * the active one.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
+	TArray<FText> EnumLabels;
 
 	bool  IsAction() const { return Kind == ERammsControlKind::Action; }
 	float Clamp(float Value) const { return Range.X < Range.Y ? FMath::Clamp(Value, static_cast<float>(Range.X), static_cast<float>(Range.Y)) : Value; }

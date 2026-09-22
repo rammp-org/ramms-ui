@@ -48,6 +48,11 @@ namespace RammsControlIds
 		{
 			return FName(TEXT("drive.strafe"));
 		}
+		/** Which drive mode is live, when a robot carries more than one. */
+		inline FName Mode()
+		{
+			return FName(TEXT("drive.mode"));
+		}
 	} // namespace Drive
 
 	/**
