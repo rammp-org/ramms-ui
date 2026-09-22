@@ -154,6 +154,15 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		ValueBox->SetWidthOverride(ValueColumnWidth * 2.0f);
 		ValueBox->AddChild(EnumValue);
 
+		// Added before the steppers: MakeHoldButton appends to RootBox as it
+		// builds, so constructing the buttons first would lay the row out as
+		// label / < / > / value.
+		if (UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(ValueBox))
+		{
+			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
+			ValueSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
 		// Same steppers the rate row uses, so they are styled and sized alike --
 		// but wired to OnClicked, since stepping a choice has nothing to ramp.
 		UTextBlock* PrevText = nullptr;
@@ -164,12 +173,6 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		PlusLabel = NextText;
 		MinusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumPrevClicked);
 		PlusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumNextClicked);
-
-		if (UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(ValueBox))
-		{
-			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
-			ValueSlot->SetVerticalAlignment(VAlign_Center);
-		}
 
 		// A read-only selector still shows which choice is live; it just cannot
 		// be stepped.
@@ -497,6 +500,14 @@ void URammsControlRow::ApplyStyle_Implementation()
 			Text->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 		}
 	}
+	if (EnumValue)
+	{
+		// Words rather than digits, so body type rather than the monospace the
+		// numeric fields use; Info because the active choice is the point of
+		// the row.
+		EnumValue->SetFont(Style->Typography.Body);
+		EnumValue->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
 	if (RateValue)
 	{
 		RateValue->SetFont(Style->Typography.Monospace); // constant digit widths
@@ -550,8 +561,16 @@ void URammsControlRow::StepEnum(int32 Delta)
 		return;
 	}
 	const int32 Count = Axis.EnumLabels.Num();
-	const float Live = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
-	const int32 Current = FMath::Clamp(FMath::RoundToInt(Live), 0, Count - 1);
+	// Step from what was last commanded, falling back to the readback when
+	// nothing has been. Stepping from the readback loses a click whenever the
+	// choice is applied asynchronously: both clicks read the old index and
+	// send the same next value, so the second one does nothing.
+	float From = 0.0f;
+	if (!IRammsControlSink::Execute_GetAxisTarget(Sink, Axis.Id, From))
+	{
+		From = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
+	}
+	const int32 Current = FMath::Clamp(FMath::RoundToInt(From), 0, Count - 1);
 	// Wrap: with two modes a one-way stepper would need the user to know which
 	// end they were at.
 	const int32 Next = ((Current + Delta) % Count + Count) % Count;
