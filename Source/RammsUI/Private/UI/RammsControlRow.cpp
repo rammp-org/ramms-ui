@@ -29,6 +29,7 @@ void URammsControlRow::ResetCachedWidgets()
 	RootBox = nullptr;
 	AxisControl = nullptr;
 	ActionButton = nullptr;
+	EnumValue = nullptr;
 	RateLabel = nullptr;
 	RateValue = nullptr;
 	LiveValue = nullptr;
@@ -129,11 +130,60 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 	RootBox->ClearChildren();
 	AxisControl = nullptr;
 	ActionButton = nullptr;
+	EnumValue = nullptr;
 	MinusButton = PlusButton = nullptr;
 
 	const FText Label = Axis.DisplayName.IsEmpty() ? FText::FromName(Axis.Id) : Axis.DisplayName;
 
-	if (Axis.IsAction())
+	if (Axis.Kind == ERammsControlKind::Enum && Axis.EnumLabels.Num() > 0)
+	{
+		// Label, the active choice, and a pair of steppers -- the same shape as
+		// a rate row, so a selector does not look like a different species of
+		// control. Clicks step rather than hold: there is nothing to ramp.
+		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumLabel"));
+		RateLabel->SetText(Label);
+		if (UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel))
+		{
+			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
+		EnumValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumValue"));
+		EnumValue->SetJustification(ETextJustify::Center);
+		USizeBox* ValueBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("EnumBox"));
+		ValueBox->SetWidthOverride(ValueColumnWidth * 2.0f);
+		ValueBox->AddChild(EnumValue);
+
+		// Added before the steppers: MakeHoldButton appends to RootBox as it
+		// builds, so constructing the buttons first would lay the row out as
+		// label / < / > / value.
+		if (UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(ValueBox))
+		{
+			ValueSlot->SetPadding(FMargin(6.0f, 0.0f));
+			ValueSlot->SetVerticalAlignment(VAlign_Center);
+		}
+
+		// Same steppers the rate row uses, so they are styled and sized alike --
+		// but wired to OnClicked, since stepping a choice has nothing to ramp.
+		UTextBlock* PrevText = nullptr;
+		UTextBlock* NextText = nullptr;
+		MinusButton = MakeHoldButton(TEXT("EnumPrev"), TEXT("<"), PrevText);
+		PlusButton = MakeHoldButton(TEXT("EnumNext"), TEXT(">"), NextText);
+		MinusLabel = PrevText;
+		PlusLabel = NextText;
+		MinusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumPrevClicked);
+		PlusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumNextClicked);
+
+		// A read-only selector still shows which choice is live; it just cannot
+		// be stepped.
+		if (Axis.bReadOnly)
+		{
+			MinusButton->SetIsEnabled(false);
+			PlusButton->SetIsEnabled(false);
+		}
+		Refresh();
+	}
+	else if (Axis.IsAction())
 	{
 		ActionButton = CreateWidget<URammsButton>(this);
 		if (Style)
@@ -307,6 +357,14 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 	}
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	const float	 Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
+	if (EnumValue)
+	{
+		// The value IS the index, so the row always shows whatever is actually
+		// live -- including a change made by something other than this row.
+		const int32 Index = FMath::Clamp(FMath::RoundToInt(Value), 0, Axis.EnumLabels.Num() - 1);
+		EnumValue->SetText(Axis.EnumLabels.IsValidIndex(Index) ? Axis.EnumLabels[Index] : FText::GetEmpty());
+		return;
+	}
 	if (Axis.bReadOnly && RateValue)
 	{
 		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%+.*f %s"), Decimals(), Value, *UnitsText().ToString())));
@@ -319,7 +377,7 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 		// while the live column follows the motor. The guard drops any
 		// OnValueChanged a programmatic update might raise, so readback never
 		// becomes a command (that loop would hold the axis and fight others).
-		float Target = 0.0f;
+		float	   Target = 0.0f;
 		const bool bSinkHasTarget = IRammsControlSink::Execute_GetAxisTarget(Sink, Axis.Id, Target);
 		if (bSinkHasTarget)
 		{
@@ -442,6 +500,14 @@ void URammsControlRow::ApplyStyle_Implementation()
 			Text->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 		}
 	}
+	if (EnumValue)
+	{
+		// Words rather than digits, so body type rather than the monospace the
+		// numeric fields use; Info because the active choice is the point of
+		// the row.
+		EnumValue->SetFont(Style->Typography.Body);
+		EnumValue->SetColorAndOpacity(FSlateColor(Style->Colors.Info));
+	}
 	if (RateValue)
 	{
 		RateValue->SetFont(Style->Typography.Monospace); // constant digit widths
@@ -486,4 +552,38 @@ void URammsControlRow::SimulateRelease()
 float URammsControlRow::GetTargetValue() const
 {
 	return AxisControl ? AxisControl->GetValue() : 0.0f;
+}
+
+void URammsControlRow::StepEnum(int32 Delta)
+{
+	if (!Sink || Axis.EnumLabels.Num() == 0)
+	{
+		return;
+	}
+	const int32 Count = Axis.EnumLabels.Num();
+	// Step from what was last commanded, falling back to the readback when
+	// nothing has been. Stepping from the readback loses a click whenever the
+	// choice is applied asynchronously: both clicks read the old index and
+	// send the same next value, so the second one does nothing.
+	float From = 0.0f;
+	if (!IRammsControlSink::Execute_GetAxisTarget(Sink, Axis.Id, From))
+	{
+		From = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
+	}
+	const int32 Current = FMath::Clamp(FMath::RoundToInt(From), 0, Count - 1);
+	// Wrap: with two modes a one-way stepper would need the user to know which
+	// end they were at.
+	const int32 Next = ((Current + Delta) % Count + Count) % Count;
+	IRammsControlSink::Execute_SetAxis(Sink, Axis.Id, static_cast<float>(Next), Source);
+	Refresh();
+}
+
+void URammsControlRow::OnEnumPrevClicked()
+{
+	StepEnum(-1);
+}
+
+void URammsControlRow::OnEnumNextClicked()
+{
+	StepEnum(1);
 }

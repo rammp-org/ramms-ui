@@ -16,23 +16,22 @@
 	"Installed": false,
 	"Modules": [
 		{
-			"Name": "RammsControl",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		},
-		{
 			"Name": "RammsUI",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
 	],
-    "Plugins": [
+	"Plugins": [
 		{
 			"Name": "RammsStreaming",
 			"Enabled": true
 		},
 		{
 			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "RammsControl",
 			"Enabled": true
 		}
 	]

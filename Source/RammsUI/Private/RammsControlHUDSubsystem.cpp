@@ -3,6 +3,7 @@
 #include "RammsControlHUDSubsystem.h"
 #include "RammsControlHUDSettings.h"
 #include "RammsUISubsystem.h"
+#include "RammsControlSurfaceRegistry.h"
 #include "UI/RammsControlSurfacePanel.h"
 #include "UI/RammsLayoutHost.h"
 #include "UI/RammsSimLayout.h"
@@ -48,9 +49,9 @@ void URammsControlHUDSubsystem::Deinitialize()
 	DestroyHUD();
 	if (UWorld* World = SubscribedWorld.Get())
 	{
-		if (URammsUISubsystem* UI = World->GetSubsystem<URammsUISubsystem>())
+		if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
 		{
-			UI->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
+			Reg->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
 		}
 	}
 	SubscribedWorld = nullptr;
@@ -75,14 +76,14 @@ void URammsControlHUDSubsystem::PlayerControllerChanged(APlayerController* NewPl
 	{
 		if (UWorld* Old = SubscribedWorld.Get())
 		{
-			if (URammsUISubsystem* OldUI = Old->GetSubsystem<URammsUISubsystem>())
+			if (URammsControlSurfaceRegistry* OldReg = Old->GetSubsystem<URammsControlSurfaceRegistry>())
 			{
-				OldUI->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
+				OldReg->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
 			}
 		}
-		if (URammsUISubsystem* UI = World->GetSubsystem<URammsUISubsystem>())
+		if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
 		{
-			UI->OnControlSurfaceRegistryChanged.AddUniqueDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
+			Reg->OnControlSurfaceRegistryChanged.AddUniqueDynamic(this, &URammsControlHUDSubsystem::OnRegistryChanged);
 			SubscribedWorld = World;
 		}
 	}
@@ -106,9 +107,9 @@ void URammsControlHUDSubsystem::TrySpawn()
 		return;
 	}
 	// Only once a robot is controllable; the registry callback retries.
-	UWorld*			   World = Controller->GetWorld();
-	URammsUISubsystem* UI = World ? World->GetSubsystem<URammsUISubsystem>() : nullptr;
-	if (!UI || UI->GetControlSurfaceCount() == 0)
+	UWorld*						  World = Controller->GetWorld();
+	URammsControlSurfaceRegistry* Reg = World ? World->GetSubsystem<URammsControlSurfaceRegistry>() : nullptr;
+	if (!Reg || Reg->GetControlSurfaceCount() == 0)
 	{
 		return;
 	}

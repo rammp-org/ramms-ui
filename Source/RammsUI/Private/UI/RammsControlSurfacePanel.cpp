@@ -7,7 +7,7 @@
 #include "UI/RammsUIStyle.h"
 #include "RammsControlSink.h"
 #include "RammsControlSurfaceProvider.h"
-#include "RammsUISubsystem.h"
+#include "RammsControlSurfaceRegistry.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/HorizontalBox.h"
@@ -81,9 +81,9 @@ void URammsControlSurfacePanel::NativeConstruct()
 	{
 		if (UWorld* World = GetWorld())
 		{
-			if (URammsUISubsystem* UI = World->GetSubsystem<URammsUISubsystem>())
+			if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
 			{
-				UI->OnControlSurfaceRegistryChanged.AddUniqueDynamic(this, &URammsControlSurfacePanel::OnRegistryChanged);
+				Reg->OnControlSurfaceRegistryChanged.AddUniqueDynamic(this, &URammsControlSurfacePanel::OnRegistryChanged);
 				bSubscribed = true;
 			}
 		}
@@ -98,9 +98,9 @@ void URammsControlSurfacePanel::NativeDestruct()
 	{
 		if (UWorld* World = GetWorld())
 		{
-			if (URammsUISubsystem* UI = World->GetSubsystem<URammsUISubsystem>())
+			if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
 			{
-				UI->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlSurfacePanel::OnRegistryChanged);
+				Reg->OnControlSurfaceRegistryChanged.RemoveDynamic(this, &URammsControlSurfacePanel::OnRegistryChanged);
 			}
 		}
 		bSubscribed = false;
@@ -136,16 +136,16 @@ bool URammsControlSurfacePanel::ResolveSurface()
 	{
 		return false;
 	}
-	UWorld*			   World = GetWorld();
-	URammsUISubsystem* UI = World ? World->GetSubsystem<URammsUISubsystem>() : nullptr;
-	if (!UI)
+	UWorld*						  World = GetWorld();
+	URammsControlSurfaceRegistry* Reg = World ? World->GetSubsystem<URammsControlSurfaceRegistry>() : nullptr;
+	if (!Reg)
 	{
 		return false;
 	}
-	UObject* Found = TargetRobotName.IsEmpty() ? nullptr : UI->FindControlSurfaceByRobotName(TargetRobotName);
+	UObject* Found = TargetRobotName.IsEmpty() ? nullptr : Reg->FindControlSurfaceByRobotName(TargetRobotName);
 	if (!Found)
 	{
-		Found = UI->FindControlSurface();
+		Found = Reg->FindControlSurface();
 	}
 	if (IsSurface(Found))
 	{
@@ -215,9 +215,9 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 {
 	URammsCollapsibleContainer* Container = CreateWidget<URammsCollapsibleContainer>(this);
 	Container->SetHeaderTitle(FText::FromName(Group));
-	Container->SetMaxContentHeight(0.0f); // size to content; the panel's own ScrollBox scrolls
+	Container->SetMaxContentHeight(0.0f);					   // size to content; the panel's own ScrollBox scrolls
 	Container->SetWheelConsumption(EConsumeMouseWheel::Never); // the wheel bubbles up to the panel, which scrolls the list
-	Container->SetScrollingEnabled(false);						 // it sizes to its content; only the panel's list scrolls
+	Container->SetScrollingEnabled(false);					   // it sizes to its content; only the panel's list scrolls
 	UVerticalBoxSlot* GroupSlot = GroupsVBox->AddChildToVerticalBox(Container);
 	if (GroupSlot)
 	{
@@ -262,7 +262,7 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				// a fixed box of its own size (plus a margin) in both dimensions and
 				// centre that in the row; otherwise the row is narrower / shorter than
 				// the circle and neighbours draw over it.
-				USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				USizeBox*	Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 				const float BoxSize = JoystickRadius * 2.0f + 8.0f;
 				Box->SetWidthOverride(BoxSize);
 				Box->SetHeightOverride(BoxSize);
