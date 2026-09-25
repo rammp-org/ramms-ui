@@ -169,16 +169,33 @@ bool URammsSurfacePositionPad::CommandValue(FVector2D Value)
 	// Both axes, every time. A 5-bar reaches a point with both motors, so
 	// commanding one coordinate and leaving the other to whatever it was is how
 	// a pad ends up describing a pose nobody pointed at.
-	bool bAny = false;
-	if (!ControlIdY.IsNone())
+	//
+	// And then the refused half again, because the sink takes ONE axis at a
+	// time. A click is therefore two 1-D commands with an axis-aligned pose in
+	// between -- (old across, new along) or the reverse -- and a curved
+	// reachable region can exclude that intermediate even when the point
+	// clicked sits well inside it. The controller refuses that half, the other
+	// half lands, and the endpoint arrives at the new fore/aft with its old
+	// height. A second click then works, because by then the first coordinate
+	// has already moved: exactly the "click twice" behaviour this collapses.
+	//
+	// Refused twice, with the other half moved in between, means the point
+	// really is out of reach, and the answer is then correctly no.
+	const bool bHasY = !ControlIdY.IsNone();
+	const bool bHasX = !ControlIdX.IsNone();
+
+	bool bY = bHasY && IRammsControlSink::Execute_SetAxis(Sink, ControlIdY, static_cast<float>(Value.Y), Source);
+	bool bX = bHasX && IRammsControlSink::Execute_SetAxis(Sink, ControlIdX, static_cast<float>(Value.X), Source);
+
+	if (bHasY && !bY && bX)
 	{
-		bAny |= IRammsControlSink::Execute_SetAxis(Sink, ControlIdY, static_cast<float>(Value.Y), Source);
+		bY = IRammsControlSink::Execute_SetAxis(Sink, ControlIdY, static_cast<float>(Value.Y), Source);
 	}
-	if (!ControlIdX.IsNone())
+	if (bHasX && !bX && bY)
 	{
-		bAny |= IRammsControlSink::Execute_SetAxis(Sink, ControlIdX, static_cast<float>(Value.X), Source);
+		bX = IRammsControlSink::Execute_SetAxis(Sink, ControlIdX, static_cast<float>(Value.X), Source);
 	}
-	return bAny;
+	return bY || bX;
 }
 
 bool URammsSurfacePositionPad::CommandAt(const FGeometry& Geometry, const FVector2D& ScreenPosition)
