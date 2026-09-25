@@ -23,6 +23,27 @@ namespace
 	}
 } // namespace
 
+URammsSurfacePositionPad::URammsSurfacePositionPad(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	// Visible, not the UUserWidget default of SelfHitTestInvisible.
+	//
+	// SelfHitTestInvisible means "hit-test my children, not me", and this pad
+	// has no children: everything it shows is drawn in NativePaint. So it
+	// painted perfectly and accepted no pointer at all -- the region, the live
+	// dot and the reset button all worked, and the pad itself could not be
+	// clicked or dragged.
+	SetVisibility(ESlateVisibility::Visible);
+}
+
+void URammsSurfacePositionPad::NativeConstruct()
+{
+	Super::NativeConstruct();
+	// Again here: a Blueprint subclass or an archetype can carry its own
+	// serialized Visibility that overrides what the constructor set.
+	SetVisibility(ESlateVisibility::Visible);
+}
+
 void URammsSurfacePositionPad::SetTarget(UObject* Sink, FName IdX, FName IdY)
 {
 	TargetSink = Sink;
@@ -211,12 +232,28 @@ int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeome
 			WhiteBox(), ESlateDrawEffect::None, Color);
 	};
 
-	// The target first, so a live dot sitting on top of it reads as "arrived"
-	// rather than hiding it.
+	// The target is a ring, not a second filled marker. Drawn as a box it sat
+	// behind the live dot as a larger square, so "commanded" and "arrived" read
+	// as one blob rather than as a dot inside a ring closing on it.
+	const auto Ring = [&](FVector2D Value, const FLinearColor& Color, float Radius) {
+		constexpr int32	  Segments = 16;
+		const FVector2D	  At = ValueToLocal(Value, Size);
+		TArray<FVector2D> Points;
+		Points.Reserve(Segments + 1);
+		for (int32 i = 0; i <= Segments; ++i)
+		{
+			const float Angle = 2.0f * PI * static_cast<float>(i) / static_cast<float>(Segments);
+			Points.Emplace(At.X + Radius * FMath::Cos(Angle), At.Y + Radius * FMath::Sin(Angle));
+		}
+		FSlateDrawElement::MakeLines(OutDrawElements, Layer + 1, Paint, Points, ESlateDrawEffect::None, Color,
+			/*bAntialias=*/true, 1.5f);
+	};
+
+	// The ring first, so the live dot draws inside it rather than under it.
 	FVector2D Target;
 	if (GetTargetValue(Target))
 	{
-		Dot(Target, TargetColor, DotRadius * 1.6f);
+		Ring(Target, TargetColor, DotRadius * 1.8f);
 	}
 	Dot(GetLiveValue(), LiveColor, DotRadius);
 
@@ -225,6 +262,13 @@ int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeome
 
 FReply URammsSurfacePositionPad::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	// Left only. A right- or middle-click would otherwise command a position
+	// and take the mouse capture with it, which is how a context menu turns
+	// into a move order.
+	if (InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return FReply::Unhandled();
+	}
 	bDragging = true;
 	CommandAt(InGeometry, InMouseEvent.GetScreenSpacePosition());
 	// Captured, or a drag that leaves the widget would silently stop steering
@@ -260,7 +304,10 @@ FReply URammsSurfacePositionPad::NativeOnTouchStarted(const FGeometry& InGeometr
 {
 	bDragging = true;
 	CommandAt(InGeometry, InEvent.GetScreenSpacePosition());
-	return FReply::Handled();
+	// Captured, like the mouse path: without it a finger that slides off the
+	// pad stops delivering moves here, so the drag dies mid-gesture and the
+	// end event cannot reliably clear the interaction either.
+	return FReply::Handled().CaptureMouse(TakeWidget());
 }
 
 FReply URammsSurfacePositionPad::NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InEvent)
@@ -276,5 +323,5 @@ FReply URammsSurfacePositionPad::NativeOnTouchMoved(const FGeometry& InGeometry,
 FReply URammsSurfacePositionPad::NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InEvent)
 {
 	bDragging = false;
-	return FReply::Handled();
+	return FReply::Handled().ReleaseMouseCapture();
 }
