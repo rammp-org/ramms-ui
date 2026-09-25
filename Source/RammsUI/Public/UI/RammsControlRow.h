@@ -30,6 +30,22 @@ class RAMMSUI_API URammsControlRow : public URammsBaseWidget
 	GENERATED_BODY()
 
 public:
+	/**
+	 * The range a widget should DISPLAY for an axis, as opposed to the range
+	 * the sink enforces.
+	 *
+	 * A non-increasing range means "defer to the backend", which is a perfectly
+	 * good answer for a sink and useless for anything that has to lay out a
+	 * control: a slider cannot be drawn between two equal numbers, and a pad
+	 * mapping built on one puts every value in the same pixel. Units give a
+	 * sensible span to draw instead. It shapes presentation only -- the sink
+	 * still does not clamp to it.
+	 *
+	 * Static and public because the pad needs the same answer the row does, and
+	 * two copies of this rule would drift.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Control")
+	static FVector2D DisplayRangeFor(const FRammsControlAxis& Axis);
 	/** Bind this row to a control on a sink. Builds the row's widgets. */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void Setup(UObject* InSink, const FRammsControlAxis& InAxis, ERammsControlSource InSource);

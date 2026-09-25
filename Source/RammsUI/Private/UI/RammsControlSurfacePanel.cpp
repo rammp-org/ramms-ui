@@ -302,7 +302,12 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				Pad->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
 				// The region rides on the vertical axis, which is where the
 				// contributor puts it so there is one per pair.
-				Pad->SetRegion(Horizontal.Range, Vertical.Range, Vertical.RegionOutline);
+				// Display ranges, the same rule a slider row uses. A pair that
+				// defers its range to the backend has a non-increasing one, and
+				// mapping a pad through that collapses every value onto one
+				// pixel and draws a fallback box of zero size.
+				Pad->SetRegion(URammsControlRow::DisplayRangeFor(Horizontal),
+					URammsControlRow::DisplayRangeFor(Vertical), Vertical.RegionOutline);
 
 				UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "PadCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));

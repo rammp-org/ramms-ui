@@ -34,6 +34,13 @@ URammsSurfacePositionPad::URammsSurfacePositionPad(const FObjectInitializer& Obj
 	// dot and the reset button all worked, and the pad itself could not be
 	// clicked or dragged.
 	SetVisibility(ESlateVisibility::Visible);
+
+	// Volatile, because everything this draws is read from the sink inside
+	// NativePaint rather than pushed in. Under a Slate invalidation root a
+	// non-volatile widget can have its first paint cached indefinitely, and
+	// the live dot would then sit still while the mechanism moved and the ring
+	// would never clear on arrival.
+	ForceVolatile(true);
 }
 
 void URammsSurfacePositionPad::NativeConstruct()
