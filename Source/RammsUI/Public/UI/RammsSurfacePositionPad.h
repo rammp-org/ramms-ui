@@ -80,6 +80,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "1.0"))
 	float DotRadius = 4.0f;
 
+	/** How close the live readback has to be to the target, in the pair's own
+	 *  units, before the pose counts as arrived and the ring stops being drawn.
+	 *  A servo settles near its target rather than exactly on it, so an exact
+	 *  comparison would leave the ring up forever. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "0.0"))
+	float ArrivedTolerance = 0.25f;
+
 	/** Point the pair at a sink and a pair of ids. */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetTarget(UObject* Sink, FName IdX, FName IdY);

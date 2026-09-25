@@ -195,13 +195,27 @@ bool URammsSurfacePositionPad::CommandValue(FVector2D Value)
 	{
 		bX = IRammsControlSink::Execute_SetAxis(Sink, ControlIdX, static_cast<float>(Value.X), Source);
 	}
-	return bY || bX;
+
+	// A pair is commanded or it is not. Reporting success because one half
+	// landed would call a half-applied pose a success -- and a half-applied
+	// pose is exactly the bug this retry exists to remove. A pad configured
+	// with only one id is still answered on that one.
+	return (bHasX && bHasY) ? (bX && bY) : (bX || bY);
 }
 
 bool URammsSurfacePositionPad::CommandAt(const FGeometry& Geometry, const FVector2D& ScreenPosition)
 {
 	const FVector2D Local = Geometry.AbsoluteToLocal(ScreenPosition);
-	return CommandValue(LocalToValue(Local, Geometry.GetLocalSize()));
+	FVector2D		Value = LocalToValue(Local, Geometry.GetLocalSize());
+
+	// Clamped, because the pointer is CAPTURED: a drag continues to be
+	// delivered here after it leaves the widget, so the mapping runs on
+	// coordinates outside the pad and extrapolates past both ranges. The sink
+	// does not clamp to the advertised range, so without this a drag off the
+	// edge sends targets the axis never offered.
+	Value.X = FMath::Clamp(Value.X, FMath::Min(RangeX.X, RangeX.Y), FMath::Max(RangeX.X, RangeX.Y));
+	Value.Y = FMath::Clamp(Value.Y, FMath::Min(RangeY.X, RangeY.Y), FMath::Max(RangeY.X, RangeY.Y));
+	return CommandValue(Value);
 }
 
 int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -266,13 +280,17 @@ int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeome
 			/*bAntialias=*/true, 1.5f);
 	};
 
-	// The ring first, so the live dot draws inside it rather than under it.
-	FVector2D Target;
-	if (GetTargetValue(Target))
+	// The ring first, so the live dot draws inside it rather than under it --
+	// and only while the two actually differ. A ring drawn around a dot that
+	// has arrived says "still moving" about a mechanism that has stopped, and
+	// the gap between the two is the only thing the ring is there to show.
+	const FVector2D Live = GetLiveValue();
+	FVector2D		Target;
+	if (GetTargetValue(Target) && !Target.Equals(Live, ArrivedTolerance))
 	{
 		Ring(Target, TargetColor, DotRadius * 1.8f);
 	}
-	Dot(GetLiveValue(), LiveColor, DotRadius);
+	Dot(Live, LiveColor, DotRadius);
 
 	return Layer + 2;
 }
