@@ -222,7 +222,71 @@ bool URammsSurfacePositionPad::CommandAt(const FGeometry& Geometry, const FVecto
 	// edge sends targets the axis never offered.
 	Value.X = FMath::Clamp(Value.X, FMath::Min(RangeX.X, RangeX.Y), FMath::Max(RangeX.X, RangeX.Y));
 	Value.Y = FMath::Clamp(Value.Y, FMath::Min(RangeY.X, RangeY.Y), FMath::Max(RangeY.X, RangeY.Y));
+
+	// And onto the region, because the ranges are a bounding box and the
+	// mechanism is not one. Every point in the corners of that box is drawn as
+	// unavailable and was still commandable, which sends coordinates the
+	// mechanism refuses -- and a refused pair can leave one half applied, since
+	// the two axes go through the sink one at a time.
+	//
+	// Projected rather than rejected: a drag that wanders over the edge should
+	// track along the boundary, which is what the mechanism can actually do,
+	// instead of freezing or silently doing nothing.
+	Value = ProjectIntoRegion(Value);
 	return CommandValue(Value);
+}
+
+bool URammsSurfacePositionPad::IsInsideRegion(FVector2D Value) const
+{
+	if (Region.Num() < 3)
+	{
+		// Nothing published: the pair really is its rectangle, and the caller
+		// has already clamped to that.
+		return true;
+	}
+	// Crossing count. The outline is closed implicitly, so the last point pairs
+	// with the first.
+	bool bInside = false;
+	for (int32 i = 0, j = Region.Num() - 1; i < Region.Num(); j = i++)
+	{
+		const FVector2D& A = Region[i];
+		const FVector2D& B = Region[j];
+		if (((A.Y > Value.Y) != (B.Y > Value.Y))
+			&& (Value.X < (B.X - A.X) * (Value.Y - A.Y) / (B.Y - A.Y != 0.0 ? B.Y - A.Y : UE_DOUBLE_SMALL_NUMBER) + A.X))
+		{
+			bInside = !bInside;
+		}
+	}
+	return bInside;
+}
+
+FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
+{
+	if (Region.Num() < 3 || IsInsideRegion(Value))
+	{
+		return Value;
+	}
+
+	FVector2D Best = Value;
+	double	  BestDistSq = TNumericLimits<double>::Max();
+	for (int32 i = 0, j = Region.Num() - 1; i < Region.Num(); j = i++)
+	{
+		const FVector2D& A = Region[j];
+		const FVector2D& B = Region[i];
+		const FVector2D	 Edge = B - A;
+		const double	 LenSq = Edge.SizeSquared();
+		const double	 T = LenSq > UE_DOUBLE_SMALL_NUMBER
+			? FMath::Clamp(FVector2D::DotProduct(Value - A, Edge) / LenSq, 0.0, 1.0)
+			: 0.0;
+		const FVector2D	 OnEdge = A + Edge * T;
+		const double	 DistSq = (Value - OnEdge).SizeSquared();
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = OnEdge;
+		}
+	}
+	return Best;
 }
 
 int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,

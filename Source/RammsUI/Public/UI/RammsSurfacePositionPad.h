@@ -140,5 +140,12 @@ private:
 	/** The shape actually drawn: the published region, or the range rectangle. */
 	TArray<FVector2D> ShapeToDraw() const;
 
+	/** True when Value lies inside the published region (always true when none
+	 *  is published, since the pair is then the rectangle its ranges describe). */
+	bool IsInsideRegion(FVector2D Value) const;
+
+	/** Value, or the nearest point on the region's boundary when it is outside. */
+	FVector2D ProjectIntoRegion(FVector2D Value) const;
+
 	bool bDragging = false;
 };
