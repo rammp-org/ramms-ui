@@ -186,8 +186,22 @@ bool URammsSurfacePositionPad::CommandValue(FVector2D Value)
 	// height. A second click then works, because by then the first coordinate
 	// has already moved: exactly the "click twice" behaviour this collapses.
 	//
-	// Refused twice, with the other half moved in between, means the point
-	// really is out of reach, and the answer is then correctly no.
+	// Two refusals are NOT proof that the point is unreachable, and this must
+	// not be read as if they were. The region can be non-convex -- the
+	// lift-drive's measurably is -- and then both axis-aligned intermediates,
+	// (old across, new along) and its mirror, can lie outside it while the
+	// point itself lies inside. Two 1-D commands cannot reach such a point at
+	// all, whatever order they are tried in.
+	//
+	// Measured on the lift-drive, across 3192 ordered pairs of points sampled
+	// inside its published region, that case arose zero times: the reflex
+	// vertices are local to the boundary rather than a notch separating one
+	// part of the region from another. So the retry is sufficient there, and
+	// the limitation is real rather than hypothetical on some other mechanism.
+	//
+	// The fix is an atomic pair command -- a 2-D control kind -- since every
+	// sink signature today is (FName, float). Until that exists this reports
+	// failure for a point it could not command, which is at least honest.
 	const bool bHasY = !ControlIdY.IsNone();
 	const bool bHasX = !ControlIdX.IsNone();
 
