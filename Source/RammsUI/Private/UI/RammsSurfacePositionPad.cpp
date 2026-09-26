@@ -288,7 +288,12 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 		ZLo = FMath::Min(ZLo, P.Y);
 		ZHi = FMath::Max(ZHi, P.Y);
 	}
-	const double Z = FMath::Clamp(Value.Y, ZLo, ZHi);
+	// Just inside the extremes. The crossing rule below is half-open in Y so
+	// that a vertex shared by two edges counts once; at exactly the lowest or
+	// highest point of the polygon that rule yields nothing, and the clamp
+	// would then have no interval to work with.
+	const double Inward = FMath::Max((ZHi - ZLo) * 1e-6, UE_DOUBLE_SMALL_NUMBER);
+	const double Z = FMath::Clamp(Value.Y, ZLo + Inward, ZHi - Inward);
 
 	// Every crossing of the horizontal line at this height, in order. Sorted
 	// and paired, they are the intervals reachable at this height -- plural,
@@ -303,12 +308,12 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 		const double	 Span = B.Y - A.Y;
 		if (FMath::Abs(Span) <= UE_DOUBLE_SMALL_NUMBER)
 		{
-			// Horizontal edge: its ends are the crossings.
-			if (FMath::IsNearlyEqual(A.Y, Z, 1e-6))
-			{
-				Crossings.Add(A.X);
-				Crossings.Add(B.X);
-			}
+			// Horizontal edges contribute nothing, deliberately. Adding their
+			// two ends looked right and double-counted them: the edges rising
+			// from each end already contribute those same points under the rule
+			// below, so a horizontal bottom edge produced [x0, x0, x1, x1],
+			// which pairs into two zero-width intervals and clamps a centred
+			// cursor onto a corner instead of the edge it is pointing at.
 			continue;
 		}
 		// Half-open in Y so a vertex shared by two edges is counted once, which
