@@ -56,6 +56,13 @@ void URammsSurfacePositionPad::SetTarget(UObject* Sink, FName IdX, FName IdY)
 	TargetSink = Sink;
 	ControlIdX = IdX;
 	ControlIdY = IdY;
+
+	// Retargeting drops whatever was discovered before. Passing null is the
+	// documented way back to auto-discovery, and a cache left standing would
+	// answer with the previous surface instead -- so a pad pointed at a new
+	// robot would go on commanding the old one, which is the worst version of
+	// this to debug.
+	CachedSink.Reset();
 }
 
 void URammsSurfacePositionPad::SetRegion(FVector2D InRangeX, FVector2D InRangeY, const TArray<FVector2D>& InRegion)
