@@ -297,6 +297,7 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				const FRammsControlAxis& Horizontal = (&Vertical == &Axis) ? *Pair : Axis;
 
 				URammsSurfacePositionPad* Pad = CreateWidget<URammsSurfacePositionPad>(this);
+				Pad->SetStyle(Style); // created after construction: propagate explicitly
 				Pad->bAutoFindSink = false;
 				Pad->Source = Source;
 				Pad->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
@@ -442,6 +443,13 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 		if (Joystick)
 		{
 			Joystick->SetStyle(Style);
+		}
+	}
+	for (URammsSurfacePositionPad* Pad : Pads)
+	{
+		if (Pad)
+		{
+			Pad->SetStyle(Style);
 		}
 	}
 }

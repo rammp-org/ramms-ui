@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "UI/RammsBaseWidget.h"
 #include "RammsControlTypes.h"
 #include "RammsSurfacePositionPad.generated.h"
 
@@ -28,7 +28,7 @@
  * describe, which is the honest picture for a pair that really is rectangular.
  */
 UCLASS(meta = (DisplayName = "Ramms Surface Position Pad"))
-class RAMMSUI_API URammsSurfacePositionPad : public UUserWidget
+class RAMMSUI_API URammsSurfacePositionPad : public URammsBaseWidget
 {
 	GENERATED_BODY()
 
@@ -159,6 +159,12 @@ public:
 	URammsSurfacePositionPad(const FObjectInitializer& ObjectInitializer);
 
 	virtual void NativeConstruct() override;
+
+	/** Take the panel's palette, the way every other runtime-created control
+	 *  in the panel does. The pad used to derive straight from UUserWidget, so
+	 *  it had no style hook at all and kept its authored colours while the
+	 *  joystick beside it followed the theme. */
+	virtual void ApplyStyle_Implementation() override;
 
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
 		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle,

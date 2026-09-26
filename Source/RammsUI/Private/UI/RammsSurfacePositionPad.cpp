@@ -3,6 +3,7 @@
 #include "UI/RammsSurfacePositionPad.h"
 #include "RammsControlSink.h"
 #include "RammsControlSurfaceRegistry.h"
+#include "UI/RammsUIStyle.h"
 #include "Styling/CoreStyle.h"
 
 namespace
@@ -41,6 +42,25 @@ URammsSurfacePositionPad::URammsSurfacePositionPad(const FObjectInitializer& Obj
 	// the live dot would then sit still while the mechanism moved and the ring
 	// would never clear on arrival.
 	ForceVolatile(true);
+}
+
+void URammsSurfacePositionPad::ApplyStyle_Implementation()
+{
+	Super::ApplyStyle_Implementation();
+	if (!Style)
+	{
+		return;
+	}
+	// The outline is a boundary, so it takes the border colour -- but it keeps
+	// the authored translucency, since a solid outline reads as a wall rather
+	// than as the edge of somewhere you can go.
+	const float RegionAlpha = RegionColor.A;
+	RegionColor = Style->Colors.Border;
+	RegionColor.A = RegionAlpha;
+	// Live is where the mechanism IS and target is where it was told to go;
+	// Info and Warning are the palette's readback and pending pair.
+	LiveColor = Style->Colors.Info;
+	TargetColor = Style->Colors.Warning;
 }
 
 void URammsSurfacePositionPad::NativeConstruct()
@@ -304,10 +324,14 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 			FMath::Clamp(Value.X, FMath::Min(RangeX.X, RangeX.Y), FMath::Max(RangeX.X, RangeX.Y)),
 			FMath::Clamp(Value.Y, FMath::Min(RangeY.X, RangeY.Y), FMath::Max(RangeY.X, RangeY.Y)));
 	}
-	if (IsInsideRegion(Value))
-	{
-		return Value;
-	}
+	// No early return for a point that is already inside. RegionInset exists
+	// because the outline is chords between sampled rows and a chord can bulge
+	// outside the mechanism's real curved boundary; a point in that sliver is
+	// inside the polygon and still unreachable. Returning it untouched applied
+	// the inset only to points arriving from outside, so the edge behaved one
+	// way approached from within and another from without -- a discontinuity of
+	// exactly RegionInset right where a drag spends its time. The clamp below
+	// is an exact no-op for anything further than RegionInset from an edge.
 
 	double ZLo = TNumericLimits<double>::Max();
 	double ZHi = -TNumericLimits<double>::Max();
