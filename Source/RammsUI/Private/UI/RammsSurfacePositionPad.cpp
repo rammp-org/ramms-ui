@@ -281,10 +281,6 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 		return Value;
 	}
 
-	// The region's height span, and then the fore/aft actually reachable at the
-	// height being pointed at. Taken by intersecting a horizontal line with the
-	// outline, so it works for any simple polygon rather than assuming how the
-	// rows were laid out.
 	double ZLo = TNumericLimits<double>::Max();
 	double ZHi = -TNumericLimits<double>::Max();
 	for (const FVector2D& P : Region)
@@ -294,8 +290,12 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 	}
 	const double Z = FMath::Clamp(Value.Y, ZLo, ZHi);
 
-	double XLo = TNumericLimits<double>::Max();
-	double XHi = -TNumericLimits<double>::Max();
+	// Every crossing of the horizontal line at this height, in order. Sorted
+	// and paired, they are the intervals reachable at this height -- plural,
+	// because the region is not convex, and taking the outermost two would
+	// span any notch between them and hand back a point the mechanism cannot
+	// reach at all.
+	TArray<double> Crossings;
 	for (int32 i = 0, j = Region.Num() - 1; i < Region.Num(); j = i++)
 	{
 		const FVector2D& A = Region[j];
@@ -303,38 +303,49 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 		const double	 Span = B.Y - A.Y;
 		if (FMath::Abs(Span) <= UE_DOUBLE_SMALL_NUMBER)
 		{
-			// A horizontal edge at this height is itself the interval.
+			// Horizontal edge: its ends are the crossings.
 			if (FMath::IsNearlyEqual(A.Y, Z, 1e-6))
 			{
-				XLo = FMath::Min(XLo, FMath::Min(A.X, B.X));
-				XHi = FMath::Max(XHi, FMath::Max(A.X, B.X));
+				Crossings.Add(A.X);
+				Crossings.Add(B.X);
 			}
 			continue;
 		}
-		const double T = (Z - A.Y) / Span;
-		if (T < 0.0 || T > 1.0)
+		// Half-open in Y so a vertex shared by two edges is counted once, which
+		// is what keeps the crossings pairing up into intervals.
+		const bool bStraddles = (A.Y <= Z && B.Y > Z) || (B.Y <= Z && A.Y > Z);
+		if (bStraddles)
 		{
-			continue;
+			Crossings.Add(A.X + (B.X - A.X) * ((Z - A.Y) / Span));
 		}
-		const double X = A.X + (B.X - A.X) * T;
-		XLo = FMath::Min(XLo, X);
-		XHi = FMath::Max(XHi, X);
 	}
 
-	if (XLo > XHi)
+	if (Crossings.Num() < 2)
 	{
-		// No crossing at this height, which a closed outline should not allow;
-		// leave the value alone rather than invent a pose for it.
+		// No interval at this height; leave the value rather than invent a pose.
 		return Value;
 	}
+	Crossings.Sort();
 
-	// Inside the edge, because the outline's edges are straight chords across a
-	// boundary that curves between the rows it was sampled at: a point exactly
-	// on one can be just outside what the mechanism reaches, and the pair is
-	// then refused on one axis and applied on the other. A row narrower than
-	// the inset collapses to its middle instead of inverting.
-	const double Inset = FMath::Min(static_cast<double>(RegionInset), 0.5 * (XHi - XLo));
-	return FVector2D(FMath::Clamp(Value.X, XLo + Inset, XHi - Inset), Z);
+	// The interval the cursor is in, or failing that the one it is nearest to.
+	double Best = 0.0;
+	double BestDist = TNumericLimits<double>::Max();
+	bool   bFound = false;
+	for (int32 i = 0; i + 1 < Crossings.Num(); i += 2)
+	{
+		const double Lo = Crossings[i];
+		const double Hi = Crossings[i + 1];
+		const double Inset = FMath::Min(static_cast<double>(RegionInset), 0.5 * (Hi - Lo));
+		const double Clamped = FMath::Clamp(Value.X, Lo + Inset, Hi - Inset);
+		const double Dist = FMath::Abs(Clamped - Value.X);
+		if (Dist < BestDist)
+		{
+			BestDist = Dist;
+			Best = Clamped;
+			bFound = true;
+		}
+	}
+	return bFound ? FVector2D(Best, Z) : Value;
 }
 
 int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
