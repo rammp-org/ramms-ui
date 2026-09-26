@@ -139,6 +139,8 @@ private:
 	TArray<TObjectPtr<URammsControlRow>> Rows;
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<URammsSurfaceJoystick>> Joysticks;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class URammsSurfacePositionPad>> Pads;
 
 	int32 BuiltVersion = -1;
 	float ReadbackAccum = 0.0f;

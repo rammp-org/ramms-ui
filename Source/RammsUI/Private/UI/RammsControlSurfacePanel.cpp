@@ -4,6 +4,7 @@
 #include "UI/RammsCollapsibleContainer.h"
 #include "UI/RammsControlRow.h"
 #include "UI/RammsSurfaceJoystick.h"
+#include "UI/RammsSurfacePositionPad.h"
 #include "UI/RammsUIStyle.h"
 #include "RammsControlSink.h"
 #include "RammsControlSurfaceProvider.h"
@@ -66,6 +67,7 @@ void URammsControlSurfacePanel::ResetCachedWidgets()
 	Groups.Reset();
 	Rows.Reset();
 	Joysticks.Reset();
+	Pads.Reset();
 	BuiltVersion = -1;
 }
 
@@ -172,6 +174,7 @@ void URammsControlSurfacePanel::Rebuild()
 	Groups.Reset();
 	Rows.Reset();
 	Joysticks.Reset();
+	Pads.Reset();
 
 	if (!ResolveSurface())
 	{
@@ -281,6 +284,57 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				continue;
 			}
 		}
+		// A pair of Position axes -> pad. Same pairing convention as the
+		// joystick above, but the values are places rather than rates, so the
+		// widget draws where the pair IS inside what it can reach -- which for
+		// a 5-bar is a curved region the two Ranges badly over-claim.
+		if (Axis.Kind == ERammsControlKind::Position && !Axis.bReadOnly && !Axis.PairedAxis.IsNone())
+		{
+			const FRammsControlAxis* Pair = Axes.FindByPredicate([&Axis](const FRammsControlAxis& A) { return A.Id == Axis.PairedAxis; });
+			if (Pair && Pair->Kind == ERammsControlKind::Position && !Pair->bReadOnly && !Consumed.Contains(Pair->Id))
+			{
+				const FRammsControlAxis& Vertical = (Axis.Order <= Pair->Order) ? Axis : *Pair;
+				const FRammsControlAxis& Horizontal = (&Vertical == &Axis) ? *Pair : Axis;
+
+				URammsSurfacePositionPad* Pad = CreateWidget<URammsSurfacePositionPad>(this);
+				Pad->SetStyle(Style); // created after construction: propagate explicitly
+				Pad->bAutoFindSink = false;
+				Pad->Source = Source;
+				Pad->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
+				// The region rides on the vertical axis, which is where the
+				// contributor puts it so there is one per pair.
+				// Display ranges, the same rule a slider row uses. A pair that
+				// defers its range to the backend has a non-increasing one, and
+				// mapping a pad through that collapses every value onto one
+				// pixel and draws a fallback box of zero size.
+				Pad->SetRegion(URammsControlRow::DisplayRangeFor(Horizontal),
+					URammsControlRow::DisplayRangeFor(Vertical), Vertical.RegionOutline);
+
+				UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "PadCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
+				Caption->SetJustification(ETextJustify::Center);
+				Container->AddContentChild(Caption);
+
+				USizeBox*	Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				const float PadSize = JoystickRadius * 2.0f + 8.0f;
+				Box->SetWidthOverride(PadSize);
+				Box->SetHeightOverride(PadSize);
+				Box->AddChild(Pad);
+				UHorizontalBox* Centre = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UHorizontalBoxSlot* CentreSlot = Centre->AddChildToHorizontalBox(Box))
+				{
+					CentreSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+					CentreSlot->SetHorizontalAlignment(HAlign_Center);
+					CentreSlot->SetPadding(FMargin(0.0f, 4.0f));
+				}
+				Container->AddContentChild(Centre);
+				Pads.Add(Pad);
+				Consumed.Add(Axis.Id);
+				Consumed.Add(Pair->Id);
+				continue;
+			}
+		}
+
 		URammsControlRow* Row = CreateWidget<URammsControlRow>(this);
 		if (Style)
 		{
@@ -389,6 +443,13 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 		if (Joystick)
 		{
 			Joystick->SetStyle(Style);
+		}
+	}
+	for (URammsSurfacePositionPad* Pad : Pads)
+	{
+		if (Pad)
+		{
+			Pad->SetStyle(Style);
 		}
 	}
 }

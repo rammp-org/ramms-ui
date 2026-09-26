@@ -268,32 +268,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		FRammsAxisConfig Config;
 		Config.Label = Label;
 		Config.IconSize = FVector2D::ZeroVector; // no icon: don't reserve the box
-		FVector2D Range = Axis.Range;
-		if (Range.X >= Range.Y)
-		{
-			switch (Axis.Units)
-			{
-				case ERammsControlUnits::Radians:
-					Range = FVector2D(-PI, PI);
-					break;
-				case ERammsControlUnits::Degrees:
-					Range = FVector2D(-180.0, 180.0);
-					break;
-				case ERammsControlUnits::Centimeters:
-					Range = FVector2D(-100.0, 100.0);
-					break;
-				case ERammsControlUnits::Meters:
-					Range = FVector2D(-1.0, 1.0);
-					break;
-				case ERammsControlUnits::RadiansPerSecond:
-				case ERammsControlUnits::CentimetersPerSecond:
-					Range = FVector2D(-10.0, 10.0);
-					break;
-				default:
-					Range = FVector2D(-1.0, 1.0);
-					break;
-			}
-		}
+		const FVector2D Range = DisplayRangeFor(Axis);
 		Config.MinValue = static_cast<float>(Range.X);
 		Config.MaxValue = static_cast<float>(Range.Y);
 		Config.DefaultValue = Axis.DefaultValue;
@@ -586,4 +561,28 @@ void URammsControlRow::OnEnumPrevClicked()
 void URammsControlRow::OnEnumNextClicked()
 {
 	StepEnum(1);
+}
+
+FVector2D URammsControlRow::DisplayRangeFor(const FRammsControlAxis& Axis)
+{
+	if (Axis.Range.X < Axis.Range.Y)
+	{
+		return Axis.Range;
+	}
+	switch (Axis.Units)
+	{
+		case ERammsControlUnits::Radians:
+			return FVector2D(-PI, PI);
+		case ERammsControlUnits::Degrees:
+			return FVector2D(-180.0, 180.0);
+		case ERammsControlUnits::Centimeters:
+			return FVector2D(-100.0, 100.0);
+		case ERammsControlUnits::Meters:
+			return FVector2D(-1.0, 1.0);
+		case ERammsControlUnits::RadiansPerSecond:
+		case ERammsControlUnits::CentimetersPerSecond:
+			return FVector2D(-10.0, 10.0);
+		default:
+			return FVector2D(-1.0, 1.0);
+	}
 }
