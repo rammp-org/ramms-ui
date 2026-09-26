@@ -131,10 +131,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FVector2D LocalToValue(FVector2D Local, FVector2D WidgetSize) const;
 
-	/** True when Value lies inside the published region -- or, when none is
-	 *  published, inside the rectangle RangeX/RangeY describe, which is the
-	 *  shape the pair falls back to. Agrees with ProjectIntoRegion in both
-	 *  cases: this is true exactly when that returns Value unchanged. */
+	/** True when Value can be commanded as it stands -- that is, exactly when
+	 *  ProjectIntoRegion returns it unchanged, which is how this is implemented
+	 *  so the two cannot drift apart.
+	 *
+	 *  Note this is NOT raw polygon containment: a point within RegionInset of
+	 *  the outline is geometrically inside and still reports false, because the
+	 *  projection would step it inward. That is the useful answer -- the
+	 *  outline is chords between sampled rows, and a chord can lie outside the
+	 *  mechanism's curved boundary, so the sliver behind it is drawn as
+	 *  reachable but is not. With no region published the shape is the
+	 *  rectangle RangeX/RangeY describe. */
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	bool IsInsideRegion(FVector2D Value) const;
 

@@ -284,31 +284,15 @@ bool URammsSurfacePositionPad::CommandAt(const FGeometry& Geometry, const FVecto
 
 bool URammsSurfacePositionPad::IsInsideRegion(FVector2D Value) const
 {
-	if (Region.Num() < 3)
-	{
-		// Nothing published: the pair really is its rectangle, so test against
-		// that. Returning true unconditionally contradicted ProjectIntoRegion,
-		// which clamps to these same ranges -- a script could hold a point the
-		// projection would move and still be told it was inside. The pointer
-		// path never reaches this branch with a region, so the widget is
-		// unaffected either way.
-		return Value.X >= FMath::Min(RangeX.X, RangeX.Y) && Value.X <= FMath::Max(RangeX.X, RangeX.Y)
-			&& Value.Y >= FMath::Min(RangeY.X, RangeY.Y) && Value.Y <= FMath::Max(RangeY.X, RangeY.Y);
-	}
-	// Crossing count. The outline is closed implicitly, so the last point pairs
-	// with the first.
-	bool bInside = false;
-	for (int32 i = 0, j = Region.Num() - 1; i < Region.Num(); j = i++)
-	{
-		const FVector2D& A = Region[i];
-		const FVector2D& B = Region[j];
-		if (((A.Y > Value.Y) != (B.Y > Value.Y))
-			&& (Value.X < (B.X - A.X) * (Value.Y - A.Y) / (B.Y - A.Y != 0.0 ? B.Y - A.Y : UE_DOUBLE_SMALL_NUMBER) + A.X))
-		{
-			bInside = !bInside;
-		}
-	}
-	return bInside;
+	// Defined as "the projection leaves this alone", not as raw polygon
+	// containment, and deliberately so: those two answers differ, and shipping
+	// both is what produced the contradiction this replaced. Containment says
+	// yes for a point sitting on a chord; the projection still steps it inward
+	// by RegionInset, because a chord between sampled rows can bulge outside
+	// the mechanism's real curved boundary. A caller asking "is this inside"
+	// wants to know whether commanding it does what they asked, so that is the
+	// question answered here, and there is now one implementation of it.
+	return ProjectIntoRegion(Value).Equals(Value, UE_DOUBLE_KINDA_SMALL_NUMBER);
 }
 
 FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
