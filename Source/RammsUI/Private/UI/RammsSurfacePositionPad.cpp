@@ -266,9 +266,14 @@ bool URammsSurfacePositionPad::IsInsideRegion(FVector2D Value) const
 {
 	if (Region.Num() < 3)
 	{
-		// Nothing published: the pair really is its rectangle, and the caller
-		// has already clamped to that.
-		return true;
+		// Nothing published: the pair really is its rectangle, so test against
+		// that. Returning true unconditionally contradicted ProjectIntoRegion,
+		// which clamps to these same ranges -- a script could hold a point the
+		// projection would move and still be told it was inside. The pointer
+		// path never reaches this branch with a region, so the widget is
+		// unaffected either way.
+		return Value.X >= FMath::Min(RangeX.X, RangeX.Y) && Value.X <= FMath::Max(RangeX.X, RangeX.Y)
+			&& Value.Y >= FMath::Min(RangeY.X, RangeY.Y) && Value.Y <= FMath::Max(RangeY.X, RangeY.Y);
 	}
 	// Crossing count. The outline is closed implicitly, so the last point pairs
 	// with the first.

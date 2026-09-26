@@ -131,8 +131,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FVector2D LocalToValue(FVector2D Local, FVector2D WidgetSize) const;
 
-	/** True when Value lies inside the published region. Always true when none
-	 *  is published, since the pair is then the rectangle its ranges describe. */
+	/** True when Value lies inside the published region -- or, when none is
+	 *  published, inside the rectangle RangeX/RangeY describe, which is the
+	 *  shape the pair falls back to. Agrees with ProjectIntoRegion in both
+	 *  cases: this is true exactly when that returns Value unchanged. */
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	bool IsInsideRegion(FVector2D Value) const;
 
