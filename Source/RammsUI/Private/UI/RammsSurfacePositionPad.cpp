@@ -75,6 +75,10 @@ UObject* URammsSurfacePositionPad::ResolveSink() const
 	{
 		return nullptr;
 	}
+	if (UObject* Cached = CachedSink.Get())
+	{
+		return Cached;
+	}
 	if (UWorld* World = GetWorld())
 	{
 		if (URammsControlSurfaceRegistry* Reg = World->GetSubsystem<URammsControlSurfaceRegistry>())
@@ -82,6 +86,7 @@ UObject* URammsSurfacePositionPad::ResolveSink() const
 			UObject* Found = Reg->FindControlSurface();
 			if (Found && Found->GetClass()->ImplementsInterface(URammsControlSink::StaticClass()))
 			{
+				CachedSink = Found;
 				return Found;
 			}
 		}
@@ -276,7 +281,18 @@ bool URammsSurfacePositionPad::IsInsideRegion(FVector2D Value) const
 
 FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 {
-	if (Region.Num() < 3 || IsInsideRegion(Value))
+	if (Region.Num() < 3)
+	{
+		// No region published, so the pair is the rectangle its ranges describe
+		// -- which is what this is documented to fall back to. Returning the
+		// value untouched let a direct caller of this API hold a point outside
+		// even that. The pointer path clamps before it gets here; a script
+		// calling the exposed function does not.
+		return FVector2D(
+			FMath::Clamp(Value.X, FMath::Min(RangeX.X, RangeX.Y), FMath::Max(RangeX.X, RangeX.Y)),
+			FMath::Clamp(Value.Y, FMath::Min(RangeY.X, RangeY.Y), FMath::Max(RangeY.X, RangeY.Y)));
+	}
+	if (IsInsideRegion(Value))
 	{
 		return Value;
 	}

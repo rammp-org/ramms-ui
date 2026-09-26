@@ -172,6 +172,15 @@ public:
 private:
 	UObject* ResolveSink() const;
 
+	/** The sink last found through the registry.
+	 *
+	 *  This widget is volatile, so it paints every frame, and each paint reads
+	 *  the live value and the held target -- two sink lookups a frame, for the
+	 *  widget's whole life, if the answer is not kept. Weak, so a sink that
+	 *  goes away is looked for again rather than kept alive or dereferenced,
+	 *  which also covers a registry that was empty when the pad first painted. */
+	mutable TWeakObjectPtr<UObject> CachedSink;
+
 	/** Command from a pointer at LocalPosition. */
 	bool CommandAt(const FGeometry& Geometry, const FVector2D& ScreenPosition);
 
