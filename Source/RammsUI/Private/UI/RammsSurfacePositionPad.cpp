@@ -281,26 +281,60 @@ FVector2D URammsSurfacePositionPad::ProjectIntoRegion(FVector2D Value) const
 		return Value;
 	}
 
-	FVector2D Best = Value;
-	double	  BestDistSq = TNumericLimits<double>::Max();
+	// The region's height span, and then the fore/aft actually reachable at the
+	// height being pointed at. Taken by intersecting a horizontal line with the
+	// outline, so it works for any simple polygon rather than assuming how the
+	// rows were laid out.
+	double ZLo = TNumericLimits<double>::Max();
+	double ZHi = -TNumericLimits<double>::Max();
+	for (const FVector2D& P : Region)
+	{
+		ZLo = FMath::Min(ZLo, P.Y);
+		ZHi = FMath::Max(ZHi, P.Y);
+	}
+	const double Z = FMath::Clamp(Value.Y, ZLo, ZHi);
+
+	double XLo = TNumericLimits<double>::Max();
+	double XHi = -TNumericLimits<double>::Max();
 	for (int32 i = 0, j = Region.Num() - 1; i < Region.Num(); j = i++)
 	{
 		const FVector2D& A = Region[j];
 		const FVector2D& B = Region[i];
-		const FVector2D	 Edge = B - A;
-		const double	 LenSq = Edge.SizeSquared();
-		const double	 T = LenSq > UE_DOUBLE_SMALL_NUMBER
-			? FMath::Clamp(FVector2D::DotProduct(Value - A, Edge) / LenSq, 0.0, 1.0)
-			: 0.0;
-		const FVector2D	 OnEdge = A + Edge * T;
-		const double	 DistSq = (Value - OnEdge).SizeSquared();
-		if (DistSq < BestDistSq)
+		const double	 Span = B.Y - A.Y;
+		if (FMath::Abs(Span) <= UE_DOUBLE_SMALL_NUMBER)
 		{
-			BestDistSq = DistSq;
-			Best = OnEdge;
+			// A horizontal edge at this height is itself the interval.
+			if (FMath::IsNearlyEqual(A.Y, Z, 1e-6))
+			{
+				XLo = FMath::Min(XLo, FMath::Min(A.X, B.X));
+				XHi = FMath::Max(XHi, FMath::Max(A.X, B.X));
+			}
+			continue;
 		}
+		const double T = (Z - A.Y) / Span;
+		if (T < 0.0 || T > 1.0)
+		{
+			continue;
+		}
+		const double X = A.X + (B.X - A.X) * T;
+		XLo = FMath::Min(XLo, X);
+		XHi = FMath::Max(XHi, X);
 	}
-	return Best;
+
+	if (XLo > XHi)
+	{
+		// No crossing at this height, which a closed outline should not allow;
+		// leave the value alone rather than invent a pose for it.
+		return Value;
+	}
+
+	// Inside the edge, because the outline's edges are straight chords across a
+	// boundary that curves between the rows it was sampled at: a point exactly
+	// on one can be just outside what the mechanism reaches, and the pair is
+	// then refused on one axis and applied on the other. A row narrower than
+	// the inset collapses to its middle instead of inverting.
+	const double Inset = FMath::Min(static_cast<double>(RegionInset), 0.5 * (XHi - XLo));
+	return FVector2D(FMath::Clamp(Value.X, XLo + Inset, XHi - Inset), Z);
 }
 
 int32 URammsSurfacePositionPad::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,

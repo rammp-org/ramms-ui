@@ -87,6 +87,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ClampMin = "0.0"))
 	float ArrivedTolerance = 0.25f;
 
+	/**
+	 * How far inside the boundary a projected point is placed, in the pair's
+	 * own units.
+	 *
+	 * The outline is a polygon through sampled rows, so its edges are straight
+	 * chords across a boundary that curves between them, and a point projected
+	 * exactly onto a chord can lie slightly OUTSIDE what the mechanism can
+	 * reach. The pair is then commanded one axis at a time, one half is
+	 * refused, the other lands -- and a drag along the edge moves on a single
+	 * axis, erratically, depending which chord it is near. Stepping just inside
+	 * the boundary keeps the commanded point reachable.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface", meta = (ClampMin = "0.0"))
+	float RegionInset = 0.05f;
+
 	/** Point the pair at a sink and a pair of ids. */
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetTarget(UObject* Sink, FName IdX, FName IdY);
@@ -116,6 +131,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FVector2D LocalToValue(FVector2D Local, FVector2D WidgetSize) const;
 
+	/** True when Value lies inside the published region. Always true when none
+	 *  is published, since the pair is then the rectangle its ranges describe. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	bool IsInsideRegion(FVector2D Value) const;
+
+	/**
+	 * Value if it is reachable, else the closest reachable point AT THE SAME
+	 * HEIGHT.
+	 *
+	 * Not the nearest point on the boundary. Nearest-point is the right answer
+	 * to a geometry question and the wrong one for a pad: where the region
+	 * narrows above its widest row, the nearest boundary point to a cursor out
+	 * to one side stays down at the shoulder, so dragging upward slides the
+	 * endpoint sideways and refuses to climb. Holding the height and clamping
+	 * the fore/aft tracks the edge the way a driver means it to.
+	 *
+	 * Reflected because what a drag does at the edge is the pad's most arguable
+	 * behaviour, and a test that cannot call this can only watch the robot and
+	 * guess.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FVector2D ProjectIntoRegion(FVector2D Value) const;
+
 	URammsSurfacePositionPad(const FObjectInitializer& ObjectInitializer);
 
 	virtual void NativeConstruct() override;
@@ -140,12 +178,7 @@ private:
 	/** The shape actually drawn: the published region, or the range rectangle. */
 	TArray<FVector2D> ShapeToDraw() const;
 
-	/** True when Value lies inside the published region (always true when none
-	 *  is published, since the pair is then the rectangle its ranges describe). */
-	bool IsInsideRegion(FVector2D Value) const;
-
-	/** Value, or the nearest point on the region's boundary when it is outside. */
-	FVector2D ProjectIntoRegion(FVector2D Value) const;
+	// Declared private below; see the public reflected pair.
 
 	bool bDragging = false;
 };
