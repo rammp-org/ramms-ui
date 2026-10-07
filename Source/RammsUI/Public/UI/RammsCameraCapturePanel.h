@@ -102,10 +102,15 @@ public:
 	int32 DepthColormapIndex = 2;
 
 	/** Drives M_MotionVectorColormap's "Sensitivity": how much screen-space
-	 *  motion it takes to saturate the colour wheel. 1.0 is the material's own
-	 *  default; raise it to see slow motion, lower it for fast. */
+	 *  motion it takes to saturate the colour wheel.
+	 *
+	 *  20, not the material's own default of 1. Measured velocities out of the
+	 *  capture pass are small -- a camera rotating at 60 deg/s gives a magnitude
+	 *  around 0.013, and 0.057 at its fastest pixel -- so a sensitivity of 1
+	 *  renders real motion as very nearly black. Raise it further for slow
+	 *  motion, lower it for fast. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion", meta = (ClampMin = "0.001"))
-	float MotionSensitivity = 1.0f;
+	float MotionSensitivity = 20.0f;
 
 	// ── Actions, also callable from Blueprint or a key binding ──────────
 
@@ -265,13 +270,15 @@ protected:
 	/**
 	 * Motion vectors, colormapped by magnitude and angle.
 	 *
-	 * Same story as depth, one channel over: M_MotionVectorColormap reads the
-	 * vector from DataTexture's R and G, while the DMV target packs depth into R
-	 * and the vector into G and B. The GB variant is that material with the mask
-	 * moved, rather than an edit to the shared one, which has its own callers.
+	 * One instance, not two. The vector's channels used to be a graph
+	 * connection, so reading it from G,B instead of R,G meant a duplicate
+	 * material; M_MotionVectorColormap takes MotionXMask/MotionYMask now and
+	 * dots them against the sample, which makes the choice a parameter. The
+	 * capture pass writes velocity to R,G, which is the default, so the masks
+	 * only matter for a source that puts it somewhere else.
 	 */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> MotionFromGBMID;
+	TObjectPtr<UMaterialInstanceDynamic> MotionMID;
 
 	/**
 	 * The colormap materials, as soft references rather than runtime string
@@ -295,7 +302,30 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
 	TSoftObjectPtr<UMaterialInterface> MotionColormapMaterial =
-		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormapGB.M_MotionVectorColormapGB")));
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormap.M_MotionVectorColormap")));
+
+	/**
+	 * Which channels of the motion target carry the vector, dotted against RGBA.
+	 *
+	 * G and B, matching the capture material, which writes depth to R and the
+	 * velocity after it. The material asset's own defaults stay R,G -- what an
+	 * ordinary two-channel flow texture wants -- and this panel states its own
+	 * source rather than making the shared asset assume one.
+	 *
+	 * The mask is why there is one colormap material instead of two. The channel
+	 * pair used to be a graph connection, so reading G,B rather than R,G meant
+	 * duplicating the whole thing; dotting a mask against the sample makes it a
+	 * setting.
+	 *
+	 * These replace what used to be a second material. The channel pair was a
+	 * graph connection, so reading G,B instead of R,G meant duplicating the whole
+	 * colormap; dotting a mask against the sample makes it a parameter.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion")
+	FLinearColor MotionXMask = FLinearColor(0.0f, 1.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion")
+	FLinearColor MotionYMask = FLinearColor(0.0f, 0.0f, 1.0f, 0.0f);
 
 	/** Build the colormap materials if they are not built yet. */
 	void EnsureDepthMaterials();

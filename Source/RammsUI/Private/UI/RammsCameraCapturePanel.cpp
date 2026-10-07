@@ -346,10 +346,7 @@ void URammsCameraCapturePanel::EnsureDepthMaterials()
 
 	Build(DepthColormapMaterial, DepthFromRedMID, TEXT("depth"));
 	Build(DepthColormapAlphaMaterial, DepthFromAlphaMID, TEXT("depth-in-alpha"));
-	// Motion vectors, same arrangement: the shared M_MotionVectorColormap reads
-	// the vector from DataTexture's R and G, and the DMV target has depth in R
-	// with the vector in G and B, so the GB variant is the one that fits.
-	Build(MotionColormapMaterial, MotionFromGBMID, TEXT("motion-vector"));
+	Build(MotionColormapMaterial, MotionMID, TEXT("motion-vector"));
 }
 
 bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) const
@@ -380,9 +377,9 @@ bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) con
 		}
 
 		case ERammsFeedChannel::Motion:
-			// Only the DMV pass produces motion vectors, and only into its own
-			// target. IsCapturingMotionVectors already accounts for the mode.
-			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetDepthRenderTarget(Camera) != nullptr;
+			// Its own pass, so its own target, and available in either capture
+			// mode -- which it was not when motion rode on the depth pass.
+			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetMotionRenderTarget(Camera) != nullptr;
 
 		default:
 			return false;
@@ -450,12 +447,12 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	else if (FeedChannel == ERammsFeedChannel::Motion)
 	{
 		EnsureDepthMaterials();
-		// Motion only ever comes out of the DMV target, G and B. There is no
-		// single-capture fallback because that mode runs no DMV pass.
-		if (DepthTarget)
+		// Motion has its own target now, in either capture mode -- it is no
+		// longer the depth pass wearing a second hat.
+		if (UTextureRenderTarget2D* MotionTarget = Sub ? Sub->GetMotionRenderTarget(Camera) : nullptr)
 		{
-			Source = DepthTarget;
-			Material = MotionFromGBMID;
+			Source = MotionTarget;
+			Material = MotionMID;
 		}
 		else
 		{
@@ -502,6 +499,8 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		Material->SetScalarParameterValue(TEXT("DepthMax"), bDepthIsCentimetres ? DepthMaxMetres * 100.0f : 1.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
+		Material->SetVectorParameterValue(TEXT("MotionXMask"), MotionXMask);
+		Material->SetVectorParameterValue(TEXT("MotionYMask"), MotionYMask);
 		Material->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(FeedWidth, Height, 0.0f, 0.0f));
 		Material->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 		FeedImage->SetBrushResourceObject(Material);
