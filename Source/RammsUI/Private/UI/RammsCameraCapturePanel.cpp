@@ -437,9 +437,12 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		}
 		else if (DepthTarget)
 		{
-			// Two-render mode: its own target, depth in red.
+			// Also alpha. This read the target's RED channel back when that target
+			// came from the DMV post-process pass; after depth moved to the depth
+			// buffer, red there is linear scene colour, so the depth view in this
+			// mode was colormapping the picture.
 			Source = DepthTarget;
-			Material = DepthFromRedMID;
+			Material = DepthFromAlphaMID;
 		}
 		// Otherwise Source stays null and the feed collapses, which is honest:
 		// this camera has no depth to show yet.
@@ -478,25 +481,20 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// Setting a parameter a material does not have is a no-op, so the depth
 		// range goes on unconditionally rather than branching per material.
 		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
-		// The two depth sources are NOT in the same units, so the range cannot be
-		// one number.
+		// CENTIMETRES, which is what the data is: both modes capture depth with
+		// SCS_SceneColorSceneDepth, measured at 615..1026 cm for real geometry
+		// with an enormous sentinel where the sky is. The material normalises
+		// (depth - Near) / (Far - Near) in whatever units it is handed, so the
+		// planes have to be in the same ones.
 		//
-		// SingleCaptureColorDepth packs SceneDepth into alpha untouched, which is
-		// centimetres -- measured at 615 cm for near geometry, and 1e13 where the
-		// sky is. The material normalises in the same space as its input (its
-		// siblings on this path spell it out: MinDepthCM, DepthScaleToCM), so a
-		// cm range is what it wants, and the metre-valued properties convert.
+		// There was a branch here giving one source a 0..1 range, from when the
+		// second one was the tonemapped DMV pass and had no unit at all. Both
+		// read the depth buffer now, so there is one answer.
 		//
-		// The DMV pass does not deliver centimetres at all. Its camera captures
-		// SCS_FinalColorLDR, so a post-process material writing raw SceneDepth is
-		// squashed through the tonemapper before it is ever read -- measured at
-		// 0.125..0.702 for the same scene the other mode reported in hundreds of
-		// cm. For a viewer the only honest reading of that is a normalised 0..1,
-		// so that is what it gets. Scaling it by the metre range would be
-		// arithmetic on a number that has no unit.
-		const bool bDepthIsCentimetres = (Material == DepthFromAlphaMID);
-		Material->SetScalarParameterValue(TEXT("DepthMin"), bDepthIsCentimetres ? DepthMinMetres * 100.0f : 0.0f);
-		Material->SetScalarParameterValue(TEXT("DepthMax"), bDepthIsCentimetres ? DepthMaxMetres * 100.0f : 1.0f);
+		// Note the range these default to is a VIEWING choice, not a measurement:
+		// the plane values only decide which distances the colour ramp spans.
+		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinCM);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxCM);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
 		Material->SetVectorParameterValue(TEXT("MotionXMask"), MotionXMask);

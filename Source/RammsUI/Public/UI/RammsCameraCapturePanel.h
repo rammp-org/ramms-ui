@@ -85,17 +85,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	TArray<int32> CaptureRateSteps = { 1, 2, 5, 10, 30, 60 };
 
-	/** Near/far of the depth colormap, in METRES.
+	/** Near and far of the depth colormap, in CENTIMETRES -- the units the
+	 *  capture actually produces, and the units the material normalises in.
 	 *
-	 *  Converted to centimetres where they are assigned, because that is what the
-	 *  material wants and what SingleCaptureColorDepth actually produces. They do
-	 *  NOT apply to the DMV pass, whose depth is tonemapped rather than metric
-	 *  and is colormapped over a fixed 0..1 instead -- see UpdateFeedImage. */
+	 *  Named for the unit because this has been wrong twice. They were metres,
+	 *  which the material then scaled, and after depth moved to
+	 *  SCS_SceneColorSceneDepth the values arriving were centimetres while the
+	 *  planes stayed metres. Real geometry sits in the hundreds, so a range
+	 *  ending at 10 put every surface past the far plane.
+	 *
+	 *  This is a viewing choice, not a measurement: it decides which distances
+	 *  the colour ramp spans, nothing about what is captured. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
-	float DepthMinMetres = 0.1f;
+	float DepthMinCM = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.1"))
-	float DepthMaxMetres = 10.0f;
+	float DepthMaxCM = 1500.0f;
 
 	/** Colormap index the material understands: 0 grayscale, 1 jet, 2 turbo. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
