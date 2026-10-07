@@ -25,6 +25,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	FVector2D JoystickAreaSize = FVector2D(200.0f, 200.0f);
 
+	/** Width of the camera capture column, in pixels. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "120.0"))
+	float CameraPanelWidth = 380.0f;
+
 	virtual TArray<FName> GetLayoutSlotNames_Implementation() const override;
 
 protected:
