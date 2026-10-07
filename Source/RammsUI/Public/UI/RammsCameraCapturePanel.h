@@ -13,6 +13,8 @@ class UTextBlock;
 class UVerticalBox;
 class UHorizontalBox;
 class URammsButton;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UCameraCaptureSubsystem;
 class UIntrinsicSceneCaptureComponent2D;
 
@@ -67,6 +69,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	TArray<int32> CaptureRateSteps = { 1, 2, 5, 10, 30, 60 };
 
+	/** Near/far of the depth colormap, in metres. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
+	float DepthMinMetres = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.1"))
+	float DepthMaxMetres = 10.0f;
+
+	/** Colormap index the material understands: 0 grayscale, 1 jet, 2 turbo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
+	int32 DepthColormapIndex = 2;
+
 	// ── Actions, also callable from Blueprint or a key binding ──────────
 
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
@@ -86,6 +99,13 @@ public:
 	/** Switch the feed between colour and depth. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void ToggleChannel();
+
+	/** Collapse to just the title bar, or expand again. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
+	void ToggleCollapsed();
+
+	UFUNCTION(BlueprintPure, Category = "Camera Capture")
+	bool IsCollapsed() const { return bCollapsed; }
 
 	/** Re-read the registered camera list from the subsystem. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
@@ -126,6 +146,8 @@ protected:
 	void HandleNextCameraClicked();
 	UFUNCTION()
 	void HandleChannelClicked();
+	UFUNCTION()
+	void HandleCollapseClicked();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
@@ -133,8 +155,22 @@ protected:
 	TObjectPtr<UVerticalBox> MainVBox;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;
+	/** Title row: the title plus the collapse toggle. */
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> TitleHBox;
+	UPROPERTY(Transient)
+	TObjectPtr<URammsButton> CollapseButton;
+
+	/** Everything below the title, hidden when collapsed. */
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> ContentVBox;
+
+	/** Capture / saving. The rate stepper is its own row -- all five controls on
+	 *  one line did not fit the column and ran off the edge. */
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> ControlsHBox;
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> RateHBox;
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> CaptureButton;
 	UPROPERTY(Transient)
@@ -171,8 +207,28 @@ protected:
 	/** Index into Cameras. Kept in range as the list changes. */
 	int32 SelectedCamera = 0;
 
-	/** False shows colour, true shows the depth/motion target. */
+	/** False shows colour, true shows depth. */
 	bool bShowDepthChannel = false;
 
+	/**
+	 * Depth is colormapped through a material, and which channel it lives in
+	 * depends on the capture mode: the DMV pass puts it in red, while
+	 * SingleCaptureColorDepth packs it into the colour target's alpha. Same
+	 * material, one connection apart, so the panel keeps an instance of each and
+	 * picks by which target it was handed.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> DepthFromRedMID;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> DepthFromAlphaMID;
+
+	/** Build the two depth materials if they are not built yet. */
+	void EnsureDepthMaterials();
+
+	/** Start collapsed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
+	bool bStartCollapsed = false;
+
+	bool  bCollapsed = false;
 	float TimeSinceRefresh = 0.0f;
 };

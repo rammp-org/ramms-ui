@@ -18,6 +18,9 @@
 #include "CameraCaptureSubsystem.h"
 #include "IntrinsicSceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 // ---------------------------------------------------------------------------
 // Construction
@@ -38,83 +41,113 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	PanelBorder->SetVerticalAlignment(VAlign_Top);
 	WidgetTree->RootWidget = PanelBorder;
 
+	// One width for the whole panel, declared once. Without it each row sizes to
+	// its own content and the longest one decides how far the panel reaches --
+	// which is how the status line and the rate stepper ended up past the edge.
+	USizeBox* WidthBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("WidthBox"));
+	WidthBox->SetWidthOverride(FeedWidth);
+	WidthBox->SetClipping(EWidgetClipping::ClipToBounds);
+	PanelBorder->AddChild(WidthBox);
+
 	MainVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MainVBox"));
-	PanelBorder->AddChild(MainVBox);
+	WidthBox->AddChild(MainVBox);
 
-	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TitleText"));
-	TitleText->SetText(FText::FromString(TEXT("Camera Capture")));
-	if (UVerticalBoxSlot* Slot = MainVBox->AddChildToVerticalBox(TitleText))
-	{
-		Slot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 4.0f));
-	}
-
-	auto AddButtonTo = [this](UHorizontalBox* Box, const TCHAR* Name, const TCHAR* Label) -> URammsButton* {
+	auto AddButtonTo = [this](UHorizontalBox* Box, const TCHAR* Name, const TCHAR* Label, float FillOrAuto) -> URammsButton* {
 		URammsButton* Button = WidgetTree->ConstructWidget<URammsButton>(URammsButton::StaticClass(), Name);
 		Button->SetText(FText::FromString(Label));
 		if (UHorizontalBoxSlot* Slot = Box->AddChildToHorizontalBox(Button))
 		{
 			Slot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
 			Slot->SetVerticalAlignment(VAlign_Center);
+			if (FillOrAuto > 0.0f)
+			{
+				Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			}
 		}
 		return Button;
 	};
 
+	// ── Title row: title, and the collapse toggle pinned to the right ──
+	TitleHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TitleHBox"));
+	MainVBox->AddChildToVerticalBox(TitleHBox);
+
+	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TitleText"));
+	TitleText->SetText(FText::FromString(TEXT("Camera Capture")));
+	if (UHorizontalBoxSlot* Slot = TitleHBox->AddChildToHorizontalBox(TitleText))
+	{
+		Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 4.0f));
+		Slot->SetVerticalAlignment(VAlign_Center);
+		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+
+	CollapseButton = AddButtonTo(TitleHBox, TEXT("CollapseButton"), TEXT("-"), 0.0f);
+	CollapseButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleCollapseClicked);
+
+	// ── Everything else, hidden when collapsed ──
+	ContentVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentVBox"));
+	MainVBox->AddChildToVerticalBox(ContentVBox);
+
 	if (bShowControls)
 	{
 		ControlsHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ControlsHBox"));
-		if (UVerticalBoxSlot* Slot = MainVBox->AddChildToVerticalBox(ControlsHBox))
+		ControlsHBox->SetClipping(EWidgetClipping::ClipToBounds);
+		if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(ControlsHBox))
 		{
 			Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 		}
 
-		CaptureButton = AddButtonTo(ControlsHBox, TEXT("CaptureButton"), TEXT("Start Capture"));
+		CaptureButton = AddButtonTo(ControlsHBox, TEXT("CaptureButton"), TEXT("Start Capture"), 1.0f);
 		CaptureButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleCaptureClicked);
 
-		SerializationButton = AddButtonTo(ControlsHBox, TEXT("SerializationButton"), TEXT("Saving: off"));
+		SerializationButton = AddButtonTo(ControlsHBox, TEXT("SerializationButton"), TEXT("Saving: off"), 1.0f);
 		SerializationButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleSerializationClicked);
 
 		if (bShowCaptureRate)
 		{
-			RateDownButton = AddButtonTo(ControlsHBox, TEXT("RateDownButton"), TEXT("-"));
+			// Its own row. Five controls on one line is more than this column
+			// holds, and the overflow fell off the right-hand edge.
+			RateHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RateHBox"));
+			RateHBox->SetClipping(EWidgetClipping::ClipToBounds);
+			if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(RateHBox))
+			{
+				Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+			}
+
+			RateDownButton = AddButtonTo(RateHBox, TEXT("RateDownButton"), TEXT("-"), 0.0f);
 			RateDownButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleRateDownClicked);
 
 			RateText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateText"));
 			RateText->SetText(FText::FromString(TEXT("every frame")));
-			if (UHorizontalBoxSlot* Slot = ControlsHBox->AddChildToHorizontalBox(RateText))
+			RateText->SetJustification(ETextJustify::Center);
+			if (UHorizontalBoxSlot* Slot = RateHBox->AddChildToHorizontalBox(RateText))
 			{
 				Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
 				Slot->SetVerticalAlignment(VAlign_Center);
+				Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			}
 
-			RateUpButton = AddButtonTo(ControlsHBox, TEXT("RateUpButton"), TEXT("+"));
+			RateUpButton = AddButtonTo(RateHBox, TEXT("RateUpButton"), TEXT("+"), 0.0f);
 			RateUpButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleRateUpClicked);
 		}
 	}
 
-	if (bShowStatistics)
-	{
-		StatsText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatsText"));
-		StatsText->SetText(FText::GetEmpty());
-		if (UVerticalBoxSlot* Slot = MainVBox->AddChildToVerticalBox(StatsText))
-		{
-			Slot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 6.0f));
-		}
-	}
-
-	// Camera selector: < name > [channel]
+	// ── Camera selector: < name > [channel] ──
 	SelectorHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SelectorHBox"));
-	if (UVerticalBoxSlot* Slot = MainVBox->AddChildToVerticalBox(SelectorHBox))
+	SelectorHBox->SetClipping(EWidgetClipping::ClipToBounds);
+	if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(SelectorHBox))
 	{
 		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 	}
 
-	SelectorHBox->SetClipping(EWidgetClipping::ClipToBounds);
-
-	PrevCameraButton = AddButtonTo(SelectorHBox, TEXT("PrevCameraButton"), TEXT("<"));
+	PrevCameraButton = AddButtonTo(SelectorHBox, TEXT("PrevCameraButton"), TEXT("<"), 0.0f);
 	PrevCameraButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandlePrevCameraClicked);
 
 	CameraNameText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CameraNameText"));
 	CameraNameText->SetText(FText::FromString(TEXT("no cameras")));
+	// Clip rather than grow. A Fill slot does not shrink a text block below its
+	// desired size, so without this a long name pushes the buttons beside it out
+	// of the panel -- the name grows and the controls are what you lose.
+	CameraNameText->SetClipping(EWidgetClipping::ClipToBounds);
 	if (UHorizontalBoxSlot* Slot = SelectorHBox->AddChildToHorizontalBox(CameraNameText))
 	{
 		Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
@@ -122,24 +155,40 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	}
 
-	NextCameraButton = AddButtonTo(SelectorHBox, TEXT("NextCameraButton"), TEXT(">"));
+	NextCameraButton = AddButtonTo(SelectorHBox, TEXT("NextCameraButton"), TEXT(">"), 0.0f);
 	NextCameraButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleNextCameraClicked);
 
-	ChannelButton = AddButtonTo(SelectorHBox, TEXT("ChannelButton"), TEXT("Colour"));
+	ChannelButton = AddButtonTo(SelectorHBox, TEXT("ChannelButton"), TEXT("Colour"), 0.0f);
 	ChannelButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleChannelClicked);
 
-	// The feed: a plain image with the render target as its brush. No chrome, no
-	// stream resolution, no display modes -- just the pixels, sized here.
+	// ── The feed: a plain image with the render target as its brush ──
 	FeedBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("FeedBox"));
 	FeedBox->SetWidthOverride(FeedWidth);
 	FeedBox->SetHeightOverride(FeedWidth * 0.75f); // replaced once a target is known
-	if (UVerticalBoxSlot* Slot = MainVBox->AddChildToVerticalBox(FeedBox))
+	if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(FeedBox))
 	{
-		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 2.0f));
+		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 	}
 
 	FeedImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("FeedImage"));
 	FeedBox->AddChild(FeedImage);
+
+	// ── Status last, and wrapped: it is the longest line and the least urgent,
+	// so it is the one that should reflow rather than push anything around. ──
+	if (bShowStatistics)
+	{
+		StatsText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatsText"));
+		StatsText->SetText(FText::GetEmpty());
+		StatsText->SetAutoWrapText(true);
+		StatsText->SetWrapTextAt(FeedWidth - 4.0f);
+		if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(StatsText))
+		{
+			Slot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 0.0f));
+		}
+	}
+
+	bCollapsed = bStartCollapsed;
+	ContentVBox->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 }
 
 void URammsCameraCapturePanel::ResetCachedWidgets()
@@ -147,7 +196,11 @@ void URammsCameraCapturePanel::ResetCachedWidgets()
 	PanelBorder = nullptr;
 	MainVBox = nullptr;
 	TitleText = nullptr;
+	TitleHBox = nullptr;
+	CollapseButton = nullptr;
+	ContentVBox = nullptr;
 	ControlsHBox = nullptr;
+	RateHBox = nullptr;
 	CaptureButton = nullptr;
 	SerializationButton = nullptr;
 	RateDownButton = nullptr;
@@ -250,6 +303,29 @@ void URammsCameraCapturePanel::RefreshCameraList()
 	SelectedCamera = Cameras.Num() > 0 ? FMath::Clamp(SelectedCamera, 0, Cameras.Num() - 1) : 0;
 }
 
+void URammsCameraCapturePanel::EnsureDepthMaterials()
+{
+	// Same material twice, differing only in which channel feeds the colormap.
+	// The DMV pass writes depth to red; SingleCaptureColorDepth packs it into the
+	// colour target's alpha, which is why one variant exists at all -- without it
+	// the depth view in that mode had no texture to point at and the feed
+	// vanished rather than merely being blank.
+	if (!DepthFromRedMID)
+	{
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_DepthColormap.M_DepthColormap")))
+		{
+			DepthFromRedMID = UMaterialInstanceDynamic::Create(Base, this);
+		}
+	}
+	if (!DepthFromAlphaMID)
+	{
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_DepthColormapAlpha.M_DepthColormapAlpha")))
+		{
+			DepthFromAlphaMID = UMaterialInstanceDynamic::Create(Base, this);
+		}
+	}
+}
+
 void URammsCameraCapturePanel::UpdateFeedImage()
 {
 	if (!FeedImage || !FeedBox)
@@ -258,36 +334,66 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	}
 
 	UIntrinsicSceneCaptureComponent2D* Camera = GetSelectedCamera();
-	UTextureRenderTarget2D*			   Target = nullptr;
-	if (Camera)
-	{
-		UCameraCaptureSubsystem* Sub = GetSubsystem();
-		// Spelled out rather than a ternary: TextureTarget is a TObjectPtr and the
-		// accessor returns a raw pointer, which makes the conditional ambiguous.
-		if (bShowDepthChannel && Sub)
-		{
-			Target = Sub->GetDepthRenderTarget(Camera);
-		}
-		else
-		{
-			Target = Camera->TextureTarget;
-		}
-	}
-
-	if (!Target)
+	if (!Camera)
 	{
 		FeedImage->SetBrushResourceObject(nullptr);
 		FeedImage->SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
 
-	FeedImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-	FeedImage->SetBrushResourceObject(Target);
+	UCameraCaptureSubsystem* Sub = GetSubsystem();
+	UTextureRenderTarget2D*	 ColourTarget = Camera->TextureTarget;
+	UTextureRenderTarget2D*	 DepthTarget = Sub ? Sub->GetDepthRenderTarget(Camera) : nullptr;
 
-	// Size from the target's own aspect, so a 4:3 depth target and a 16:9 colour
+	// Which texture the feed draws, and whether it goes through the colormap.
+	UTextureRenderTarget2D*	  Source = ColourTarget;
+	UMaterialInstanceDynamic* Material = nullptr;
+	if (bShowDepthChannel)
+	{
+		EnsureDepthMaterials();
+		if (DepthTarget)
+		{
+			// Two-render mode: its own target, depth in red.
+			Source = DepthTarget;
+			Material = DepthFromRedMID;
+		}
+		else
+		{
+			// Single capture: no depth target exists, because depth is in the
+			// colour target's alpha. Same colormap, alpha variant.
+			Source = ColourTarget;
+			Material = DepthFromAlphaMID;
+		}
+	}
+
+	if (!Source)
+	{
+		FeedImage->SetBrushResourceObject(nullptr);
+		FeedImage->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	// Size from the source's own aspect, so a 4:3 depth target and a 16:9 colour
 	// target both fill the width and neither is stretched.
-	const float Aspect = Target->SizeY > 0 ? static_cast<float>(Target->SizeX) / static_cast<float>(Target->SizeY) : 1.0f;
+	const float Aspect = Source->SizeY > 0 ? static_cast<float>(Source->SizeX) / static_cast<float>(Source->SizeY) : 1.0f;
 	const float Height = Aspect > 0.0f ? FeedWidth / Aspect : FeedWidth;
+
+	FeedImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (Material)
+	{
+		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
+		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinMetres);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxMetres);
+		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
+		Material->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(FeedWidth, Height, 0.0f, 0.0f));
+		Material->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+		FeedImage->SetBrushResourceObject(Material);
+	}
+	else
+	{
+		FeedImage->SetBrushResourceObject(Source);
+	}
+
 	FeedImage->SetBrushSize(FVector2D(FeedWidth, Height));
 	FeedBox->SetWidthOverride(FeedWidth);
 	FeedBox->SetHeightOverride(Height);
@@ -331,9 +437,14 @@ void URammsCameraCapturePanel::NativeTick(const FGeometry& MyGeometry, float InD
 		}
 	}
 
-	// Cheap, and it keeps the brush pointing at the right target if a camera's
-	// render target is recreated -- a resolution change does exactly that.
-	UpdateFeedImage();
+	// Collapsed, nothing below the title is visible, so none of it is worth
+	// recomputing -- only the title and the collapse button still show.
+	if (!bCollapsed)
+	{
+		// Cheap, and it keeps the brush pointing at the right target if a camera's
+		// render target is recreated -- a resolution change does exactly that.
+		UpdateFeedImage();
+	}
 	RefreshLabels();
 }
 
@@ -364,10 +475,16 @@ void URammsCameraCapturePanel::RefreshLabels()
 			Button->SetEnabled(bMultiple);
 		}
 	}
+	if (CollapseButton)
+	{
+		CollapseButton->SetText(FText::FromString(bCollapsed ? TEXT("+") : TEXT("-")));
+	}
 	if (ChannelButton)
 	{
 		ChannelButton->SetEnabled(Cameras.Num() > 0);
 		ChannelButton->SetText(FText::FromString(bShowDepthChannel ? TEXT("Depth") : TEXT("Colour")));
+		ChannelButton->SetToolTipText(FText::FromString(
+			bShowDepthChannel ? TEXT("Showing depth, colormapped") : TEXT("Showing colour")));
 	}
 
 	if (CameraNameText)
@@ -509,6 +626,21 @@ void URammsCameraCapturePanel::ToggleChannel()
 	bShowDepthChannel = !bShowDepthChannel;
 	UpdateFeedImage();
 	RefreshLabels();
+}
+
+void URammsCameraCapturePanel::ToggleCollapsed()
+{
+	bCollapsed = !bCollapsed;
+	if (ContentVBox)
+	{
+		ContentVBox->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	RefreshLabels();
+}
+
+void URammsCameraCapturePanel::HandleCollapseClicked()
+{
+	ToggleCollapsed();
 }
 
 void URammsCameraCapturePanel::HandleCaptureClicked()
