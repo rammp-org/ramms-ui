@@ -337,6 +337,53 @@ void URammsCameraCapturePanel::EnsureDepthMaterials()
 			DepthFromAlphaMID = UMaterialInstanceDynamic::Create(Base, this);
 		}
 	}
+	// Motion vectors, same arrangement: the shared M_MotionVectorColormap reads
+	// the vector from DataTexture's R and G, and the DMV target has depth in R
+	// with the vector in G and B, so the GB variant is the one that fits.
+	if (!MotionFromGBMID)
+	{
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_MotionVectorColormapGB.M_MotionVectorColormapGB")))
+		{
+			MotionFromGBMID = UMaterialInstanceDynamic::Create(Base, this);
+		}
+	}
+}
+
+bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) const
+{
+	UIntrinsicSceneCaptureComponent2D* Camera = GetSelectedCamera();
+	if (!Camera)
+	{
+		return false;
+	}
+	UCameraCaptureSubsystem* Sub = GetSubsystem();
+
+	switch (Channel)
+	{
+		case ERammsFeedChannel::Colour:
+			return Camera->TextureTarget != nullptr;
+
+		case ERammsFeedChannel::Depth:
+		{
+			if (!Sub || !Sub->IsCapturingDepth())
+			{
+				return false;
+			}
+			// Single capture has no depth target: depth is in the colour
+			// target's alpha, so that target is what it needs.
+			return Sub->GetCaptureMode() == ERammsCaptureMode::SingleCaptureColorDepth
+				? Camera->TextureTarget != nullptr
+				: Sub->GetDepthRenderTarget(Camera) != nullptr;
+		}
+
+		case ERammsFeedChannel::Motion:
+			// Only the DMV pass produces motion vectors, and only into its own
+			// target. IsCapturingMotionVectors already accounts for the mode.
+			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetDepthRenderTarget(Camera) != nullptr;
+
+		default:
+			return false;
+	}
 }
 
 void URammsCameraCapturePanel::UpdateFeedImage()
@@ -358,10 +405,19 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	UTextureRenderTarget2D*	 ColourTarget = Camera->TextureTarget;
 	UTextureRenderTarget2D*	 DepthTarget = Sub ? Sub->GetDepthRenderTarget(Camera) : nullptr;
 
-	// Which texture the feed draws, and whether it goes through the colormap.
+	// The selected channel may have stopped being available since it was picked
+	// -- the capture mode can change under the panel, and a camera can lose its
+	// DMV target. Fall back rather than drawing the wrong plane.
+	if (FeedChannel != ERammsFeedChannel::Colour && !IsChannelAvailable(FeedChannel))
+	{
+		FeedChannel = ERammsFeedChannel::Colour;
+	}
+
+	// Which texture the feed draws, and whether it goes through a colormap.
 	UTextureRenderTarget2D*	  Source = ColourTarget;
 	UMaterialInstanceDynamic* Material = nullptr;
-	if (bShowDepthChannel)
+
+	if (FeedChannel == ERammsFeedChannel::Depth)
 	{
 		EnsureDepthMaterials();
 
@@ -388,6 +444,21 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// Otherwise Source stays null and the feed collapses, which is honest:
 		// this camera has no depth to show yet.
 	}
+	else if (FeedChannel == ERammsFeedChannel::Motion)
+	{
+		EnsureDepthMaterials();
+		// Motion only ever comes out of the DMV target, G and B. There is no
+		// single-capture fallback because that mode runs no DMV pass.
+		if (DepthTarget)
+		{
+			Source = DepthTarget;
+			Material = MotionFromGBMID;
+		}
+		else
+		{
+			Source = nullptr;
+		}
+	}
 
 	if (!Source)
 	{
@@ -404,10 +475,13 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	FeedImage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	if (Material)
 	{
+		// Setting a parameter a material does not have is a no-op, so the depth
+		// range goes on unconditionally rather than branching per material.
 		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
 		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinMetres);
 		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxMetres);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
+		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
 		Material->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(FeedWidth, Height, 0.0f, 0.0f));
 		Material->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 		FeedImage->SetBrushResourceObject(Material);
@@ -504,10 +578,29 @@ void URammsCameraCapturePanel::RefreshLabels()
 	}
 	if (ChannelButton)
 	{
-		ChannelButton->SetEnabled(Cameras.Num() > 0);
-		ChannelButton->SetText(FText::FromString(bShowDepthChannel ? TEXT("Depth") : TEXT("Colour")));
-		ChannelButton->SetToolTipText(FText::FromString(
-			bShowDepthChannel ? TEXT("Showing depth, colormapped") : TEXT("Showing colour")));
+		// Disabled when there is nothing to cycle TO, which is the honest state
+		// in single capture with depth off, or with no camera at all.
+		const bool bHasAlternative = IsChannelAvailable(ERammsFeedChannel::Depth)
+			|| IsChannelAvailable(ERammsFeedChannel::Motion);
+		ChannelButton->SetEnabled(Cameras.Num() > 0 && bHasAlternative);
+
+		const TCHAR* ChannelName = TEXT("Colour");
+		const TCHAR* ChannelHint = TEXT("Showing colour");
+		switch (FeedChannel)
+		{
+			case ERammsFeedChannel::Depth:
+				ChannelName = TEXT("Depth");
+				ChannelHint = TEXT("Showing depth, colormapped");
+				break;
+			case ERammsFeedChannel::Motion:
+				ChannelName = TEXT("Motion");
+				ChannelHint = TEXT("Showing motion vectors, colormapped by magnitude and angle");
+				break;
+			default:
+				break;
+		}
+		ChannelButton->SetText(FText::FromString(ChannelName));
+		ChannelButton->SetToolTipText(FText::FromString(ChannelHint));
 	}
 
 	if (CameraNameText)
@@ -646,7 +739,27 @@ void URammsCameraCapturePanel::StepCamera(int32 Delta)
 
 void URammsCameraCapturePanel::ToggleChannel()
 {
-	bShowDepthChannel = !bShowDepthChannel;
+	// Walk forward to the next channel this camera can show. At most three steps,
+	// and colour is the backstop -- a camera with a render target always has it,
+	// so the loop cannot spin.
+	static constexpr int32 NumChannels = 3;
+	for (int32 Step = 1; Step <= NumChannels; ++Step)
+	{
+		const ERammsFeedChannel Candidate =
+			static_cast<ERammsFeedChannel>((static_cast<int32>(FeedChannel) + Step) % NumChannels);
+		if (IsChannelAvailable(Candidate))
+		{
+			FeedChannel = Candidate;
+			break;
+		}
+	}
+	UpdateFeedImage();
+	RefreshLabels();
+}
+
+void URammsCameraCapturePanel::SetFeedChannel(ERammsFeedChannel Channel)
+{
+	FeedChannel = IsChannelAvailable(Channel) ? Channel : ERammsFeedChannel::Colour;
 	UpdateFeedImage();
 	RefreshLabels();
 }

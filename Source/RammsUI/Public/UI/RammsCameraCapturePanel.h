@@ -19,6 +19,22 @@ class UCameraCaptureSubsystem;
 class UIntrinsicSceneCaptureComponent2D;
 
 /**
+ * Which plane of a camera the feed is showing.
+ *
+ * Not every camera has all three. Depth exists in both capture modes but lives
+ * in a different channel in each; motion vectors are produced only by the DMV
+ * pass, so SingleCaptureColorDepth never has them at all. The panel cycles past
+ * whatever is unavailable rather than offering a view that cannot be drawn.
+ */
+UENUM(BlueprintType)
+enum class ERammsFeedChannel : uint8
+{
+	Colour UMETA(DisplayName = "Colour"),
+	Depth  UMETA(DisplayName = "Depth"),
+	Motion UMETA(DisplayName = "Motion vectors")
+};
+
+/**
  * One camera from the capture subsystem, shown large, plus the controls that
  * decide what the subsystem does.
  *
@@ -80,6 +96,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
 	int32 DepthColormapIndex = 2;
 
+	/** Drives M_MotionVectorColormap's "Sensitivity": how much screen-space
+	 *  motion it takes to saturate the colour wheel. 1.0 is the material's own
+	 *  default; raise it to see slow motion, lower it for fast. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion", meta = (ClampMin = "0.001"))
+	float MotionSensitivity = 1.0f;
+
 	// ── Actions, also callable from Blueprint or a key binding ──────────
 
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
@@ -96,9 +118,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void StepCamera(int32 Delta);
 
-	/** Switch the feed between colour and depth. */
+	/** Advance to the next channel that this camera can actually show, wrapping:
+	 *  colour -> depth -> motion -> colour. Unavailable channels are skipped, so
+	 *  in single-capture mode the cycle is just colour -> depth. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void ToggleChannel();
+
+	/** Show a specific channel. Falls back to colour if it is unavailable. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
+	void SetFeedChannel(ERammsFeedChannel Channel);
+
+	UFUNCTION(BlueprintPure, Category = "Camera Capture")
+	ERammsFeedChannel GetFeedChannel() const { return FeedChannel; }
+
+	/** Whether the selected camera can show this channel right now. */
+	UFUNCTION(BlueprintPure, Category = "Camera Capture")
+	bool IsChannelAvailable(ERammsFeedChannel Channel) const;
 
 	/** Collapse to just the title bar, or expand again. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
@@ -207,8 +242,8 @@ protected:
 	/** Index into Cameras. Kept in range as the list changes. */
 	int32 SelectedCamera = 0;
 
-	/** False shows colour, true shows depth. */
-	bool bShowDepthChannel = false;
+	/** Which plane is on screen. */
+	ERammsFeedChannel FeedChannel = ERammsFeedChannel::Colour;
 
 	/**
 	 * Depth is colormapped through a material, and which channel it lives in
@@ -222,7 +257,18 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DepthFromAlphaMID;
 
-	/** Build the two depth materials if they are not built yet. */
+	/**
+	 * Motion vectors, colormapped by magnitude and angle.
+	 *
+	 * Same story as depth, one channel over: M_MotionVectorColormap reads the
+	 * vector from DataTexture's R and G, while the DMV target packs depth into R
+	 * and the vector into G and B. The GB variant is that material with the mask
+	 * moved, rather than an edit to the shared one, which has its own callers.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MotionFromGBMID;
+
+	/** Build the colormap materials if they are not built yet. */
 	void EnsureDepthMaterials();
 
 	/** Start collapsed. */
