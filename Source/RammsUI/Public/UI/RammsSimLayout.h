@@ -27,7 +27,7 @@ public:
 
 	/** Width of the camera capture column, in pixels. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "120.0"))
-	float CameraPanelWidth = 280.0f;
+	float CameraPanelWidth = 380.0f;
 
 	virtual TArray<FName> GetLayoutSlotNames_Implementation() const override;
 

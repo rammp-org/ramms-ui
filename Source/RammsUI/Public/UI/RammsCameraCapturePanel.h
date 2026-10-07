@@ -7,32 +7,34 @@
 #include "RammsCameraCapturePanel.generated.h"
 
 class UBorder;
-class UScrollBox;
+class UImage;
+class USizeBox;
 class UTextBlock;
 class UVerticalBox;
 class UHorizontalBox;
 class URammsButton;
-class URammsCameraWidget;
 class UCameraCaptureSubsystem;
 class UIntrinsicSceneCaptureComponent2D;
 
 /**
- * Live view of everything the camera capture subsystem has registered, with the
- * controls that decide what it does.
+ * One camera from the capture subsystem, shown large, plus the controls that
+ * decide what the subsystem does.
  *
- * One feed per camera, taken from the camera's own render target rather than
- * from FCaptureData: the target is already on the GPU, so displaying it costs a
- * brush assignment instead of a readback. That also means the feeds show what
- * the cameras are rendering even while serialization is off, which is the state
- * you want when framing a shot.
+ * Deliberately one feed and not all of them. A column of thumbnails is the
+ * obvious first design and a bad one: every feed is too small to read, and N
+ * cameras means N render targets composited every frame for a panel you are
+ * only ever looking at one part of. A selector and a single large image shows
+ * the thing you are actually trying to see.
  *
- * Depth goes in the camera widget's data-texture slot when a separate depth
- * target exists. In SingleCaptureColorDepth mode there is no second target --
- * depth rides in the colour target's alpha -- so the slot stays empty and the
- * panel says so rather than leaving a blank square unexplained.
+ * The image is the camera's own render target drawn straight into a brush --
+ * already on the GPU, so no readback -- which also means it keeps updating
+ * whether or not anything is being written to disk, the state you want while
+ * framing a shot. The depth channel is the same thing for the depth target,
+ * when the camera has one; in SingleCaptureColorDepth mode it does not, because
+ * depth rides in the colour target's alpha, and the toggle says so.
  *
  * The panel does not own the cameras and never creates one. It reflects the
- * subsystem, and rebuilds its feed list when the registered set changes.
+ * subsystem, and refreshes its camera list when the registered set changes.
  */
 UCLASS(meta = (DisplayName = "Ramms Camera Capture Panel"))
 class RAMMSUI_API URammsCameraCapturePanel : public URammsBaseWidget
@@ -52,12 +54,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	bool bShowStatistics = true;
 
-	/** Height of each camera feed, in pixels. Width follows the feed's aspect. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture", meta = (ClampMin = "48.0"))
-	float FeedHeight = 160.0f;
+	/** Width of the feed image, in pixels. Height follows the camera's aspect. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture", meta = (ClampMin = "64.0"))
+	float FeedWidth = 320.0f;
 
-	/** How often the labels and statistics refresh. The feeds themselves are
-	 *  render targets and update with the renderer, not with this. */
+	/** How often the labels, statistics and feed texture refresh. The image
+	 *  itself is a render target and updates with the renderer, not with this. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture", meta = (ClampMin = "0.05"))
 	float RefreshInterval = 0.25f;
 
@@ -77,9 +79,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void StepCaptureRate(int32 Delta);
 
-	/** Discard the feed widgets and rebuild them from the subsystem. */
+	/** Show the next/previous camera. Wraps. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
-	void RebuildFeeds();
+	void StepCamera(int32 Delta);
+
+	/** Switch the feed between colour and depth. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
+	void ToggleChannel();
+
+	/** Re-read the registered camera list from the subsystem. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
+	void RefreshCameraList();
 
 protected:
 	virtual void	 NativeConstruct() override;
@@ -92,63 +102,77 @@ protected:
 	/** The subsystem on this world, or null outside play. */
 	UCameraCaptureSubsystem* GetSubsystem() const;
 
+	/** The camera currently selected, or null. */
+	UIntrinsicSceneCaptureComponent2D* GetSelectedCamera() const;
+
+	/** Point the feed image at the selected camera's current channel, and size
+	 *  it to that target's aspect. */
+	void UpdateFeedImage();
+
 	/** Button text and statistics. Cheap; called on RefreshInterval. */
 	void RefreshLabels();
 
 	UFUNCTION()
 	void HandleCaptureClicked();
-
 	UFUNCTION()
 	void HandleSerializationClicked();
-
 	UFUNCTION()
 	void HandleRateUpClicked();
-
 	UFUNCTION()
 	void HandleRateDownClicked();
+	UFUNCTION()
+	void HandlePrevCameraClicked();
+	UFUNCTION()
+	void HandleNextCameraClicked();
+	UFUNCTION()
+	void HandleChannelClicked();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> PanelBorder;
-
 	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> MainVBox;
-
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> TitleText;
-
 	UPROPERTY(Transient)
 	TObjectPtr<UHorizontalBox> ControlsHBox;
-
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> CaptureButton;
-
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> SerializationButton;
-
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> RateDownButton;
-
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> RateUpButton;
-
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RateText;
-
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> StatsText;
 
+	/** Camera selector: < name > and the channel toggle. */
 	UPROPERTY(Transient)
-	TObjectPtr<UScrollBox> FeedsScroll;
+	TObjectPtr<UHorizontalBox> SelectorHBox;
+	UPROPERTY(Transient)
+	TObjectPtr<URammsButton> PrevCameraButton;
+	UPROPERTY(Transient)
+	TObjectPtr<URammsButton> NextCameraButton;
+	UPROPERTY(Transient)
+	TObjectPtr<URammsButton> ChannelButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> CameraNameText;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UVerticalBox> FeedsVBox;
-
+	TObjectPtr<USizeBox> FeedBox;
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<URammsCameraWidget>> Feeds;
+	TObjectPtr<UImage> FeedImage;
 
-	/** Cameras the current feed widgets were built for, so a changed set can be
-	 *  detected without rebuilding every tick. */
-	TArray<TWeakObjectPtr<UIntrinsicSceneCaptureComponent2D>> FeedCameras;
+	/** The registered cameras, as of the last refresh. */
+	TArray<TWeakObjectPtr<UIntrinsicSceneCaptureComponent2D>> Cameras;
+
+	/** Index into Cameras. Kept in range as the list changes. */
+	int32 SelectedCamera = 0;
+
+	/** False shows colour, true shows the depth/motion target. */
+	bool bShowDepthChannel = false;
 
 	float TimeSinceRefresh = 0.0f;
 };
