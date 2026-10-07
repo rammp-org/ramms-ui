@@ -259,7 +259,8 @@ void URammsCameraCapturePanel::ApplyStyle_Implementation()
 	// Buttons are created at runtime, outside this widget's tree, so they are
 	// handed the style directly -- the same thing the control surface panel does.
 	for (URammsButton* Button : { CaptureButton.Get(), SerializationButton.Get(), RateDownButton.Get(),
-			 RateUpButton.Get(), PrevCameraButton.Get(), NextCameraButton.Get(), ChannelButton.Get() })
+			 RateUpButton.Get(), PrevCameraButton.Get(), NextCameraButton.Get(), ChannelButton.Get(),
+			 CollapseButton.Get() })
 	{
 		if (Button)
 		{
@@ -323,30 +324,32 @@ void URammsCameraCapturePanel::EnsureDepthMaterials()
 	// colour target's alpha, which is why one variant exists at all -- without it
 	// the depth view in that mode had no texture to point at and the feed
 	// vanished rather than merely being blank.
-	if (!DepthFromRedMID)
-	{
-		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_DepthColormap.M_DepthColormap")))
+	// Loaded from soft references, not literal paths: a path the cooker cannot
+	// see is an asset a packaged build can be missing, and the failure is quiet.
+	auto Build = [this](const TSoftObjectPtr<UMaterialInterface>& Ref, TObjectPtr<UMaterialInstanceDynamic>& Out, const TCHAR* What) {
+		if (Out || Ref.IsNull())
 		{
-			DepthFromRedMID = UMaterialInstanceDynamic::Create(Base, this);
+			return;
 		}
-	}
-	if (!DepthFromAlphaMID)
-	{
-		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_DepthColormapAlpha.M_DepthColormapAlpha")))
+		if (UMaterialInterface* Base = Ref.LoadSynchronous())
 		{
-			DepthFromAlphaMID = UMaterialInstanceDynamic::Create(Base, this);
+			Out = UMaterialInstanceDynamic::Create(Base, this);
 		}
-	}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[RammsCameraCapturePanel] Could not load the %s material (%s); that view will show the raw render ")
+					TEXT("target instead of a colormap."),
+				What, *Ref.ToSoftObjectPath().ToString());
+		}
+	};
+
+	Build(DepthColormapMaterial, DepthFromRedMID, TEXT("depth"));
+	Build(DepthColormapAlphaMaterial, DepthFromAlphaMID, TEXT("depth-in-alpha"));
 	// Motion vectors, same arrangement: the shared M_MotionVectorColormap reads
 	// the vector from DataTexture's R and G, and the DMV target has depth in R
 	// with the vector in G and B, so the GB variant is the one that fits.
-	if (!MotionFromGBMID)
-	{
-		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/RammsUI/Materials/M_MotionVectorColormapGB.M_MotionVectorColormapGB")))
-		{
-			MotionFromGBMID = UMaterialInstanceDynamic::Create(Base, this);
-		}
-	}
+	Build(MotionColormapMaterial, MotionFromGBMID, TEXT("motion-vector"));
 }
 
 bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) const
@@ -478,8 +481,25 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// Setting a parameter a material does not have is a no-op, so the depth
 		// range goes on unconditionally rather than branching per material.
 		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
-		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinMetres);
-		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxMetres);
+		// The two depth sources are NOT in the same units, so the range cannot be
+		// one number.
+		//
+		// SingleCaptureColorDepth packs SceneDepth into alpha untouched, which is
+		// centimetres -- measured at 615 cm for near geometry, and 1e13 where the
+		// sky is. The material normalises in the same space as its input (its
+		// siblings on this path spell it out: MinDepthCM, DepthScaleToCM), so a
+		// cm range is what it wants, and the metre-valued properties convert.
+		//
+		// The DMV pass does not deliver centimetres at all. Its camera captures
+		// SCS_FinalColorLDR, so a post-process material writing raw SceneDepth is
+		// squashed through the tonemapper before it is ever read -- measured at
+		// 0.125..0.702 for the same scene the other mode reported in hundreds of
+		// cm. For a viewer the only honest reading of that is a normalised 0..1,
+		// so that is what it gets. Scaling it by the metre range would be
+		// arithmetic on a number that has no unit.
+		const bool bDepthIsCentimetres = (Material == DepthFromAlphaMID);
+		Material->SetScalarParameterValue(TEXT("DepthMin"), bDepthIsCentimetres ? DepthMinMetres * 100.0f : 0.0f);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), bDepthIsCentimetres ? DepthMaxMetres * 100.0f : 1.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
 		Material->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(FeedWidth, Height, 0.0f, 0.0f));

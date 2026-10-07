@@ -85,7 +85,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	TArray<int32> CaptureRateSteps = { 1, 2, 5, 10, 30, 60 };
 
-	/** Near/far of the depth colormap, in metres. */
+	/** Near/far of the depth colormap, in METRES.
+	 *
+	 *  Converted to centimetres where they are assigned, because that is what the
+	 *  material wants and what SingleCaptureColorDepth actually produces. They do
+	 *  NOT apply to the DMV pass, whose depth is tonemapped rather than metric
+	 *  and is colormapped over a fixed 0..1 instead -- see UpdateFeedImage. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
 	float DepthMinMetres = 0.1f;
 
@@ -267,6 +272,30 @@ protected:
 	 */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MotionFromGBMID;
+
+	/**
+	 * The colormap materials, as soft references rather than runtime string
+	 * paths.
+	 *
+	 * LoadObject on a literal path is invisible to the cooker, so a packaged
+	 * build could omit these entirely unless the consuming project happened to
+	 * always-cook this plugin's content -- and the failure is quiet: LoadObject
+	 * returns null and the feed falls back to drawing the raw target, so depth
+	 * appears as a red-channel greyscale and motion as whatever the DMV target
+	 * looks like. A soft reference is a real cook dependency and still does not
+	 * force these to load for a panel that never shows depth.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
+	TSoftObjectPtr<UMaterialInterface> DepthColormapMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_DepthColormap.M_DepthColormap")));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
+	TSoftObjectPtr<UMaterialInterface> DepthColormapAlphaMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_DepthColormapAlpha.M_DepthColormapAlpha")));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
+	TSoftObjectPtr<UMaterialInterface> MotionColormapMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormapGB.M_MotionVectorColormapGB")));
 
 	/** Build the colormap materials if they are not built yet. */
 	void EnsureDepthMaterials();
