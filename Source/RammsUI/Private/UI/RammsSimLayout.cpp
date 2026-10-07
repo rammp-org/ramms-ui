@@ -66,8 +66,13 @@ void URammsSimLayout::BuildWidgetTree()
 		{
 			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 1.0f));
 			CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
-			CanvasSlot->SetOffsets(FMargin(16.0f, 64.0f, 0.0f, 200.0f));
-			CanvasSlot->SetSize(FVector2D(CameraPanelWidth, 0.0f));
+			// Width and bottom margin in ONE call. With these anchors the slot
+			// is stretched vertically but not horizontally, so Offsets.Right is
+			// the width and Offsets.Bottom is the gap above the bottom edge --
+			// and SetSize writes both of them, which is how a following
+			// SetSize(width, 0) reset the 200 px margin to zero and ran the
+			// panel down into the joystick.
+			CanvasSlot->SetOffsets(FMargin(16.0f, 64.0f, CameraPanelWidth, 200.0f));
 		}
 		RegisterSlot(TEXT("CameraCapturePanel"), SlotWidget);
 	}

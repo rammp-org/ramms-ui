@@ -287,6 +287,12 @@ UIntrinsicSceneCaptureComponent2D* URammsCameraCapturePanel::GetSelectedCamera()
 
 void URammsCameraCapturePanel::RefreshCameraList()
 {
+	// What is on screen is a camera, not a position in a list. Clamping an index
+	// across the rebuild quietly swapped the feed whenever an EARLIER camera
+	// unregistered: with A/B/C and B showing, losing A leaves index 1 on C while
+	// B is still registered and still what the user asked for.
+	UIntrinsicSceneCaptureComponent2D* Previous = Cameras.IsValidIndex(SelectedCamera) ? Cameras[SelectedCamera].Get() : nullptr;
+
 	Cameras.Reset();
 	if (UCameraCaptureSubsystem* Sub = GetSubsystem())
 	{
@@ -298,9 +304,16 @@ void URammsCameraCapturePanel::RefreshCameraList()
 			}
 		}
 	}
-	// Keep the selection in range rather than letting it point past the end when
-	// a camera unregisters.
-	SelectedCamera = Cameras.Num() > 0 ? FMath::Clamp(SelectedCamera, 0, Cameras.Num() - 1) : 0;
+
+	const int32 FoundAt = Previous ? Cameras.IndexOfByPredicate(
+										 [Previous](const TWeakObjectPtr<UIntrinsicSceneCaptureComponent2D>& C) { return C.Get() == Previous; })
+								   : INDEX_NONE;
+
+	// The clamp is the fallback for the one case it is right for: the camera
+	// being shown is gone, so some neighbouring index is the best guess left.
+	SelectedCamera = FoundAt != INDEX_NONE
+		? FoundAt
+		: (Cameras.Num() > 0 ? FMath::Clamp(SelectedCamera, 0, Cameras.Num() - 1) : 0);
 }
 
 void URammsCameraCapturePanel::EnsureDepthMaterials()
@@ -351,19 +364,29 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	if (bShowDepthChannel)
 	{
 		EnsureDepthMaterials();
-		if (DepthTarget)
+
+		// Ask the mode, not the target. A null depth target is also what a
+		// two-render camera returns before it is set up, and what one returns
+		// when the DMV material is missing -- treating null as "depth is in
+		// alpha" colormapped the colour target's alpha in those states and
+		// presented inverted opacity as a distance measurement.
+		const bool bDepthInAlpha = Sub && Sub->GetCaptureMode() == ERammsCaptureMode::SingleCaptureColorDepth;
+
+		if (bDepthInAlpha)
+		{
+			// Single capture: there is no depth target, because depth rides in
+			// the colour target's alpha. Same colormap, alpha variant.
+			Source = ColourTarget;
+			Material = DepthFromAlphaMID;
+		}
+		else if (DepthTarget)
 		{
 			// Two-render mode: its own target, depth in red.
 			Source = DepthTarget;
 			Material = DepthFromRedMID;
 		}
-		else
-		{
-			// Single capture: no depth target exists, because depth is in the
-			// colour target's alpha. Same colormap, alpha variant.
-			Source = ColourTarget;
-			Material = DepthFromAlphaMID;
-		}
+		// Otherwise Source stays null and the feed collapses, which is honest:
+		// this camera has no depth to show yet.
 	}
 
 	if (!Source)
