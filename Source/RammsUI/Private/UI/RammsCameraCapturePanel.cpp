@@ -389,11 +389,26 @@ void URammsCameraCapturePanel::RefreshLabels()
 	if (StatsText)
 	{
 		const FCaptureStatistics Stats = Sub->GetStatistics();
+
+		// The output directory is stored relative to the project, which prints as
+		// a stack of "../.." that overflows the panel and says nothing. Show the
+		// last couple of components, which is the part that identifies the run.
+		FString Dir = Sub->GetOutputDirectory();
+		FPaths::NormalizeDirectoryName(Dir);
+		TArray<FString> Parts;
+		Dir.ParseIntoArray(Parts, TEXT("/"), true);
+		Parts.RemoveAll([](const FString& P) { return P == TEXT("..") || P == TEXT("."); });
+		if (Parts.Num() > 2)
+		{
+			Parts.RemoveAt(0, Parts.Num() - 2);
+		}
+		const FString ShortDir = Parts.Num() > 0 ? FString::Join(Parts, TEXT("/")) : Dir;
+
 		StatsText->SetText(FText::FromString(FString::Printf(
 			TEXT("%lld frames  |  kick %.2f ms  |  %s"),
 			Stats.TotalFramesCaptured,
 			Stats.AverageCaptureTimeMs,
-			*Sub->GetOutputDirectory())));
+			*ShortDir)));
 	}
 }
 

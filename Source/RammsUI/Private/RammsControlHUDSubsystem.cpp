@@ -174,7 +174,9 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 			Host->AddPoolWidget(FName("Joystick"), Joystick);
 		}
 	}
-	if (Settings && Settings->bShowCameraCapturePanel)
+	// Same shape as the panels above: absent settings means show it, rather than
+	// silently hiding the panel whenever the CDO cannot be reached.
+	if (!Settings || Settings->bShowCameraCapturePanel)
 	{
 		CameraCapturePanel = CreateWidget<URammsCameraCapturePanel>(Controller, URammsCameraCapturePanel::StaticClass());
 		if (CameraCapturePanel)

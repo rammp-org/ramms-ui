@@ -38,11 +38,11 @@ public:
 	bool bShowJoystick = true;
 
 	/** Show the camera capture panel: a live feed per registered camera, plus
-	 *  capture / serialization / rate controls. Off by default -- it is a
-	 *  diagnostic and authoring surface, and every feed is a render target the
-	 *  panel keeps on screen. */
+	 *  capture / serialization / rate controls. It costs nothing when no camera
+	 *  is registered -- the panel builds no feeds and the subsystem does no work
+	 *  -- so it is on, like the other panels. */
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
-	bool bShowCameraCapturePanel = false;
+	bool bShowCameraCapturePanel = true;
 
 	/** Put the player in Game-and-UI input mode with a visible cursor so the
 	 *  HUD receives clicks and touches while keys still reach the game. */
