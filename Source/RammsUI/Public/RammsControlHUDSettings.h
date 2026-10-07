@@ -37,6 +37,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
 	bool bShowJoystick = true;
 
+	/** Show the camera capture panel: a live feed per registered camera, plus
+	 *  capture / serialization / rate controls. Off by default -- it is a
+	 *  diagnostic and authoring surface, and every feed is a render target the
+	 *  panel keeps on screen. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD")
+	bool bShowCameraCapturePanel = false;
+
 	/** Put the player in Game-and-UI input mode with a visible cursor so the
 	 *  HUD receives clicks and touches while keys still reach the game. */
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")

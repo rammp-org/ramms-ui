@@ -8,6 +8,7 @@
 #include "UI/RammsLayoutHost.h"
 #include "UI/RammsSimLayout.h"
 #include "UI/RammsSurfaceJoystick.h"
+#include "UI/RammsCameraCapturePanel.h"
 #include "UI/RammsUIStyle.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/LocalPlayer.h"
@@ -173,6 +174,14 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 			Host->AddPoolWidget(FName("Joystick"), Joystick);
 		}
 	}
+	if (Settings && Settings->bShowCameraCapturePanel)
+	{
+		CameraCapturePanel = CreateWidget<URammsCameraCapturePanel>(Controller, URammsCameraCapturePanel::StaticClass());
+		if (CameraCapturePanel)
+		{
+			Host->AddPoolWidget(FName("CameraCapturePanel"), CameraCapturePanel);
+		}
+	}
 	Host->AddToPlayerScreen(10);
 	Host->TransitionToLayout(FName("Sim"), false);
 
@@ -205,4 +214,5 @@ void URammsControlHUDSubsystem::DestroyHUD()
 	Host = nullptr;
 	SurfacePanel = nullptr;
 	Joystick = nullptr;
+	CameraCapturePanel = nullptr;
 }

@@ -10,6 +10,7 @@ class APlayerController;
 class URammsControlSurfacePanel;
 class URammsLayoutHost;
 class URammsSurfaceJoystick;
+class URammsCameraCapturePanel;
 
 /**
  * The single spawn path for the sim's UI. One per local player; when that
@@ -43,6 +44,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms|HUD")
 	void DestroyHUD();
 
+	/** The camera capture panel, or null when it is not enabled. Exposed so a
+	 *  Blueprint, a key binding or a test can drive its actions. */
+	UFUNCTION(BlueprintPure, Category = "Ramms|HUD")
+	URammsCameraCapturePanel* GetCameraCapturePanel() const { return CameraCapturePanel; }
+
 	UFUNCTION(BlueprintPure, Category = "Ramms|HUD")
 	URammsLayoutHost* GetHost() const { return Host; }
 
@@ -64,6 +70,8 @@ private:
 	TObjectPtr<URammsControlSurfacePanel> SurfacePanel;
 	UPROPERTY(Transient)
 	TObjectPtr<URammsSurfaceJoystick> Joystick;
+	UPROPERTY(Transient)
+	TObjectPtr<URammsCameraCapturePanel> CameraCapturePanel;
 
 	TWeakObjectPtr<APlayerController> PC;
 	TWeakObjectPtr<UWorld>			  SubscribedWorld;

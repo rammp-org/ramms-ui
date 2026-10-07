@@ -8,7 +8,7 @@
 
 TArray<FName> URammsSimLayout::GetLayoutSlotNames_Implementation() const
 {
-	return { FName("SurfacePanel"), FName("Joystick"), FName("Status") };
+	return { FName("SurfacePanel"), FName("Joystick"), FName("Status"), FName("CameraCapturePanel") };
 }
 
 void URammsSimLayout::BuildWidgetTree()
@@ -55,6 +55,21 @@ void URammsSimLayout::BuildWidgetTree()
 			CanvasSlot->SetAutoSize(true);
 		}
 		RegisterSlot(TEXT("Status"), SlotWidget);
+	}
+	// Left column, below status: the camera capture feeds. Left rather than right
+	// so it does not fight the control-surface panel for the same column, and
+	// anchored top-to-bottom so a long list of cameras scrolls inside its own
+	// panel rather than growing off the screen.
+	{
+		UOverlay* SlotWidget = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("CameraCapturePanel"));
+		if (UCanvasPanelSlot* CanvasSlot = Root->AddChildToCanvas(SlotWidget))
+		{
+			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 1.0f));
+			CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+			CanvasSlot->SetOffsets(FMargin(16.0f, 64.0f, 0.0f, 200.0f));
+			CanvasSlot->SetSize(FVector2D(CameraPanelWidth, 0.0f));
+		}
+		RegisterSlot(TEXT("CameraCapturePanel"), SlotWidget);
 	}
 	LayoutDisplayName = FText::FromString(TEXT("Sim"));
 }
