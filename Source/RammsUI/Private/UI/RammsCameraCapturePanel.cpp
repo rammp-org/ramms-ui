@@ -75,11 +75,11 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 
 	TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TitleText"));
 	TitleText->SetText(FText::FromString(TEXT("Camera Capture")));
-	if (UHorizontalBoxSlot* Slot = TitleHBox->AddChildToHorizontalBox(TitleText))
+	if (UHorizontalBoxSlot* BSlot = TitleHBox->AddChildToHorizontalBox(TitleText))
 	{
-		Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 4.0f));
-		Slot->SetVerticalAlignment(VAlign_Center);
-		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		BSlot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 4.0f));
+		BSlot->SetVerticalAlignment(VAlign_Center);
+		BSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	}
 
 	CollapseButton = AddButtonTo(TitleHBox, TEXT("CollapseButton"), TEXT("-"), 0.0f);
@@ -93,9 +93,9 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	{
 		ControlsHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ControlsHBox"));
 		ControlsHBox->SetClipping(EWidgetClipping::ClipToBounds);
-		if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(ControlsHBox))
+		if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(ControlsHBox))
 		{
-			Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+			BSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 		}
 
 		CaptureButton = AddButtonTo(ControlsHBox, TEXT("CaptureButton"), TEXT("Start Capture"), 1.0f);
@@ -110,9 +110,9 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 			// holds, and the overflow fell off the right-hand edge.
 			RateHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RateHBox"));
 			RateHBox->SetClipping(EWidgetClipping::ClipToBounds);
-			if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(RateHBox))
+			if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(RateHBox))
 			{
-				Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+				BSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 			}
 
 			RateDownButton = AddButtonTo(RateHBox, TEXT("RateDownButton"), TEXT("-"), 0.0f);
@@ -121,11 +121,11 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 			RateText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateText"));
 			RateText->SetText(FText::FromString(TEXT("every frame")));
 			RateText->SetJustification(ETextJustify::Center);
-			if (UHorizontalBoxSlot* Slot = RateHBox->AddChildToHorizontalBox(RateText))
+			if (UHorizontalBoxSlot* BSlot = RateHBox->AddChildToHorizontalBox(RateText))
 			{
-				Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
-				Slot->SetVerticalAlignment(VAlign_Center);
-				Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				BSlot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
+				BSlot->SetVerticalAlignment(VAlign_Center);
+				BSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			}
 
 			RateUpButton = AddButtonTo(RateHBox, TEXT("RateUpButton"), TEXT("+"), 0.0f);
@@ -136,9 +136,9 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	// ── Camera selector: < name > [channel] ──
 	SelectorHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SelectorHBox"));
 	SelectorHBox->SetClipping(EWidgetClipping::ClipToBounds);
-	if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(SelectorHBox))
+	if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(SelectorHBox))
 	{
-		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		BSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 	}
 
 	PrevCameraButton = AddButtonTo(SelectorHBox, TEXT("PrevCameraButton"), TEXT("<"), 0.0f);
@@ -150,11 +150,11 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	// desired size, so without this a long name pushes the buttons beside it out
 	// of the panel -- the name grows and the controls are what you lose.
 	CameraNameText->SetClipping(EWidgetClipping::ClipToBounds);
-	if (UHorizontalBoxSlot* Slot = SelectorHBox->AddChildToHorizontalBox(CameraNameText))
+	if (UHorizontalBoxSlot* BSlot = SelectorHBox->AddChildToHorizontalBox(CameraNameText))
 	{
-		Slot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
-		Slot->SetVerticalAlignment(VAlign_Center);
-		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		BSlot->SetPadding(FMargin(2.0f, 0.0f, 4.0f, 0.0f));
+		BSlot->SetVerticalAlignment(VAlign_Center);
+		BSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	}
 
 	NextCameraButton = AddButtonTo(SelectorHBox, TEXT("NextCameraButton"), TEXT(">"), 0.0f);
@@ -167,9 +167,9 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	FeedBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("FeedBox"));
 	FeedBox->SetWidthOverride(FeedWidth);
 	FeedBox->SetHeightOverride(FeedWidth * 0.75f); // replaced once a target is known
-	if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(FeedBox))
+	if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(FeedBox))
 	{
-		Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		BSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
 	}
 
 	FeedImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("FeedImage"));
@@ -183,9 +183,9 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 		StatsText->SetText(FText::GetEmpty());
 		StatsText->SetAutoWrapText(true);
 		StatsText->SetWrapTextAt(FeedWidth - 4.0f);
-		if (UVerticalBoxSlot* Slot = ContentVBox->AddChildToVerticalBox(StatsText))
+		if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(StatsText))
 		{
-			Slot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 0.0f));
+			BSlot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 0.0f));
 		}
 	}
 
