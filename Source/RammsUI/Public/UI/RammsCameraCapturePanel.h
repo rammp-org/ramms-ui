@@ -108,7 +108,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.01"))
 	float DepthMaxMetres = 10.0f;
 
-	/** Colormap index the material understands: 0 grayscale, 1 jet, 2 turbo. */
+	/** Colormap the material selects: 0 grayscale, 1 jet, 2 turbo, 3 inferno. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
 	int32 DepthColormapIndex = 2;
 
@@ -284,8 +284,6 @@ protected:
 	 * picks by which target it was handed.
 	 */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> DepthFromRedMID;
-	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DepthFromAlphaMID;
 
 	/**
@@ -313,9 +311,6 @@ protected:
 	 * looks like. A soft reference is a real cook dependency and still does not
 	 * force these to load for a panel that never shows depth.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
-	TSoftObjectPtr<UMaterialInterface> DepthColormapMaterial =
-		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_DepthColormap.M_DepthColormap")));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
 	TSoftObjectPtr<UMaterialInterface> DepthColormapAlphaMaterial =
@@ -328,10 +323,11 @@ protected:
 	/**
 	 * Which channels of the motion target carry the vector, dotted against RGBA.
 	 *
-	 * G and B, matching the capture material, which writes depth to R and the
-	 * velocity after it. The material asset's own defaults stay R,G -- what an
-	 * ordinary two-channel flow texture wants -- and this panel states its own
-	 * source rather than making the shared asset assume one.
+	 * G and B, matching the capture material, which writes its legacy depth
+	 * output to R and the velocity after it. The material asset's own defaults
+	 * stay R,G -- what an ordinary two-channel flow texture wants -- and this
+	 * panel states its own source rather than making the shared asset assume
+	 * one.
 	 *
 	 * The mask is why there is one colormap material instead of two. The channel
 	 * pair used to be a graph connection, so reading G,B rather than R,G meant

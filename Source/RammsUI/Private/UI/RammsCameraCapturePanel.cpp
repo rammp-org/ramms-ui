@@ -360,7 +360,6 @@ void URammsCameraCapturePanel::EnsureDepthMaterials()
 		}
 	};
 
-	Build(DepthColormapMaterial, DepthFromRedMID, TEXT("depth"));
 	Build(DepthColormapAlphaMaterial, DepthFromAlphaMID, TEXT("depth-in-alpha"));
 	Build(MotionColormapMaterial, MotionMID, TEXT("motion-vector"));
 }
@@ -501,8 +500,14 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// are metres -- that asymmetry is what DepthScaleToCM exists to bridge --
 		// so these pass through unscaled and match the material's own defaults of
 		// 0.1 and 10.
-		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinMetres);
-		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxMetres);
+		// Max strictly above Min. The two are clamped independently in the editor,
+		// so nothing stops Max <= Min, and the material divides by (Far - Near):
+		// equal gives a zero-width normalisation, reversed gives an inverted ramp.
+		// It is also the repeat interval, where zero width is worse still.
+		const float RangeMin = DepthMinMetres;
+		const float RangeMax = FMath::Max(DepthMaxMetres, RangeMin + KINDA_SMALL_NUMBER);
+		Material->SetScalarParameterValue(TEXT("DepthMin"), RangeMin);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), RangeMax);
 		Material->SetScalarParameterValue(TEXT("DepthWrap"), bDepthColormapRepeat ? 1.0f : 0.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
