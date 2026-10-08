@@ -44,6 +44,44 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
 	bool bShowCameraCapturePanel = true;
 
+	// -- Camera capture panel: depth view ------------------------------------
+	//
+	// Here rather than on the widget because the HUD creates that widget from
+	// the C++ class at runtime -- there is no instance in the editor to select,
+	// so its own EditAnywhere properties were unreachable in practice.
+
+	/** Near and far of the depth colour ramp, in METRES -- the units the
+	 *  material's plane inputs take, which is what its DepthScaleToCM parameter
+	 *  is there to reconcile with the centimetres it samples. 0.1 and 10 are the
+	 *  material's own defaults and read correctly; larger values push every real
+	 *  surface past the far plane and flatten the view. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
+	float DepthColormapMinMetres = 0.1f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0.01"))
+	float DepthColormapMaxMetres = 10.0f;
+
+	/**
+	 * Repeat the ramp past the far plane instead of clamping.
+	 *
+	 * Clamping makes every surface beyond the far plane the same colour, so a
+	 * range tight enough to resolve nearby detail throws away everything behind
+	 * it. Repeating gives one band per (Max - Min) of depth and keeps all
+	 * distances distinguishable -- contour lines rather than a gradient. The
+	 * trade is that colour no longer tells you absolute depth, only depth within
+	 * a band, so it is for looking at structure rather than reading distances.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth")
+	bool bDepthColormapRepeat = false;
+
+	/** 0 grayscale, 1 jet, 2 turbo, 3 inferno. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0", ClampMax = "3"))
+	int32 DepthColormapIndex = 2;
+
+	/** Motion vector magnitude that saturates the colour wheel. */
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Motion", meta = (ClampMin = "0.001"))
+	float MotionSensitivity = 20.0f;
+
 	/** Put the player in Game-and-UI input mode with a visible cursor so the
 	 *  HUD receives clicks and touches while keys still reach the game. */
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")

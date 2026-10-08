@@ -85,27 +85,53 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	TArray<int32> CaptureRateSteps = { 1, 2, 5, 10, 30, 60 };
 
-	/** Near/far of the depth colormap, in METRES.
+	/**
+	 * Near and far of the depth colormap, in METRES.
 	 *
-	 *  Converted to centimetres where they are assigned, because that is what the
-	 *  material wants and what SingleCaptureColorDepth actually produces. They do
-	 *  NOT apply to the DMV pass, whose depth is tonemapped rather than metric
-	 *  and is colormapped over a fixed 0..1 instead -- see UpdateFeedImage. */
+	 * The material converts: its sampled depth is centimetres and its plane
+	 * inputs are metres, which is exactly what its DepthScaleToCM parameter is
+	 * for. Its own defaults are 0.1 and 10, and matching them is what makes the
+	 * ramp read correctly.
+	 *
+	 * This has been got wrong twice in the other direction -- once by scaling
+	 * these by 100 on the way in, once by renaming them to CM and defaulting to
+	 * 10/1500. Both put every real surface past the far plane, which is what
+	 * flattened the view to two colours. The presence of a *ScaleToCM parameter
+	 * on a material is the tell that its planes are NOT in centimetres.
+	 *
+	 * A viewing choice, not a measurement: it decides which distances the ramp
+	 * spans, nothing about what is captured.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
 	float DepthMinMetres = 0.1f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.01"))
 	float DepthMaxMetres = 10.0f;
 
-	/** Colormap index the material understands: 0 grayscale, 1 jet, 2 turbo. */
+	/** Colormap the material selects: 0 grayscale, 1 jet, 2 turbo, 3 inferno. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
 	int32 DepthColormapIndex = 2;
 
+	/** Repeat the colour ramp past the far plane instead of clamping, so every
+	 *  distance stays distinguishable. See URammsControlHUDSettings. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
+	bool bDepthColormapRepeat = false;
+
+	/** Pull the depth and motion view settings from URammsControlHUDSettings.
+	 *  The HUD builds this widget from the C++ class, so project settings are the
+	 *  only place a user can reach these. */
+	void ApplyHUDSettings();
+
 	/** Drives M_MotionVectorColormap's "Sensitivity": how much screen-space
-	 *  motion it takes to saturate the colour wheel. 1.0 is the material's own
-	 *  default; raise it to see slow motion, lower it for fast. */
+	 *  motion it takes to saturate the colour wheel.
+	 *
+	 *  20, not the material's own default of 1. Measured velocities out of the
+	 *  capture pass are small -- a camera rotating at 60 deg/s gives a magnitude
+	 *  around 0.013, and 0.057 at its fastest pixel -- so a sensitivity of 1
+	 *  renders real motion as very nearly black. Raise it further for slow
+	 *  motion, lower it for fast. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion", meta = (ClampMin = "0.001"))
-	float MotionSensitivity = 1.0f;
+	float MotionSensitivity = 20.0f;
 
 	// ── Actions, also callable from Blueprint or a key binding ──────────
 
@@ -251,27 +277,32 @@ protected:
 	ERammsFeedChannel FeedChannel = ERammsFeedChannel::Colour;
 
 	/**
-	 * Depth is colormapped through a material, and which channel it lives in
-	 * depends on the capture mode: the DMV pass puts it in red, while
-	 * SingleCaptureColorDepth packs it into the colour target's alpha. Same
-	 * material, one connection apart, so the panel keeps an instance of each and
-	 * picks by which target it was handed.
+	 * Depth, colormapped. ONE instance, reading alpha, for both capture modes.
+	 *
+	 * Both capture depth with SCS_SceneColorSceneDepth, which puts it in alpha --
+	 * the one-render mode in the colour target, the two-render mode in a target
+	 * of its own. Only which target differs, so only one material is needed.
+	 *
+	 * There used to be a second instance reading red, from when the two-render
+	 * mode's depth came from the DMV post-process pass. Red in that target is
+	 * linear scene colour now, so the red variant did not read depth at all; it
+	 * is gone rather than kept for a case that no longer exists.
 	 */
-	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> DepthFromRedMID;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DepthFromAlphaMID;
 
 	/**
 	 * Motion vectors, colormapped by magnitude and angle.
 	 *
-	 * Same story as depth, one channel over: M_MotionVectorColormap reads the
-	 * vector from DataTexture's R and G, while the DMV target packs depth into R
-	 * and the vector into G and B. The GB variant is that material with the mask
-	 * moved, rather than an edit to the shared one, which has its own callers.
+	 * One instance, not two. The vector's channels used to be a graph
+	 * connection, so reading it from G,B instead of R,G meant a duplicate
+	 * material; M_MotionVectorColormap takes MotionXMask/MotionYMask now and
+	 * dots them against the sample, which makes the choice a parameter. The
+	 * capture pass writes velocity to G,B, so this panel sets the masks to match;
+	 * the material's own defaults stay R,G for an ordinary flow texture.
 	 */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> MotionFromGBMID;
+	TObjectPtr<UMaterialInstanceDynamic> MotionMID;
 
 	/**
 	 * The colormap materials, as soft references rather than runtime string
@@ -285,9 +316,6 @@ protected:
 	 * looks like. A soft reference is a real cook dependency and still does not
 	 * force these to load for a panel that never shows depth.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
-	TSoftObjectPtr<UMaterialInterface> DepthColormapMaterial =
-		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_DepthColormap.M_DepthColormap")));
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
 	TSoftObjectPtr<UMaterialInterface> DepthColormapAlphaMaterial =
@@ -295,7 +323,31 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
 	TSoftObjectPtr<UMaterialInterface> MotionColormapMaterial =
-		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormapGB.M_MotionVectorColormapGB")));
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormap.M_MotionVectorColormap")));
+
+	/**
+	 * Which channels of the motion target carry the vector, dotted against RGBA.
+	 *
+	 * G and B, matching the capture material, which writes its legacy depth
+	 * output to R and the velocity after it. The material asset's own defaults
+	 * stay R,G -- what an ordinary two-channel flow texture wants -- and this
+	 * panel states its own source rather than making the shared asset assume
+	 * one.
+	 *
+	 * The mask is why there is one colormap material instead of two. The channel
+	 * pair used to be a graph connection, so reading G,B rather than R,G meant
+	 * duplicating the whole thing; dotting a mask against the sample makes it a
+	 * setting.
+	 *
+	 * These replace what used to be a second material. The channel pair was a
+	 * graph connection, so reading G,B instead of R,G meant duplicating the whole
+	 * colormap; dotting a mask against the sample makes it a parameter.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion")
+	FLinearColor MotionXMask = FLinearColor(0.0f, 1.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Motion")
+	FLinearColor MotionYMask = FLinearColor(0.0f, 0.0f, 1.0f, 0.0f);
 
 	/** Build the colormap materials if they are not built yet. */
 	void EnsureDepthMaterials();

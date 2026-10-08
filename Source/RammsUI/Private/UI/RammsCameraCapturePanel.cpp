@@ -2,6 +2,8 @@
 
 #include "UI/RammsCameraCapturePanel.h"
 
+#include "RammsControlHUDSettings.h"
+
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/HorizontalBox.h"
@@ -317,6 +319,20 @@ void URammsCameraCapturePanel::RefreshCameraList()
 		: (Cameras.Num() > 0 ? FMath::Clamp(SelectedCamera, 0, Cameras.Num() - 1) : 0);
 }
 
+void URammsCameraCapturePanel::ApplyHUDSettings()
+{
+	const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+	if (!Settings)
+	{
+		return;
+	}
+	DepthMinMetres = Settings->DepthColormapMinMetres;
+	DepthMaxMetres = Settings->DepthColormapMaxMetres;
+	bDepthColormapRepeat = Settings->bDepthColormapRepeat;
+	DepthColormapIndex = Settings->DepthColormapIndex;
+	MotionSensitivity = Settings->MotionSensitivity;
+}
+
 void URammsCameraCapturePanel::EnsureDepthMaterials()
 {
 	// Same material twice, differing only in which channel feeds the colormap.
@@ -344,12 +360,8 @@ void URammsCameraCapturePanel::EnsureDepthMaterials()
 		}
 	};
 
-	Build(DepthColormapMaterial, DepthFromRedMID, TEXT("depth"));
 	Build(DepthColormapAlphaMaterial, DepthFromAlphaMID, TEXT("depth-in-alpha"));
-	// Motion vectors, same arrangement: the shared M_MotionVectorColormap reads
-	// the vector from DataTexture's R and G, and the DMV target has depth in R
-	// with the vector in G and B, so the GB variant is the one that fits.
-	Build(MotionColormapMaterial, MotionFromGBMID, TEXT("motion-vector"));
+	Build(MotionColormapMaterial, MotionMID, TEXT("motion-vector"));
 }
 
 bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) const
@@ -380,9 +392,9 @@ bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) con
 		}
 
 		case ERammsFeedChannel::Motion:
-			// Only the DMV pass produces motion vectors, and only into its own
-			// target. IsCapturingMotionVectors already accounts for the mode.
-			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetDepthRenderTarget(Camera) != nullptr;
+			// Its own pass, so its own target, and available in either capture
+			// mode -- which it was not when motion rode on the depth pass.
+			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetMotionRenderTarget(Camera) != nullptr;
 
 		default:
 			return false;
@@ -440,9 +452,12 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		}
 		else if (DepthTarget)
 		{
-			// Two-render mode: its own target, depth in red.
+			// Also alpha. This read the target's RED channel back when that target
+			// came from the DMV post-process pass; after depth moved to the depth
+			// buffer, red there is linear scene colour, so the depth view in this
+			// mode was colormapping the picture.
 			Source = DepthTarget;
-			Material = DepthFromRedMID;
+			Material = DepthFromAlphaMID;
 		}
 		// Otherwise Source stays null and the feed collapses, which is honest:
 		// this camera has no depth to show yet.
@@ -450,12 +465,12 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	else if (FeedChannel == ERammsFeedChannel::Motion)
 	{
 		EnsureDepthMaterials();
-		// Motion only ever comes out of the DMV target, G and B. There is no
-		// single-capture fallback because that mode runs no DMV pass.
-		if (DepthTarget)
+		// Motion has its own target now, in either capture mode -- it is no
+		// longer the depth pass wearing a second hat.
+		if (UTextureRenderTarget2D* MotionTarget = Sub ? Sub->GetMotionRenderTarget(Camera) : nullptr)
 		{
-			Source = DepthTarget;
-			Material = MotionFromGBMID;
+			Source = MotionTarget;
+			Material = MotionMID;
 		}
 		else
 		{
@@ -481,27 +496,23 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// Setting a parameter a material does not have is a no-op, so the depth
 		// range goes on unconditionally rather than branching per material.
 		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
-		// The two depth sources are NOT in the same units, so the range cannot be
-		// one number.
-		//
-		// SingleCaptureColorDepth packs SceneDepth into alpha untouched, which is
-		// centimetres -- measured at 615 cm for near geometry, and 1e13 where the
-		// sky is. The material normalises in the same space as its input (its
-		// siblings on this path spell it out: MinDepthCM, DepthScaleToCM), so a
-		// cm range is what it wants, and the metre-valued properties convert.
-		//
-		// The DMV pass does not deliver centimetres at all. Its camera captures
-		// SCS_FinalColorLDR, so a post-process material writing raw SceneDepth is
-		// squashed through the tonemapper before it is ever read -- measured at
-		// 0.125..0.702 for the same scene the other mode reported in hundreds of
-		// cm. For a viewer the only honest reading of that is a normalised 0..1,
-		// so that is what it gets. Scaling it by the metre range would be
-		// arithmetic on a number that has no unit.
-		const bool bDepthIsCentimetres = (Material == DepthFromAlphaMID);
-		Material->SetScalarParameterValue(TEXT("DepthMin"), bDepthIsCentimetres ? DepthMinMetres * 100.0f : 0.0f);
-		Material->SetScalarParameterValue(TEXT("DepthMax"), bDepthIsCentimetres ? DepthMaxMetres * 100.0f : 1.0f);
+		// METRES. The material's sampled depth is centimetres and its plane inputs
+		// are metres -- that asymmetry is what DepthScaleToCM exists to bridge --
+		// so these pass through unscaled and match the material's own defaults of
+		// 0.1 and 10.
+		// Max strictly above Min. The two are clamped independently in the editor,
+		// so nothing stops Max <= Min, and the material divides by (Far - Near):
+		// equal gives a zero-width normalisation, reversed gives an inverted ramp.
+		// It is also the repeat interval, where zero width is worse still.
+		const float RangeMin = DepthMinMetres;
+		const float RangeMax = FMath::Max(DepthMaxMetres, RangeMin + KINDA_SMALL_NUMBER);
+		Material->SetScalarParameterValue(TEXT("DepthMin"), RangeMin);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), RangeMax);
+		Material->SetScalarParameterValue(TEXT("DepthWrap"), bDepthColormapRepeat ? 1.0f : 0.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
+		Material->SetVectorParameterValue(TEXT("MotionXMask"), MotionXMask);
+		Material->SetVectorParameterValue(TEXT("MotionYMask"), MotionYMask);
 		Material->SetVectorParameterValue(TEXT("ImageSize"), FLinearColor(FeedWidth, Height, 0.0f, 0.0f));
 		Material->SetVectorParameterValue(TEXT("CornerRadii"), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
 		FeedImage->SetBrushResourceObject(Material);
@@ -567,6 +578,10 @@ void URammsCameraCapturePanel::NativeTick(const FGeometry& MyGeometry, float InD
 
 void URammsCameraCapturePanel::RefreshLabels()
 {
+	// Cheap, and it means changing a value in Project Settings shows up without
+	// restarting play.
+	ApplyHUDSettings();
+
 	UCameraCaptureSubsystem* Sub = GetSubsystem();
 
 	if (TitleText)
