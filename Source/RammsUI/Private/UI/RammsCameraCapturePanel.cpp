@@ -57,13 +57,13 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	auto AddButtonTo = [this](UHorizontalBox* Box, const TCHAR* Name, const TCHAR* Label, float FillOrAuto) -> URammsButton* {
 		URammsButton* Button = WidgetTree->ConstructWidget<URammsButton>(URammsButton::StaticClass(), Name);
 		Button->SetText(FText::FromString(Label));
-		if (UHorizontalBoxSlot* Slot = Box->AddChildToHorizontalBox(Button))
+		if (UHorizontalBoxSlot* BSlot = Box->AddChildToHorizontalBox(Button))
 		{
-			Slot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
-			Slot->SetVerticalAlignment(VAlign_Center);
+			BSlot->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+			BSlot->SetVerticalAlignment(VAlign_Center);
 			if (FillOrAuto > 0.0f)
 			{
-				Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				BSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			}
 		}
 		return Button;
