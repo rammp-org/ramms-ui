@@ -277,11 +277,16 @@ protected:
 	ERammsFeedChannel FeedChannel = ERammsFeedChannel::Colour;
 
 	/**
-	 * Depth is colormapped through a material, and which channel it lives in
-	 * depends on the capture mode: the DMV pass puts it in red, while
-	 * SingleCaptureColorDepth packs it into the colour target's alpha. Same
-	 * material, one connection apart, so the panel keeps an instance of each and
-	 * picks by which target it was handed.
+	 * Depth, colormapped. ONE instance, reading alpha, for both capture modes.
+	 *
+	 * Both capture depth with SCS_SceneColorSceneDepth, which puts it in alpha --
+	 * the one-render mode in the colour target, the two-render mode in a target
+	 * of its own. Only which target differs, so only one material is needed.
+	 *
+	 * There used to be a second instance reading red, from when the two-render
+	 * mode's depth came from the DMV post-process pass. Red in that target is
+	 * linear scene colour now, so the red variant did not read depth at all; it
+	 * is gone rather than kept for a case that no longer exists.
 	 */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DepthFromAlphaMID;
@@ -293,8 +298,8 @@ protected:
 	 * connection, so reading it from G,B instead of R,G meant a duplicate
 	 * material; M_MotionVectorColormap takes MotionXMask/MotionYMask now and
 	 * dots them against the sample, which makes the choice a parameter. The
-	 * capture pass writes velocity to R,G, which is the default, so the masks
-	 * only matter for a source that puts it somewhere else.
+	 * capture pass writes velocity to G,B, so this panel sets the masks to match;
+	 * the material's own defaults stay R,G for an ordinary flow texture.
 	 */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MotionMID;
