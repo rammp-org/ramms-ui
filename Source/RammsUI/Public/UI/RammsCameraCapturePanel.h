@@ -106,6 +106,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
 	int32 DepthColormapIndex = 2;
 
+	/** Repeat the colour ramp past the far plane instead of clamping, so every
+	 *  distance stays distinguishable. See URammsControlHUDSettings. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")
+	bool bDepthColormapRepeat = false;
+
+	/** Pull the depth and motion view settings from URammsControlHUDSettings.
+	 *  The HUD builds this widget from the C++ class, so project settings are the
+	 *  only place a user can reach these. */
+	void ApplyHUDSettings();
+
 	/** Drives M_MotionVectorColormap's "Sensitivity": how much screen-space
 	 *  motion it takes to saturate the colour wheel.
 	 *

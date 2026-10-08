@@ -2,6 +2,8 @@
 
 #include "UI/RammsCameraCapturePanel.h"
 
+#include "RammsControlHUDSettings.h"
+
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/HorizontalBox.h"
@@ -317,6 +319,20 @@ void URammsCameraCapturePanel::RefreshCameraList()
 		: (Cameras.Num() > 0 ? FMath::Clamp(SelectedCamera, 0, Cameras.Num() - 1) : 0);
 }
 
+void URammsCameraCapturePanel::ApplyHUDSettings()
+{
+	const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+	if (!Settings)
+	{
+		return;
+	}
+	DepthMinCM = Settings->DepthColormapMinCM;
+	DepthMaxCM = Settings->DepthColormapMaxCM;
+	bDepthColormapRepeat = Settings->bDepthColormapRepeat;
+	DepthColormapIndex = Settings->DepthColormapIndex;
+	MotionSensitivity = Settings->MotionSensitivity;
+}
+
 void URammsCameraCapturePanel::EnsureDepthMaterials()
 {
 	// Same material twice, differing only in which channel feeds the colormap.
@@ -495,6 +511,10 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// the plane values only decide which distances the colour ramp spans.
 		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinCM);
 		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxCM);
+		// Repeating turns the ramp into contour bands, one per (Max - Min), so a
+		// tight range still says something about distant surfaces instead of
+		// flattening them all to the far colour.
+		Material->SetScalarParameterValue(TEXT("DepthWrap"), bDepthColormapRepeat ? 1.0f : 0.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);
 		Material->SetVectorParameterValue(TEXT("MotionXMask"), MotionXMask);
@@ -564,6 +584,10 @@ void URammsCameraCapturePanel::NativeTick(const FGeometry& MyGeometry, float InD
 
 void URammsCameraCapturePanel::RefreshLabels()
 {
+	// Cheap, and it means changing a value in Project Settings shows up without
+	// restarting play.
+	ApplyHUDSettings();
+
 	UCameraCaptureSubsystem* Sub = GetSubsystem();
 
 	if (TitleText)
