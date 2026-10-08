@@ -85,22 +85,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture")
 	TArray<int32> CaptureRateSteps = { 1, 2, 5, 10, 30, 60 };
 
-	/** Near and far of the depth colormap, in CENTIMETRES -- the units the
-	 *  capture actually produces, and the units the material normalises in.
+	/**
+	 * Near and far of the depth colormap, in METRES.
 	 *
-	 *  Named for the unit because this has been wrong twice. They were metres,
-	 *  which the material then scaled, and after depth moved to
-	 *  SCS_SceneColorSceneDepth the values arriving were centimetres while the
-	 *  planes stayed metres. Real geometry sits in the hundreds, so a range
-	 *  ending at 10 put every surface past the far plane.
+	 * The material converts: its sampled depth is centimetres and its plane
+	 * inputs are metres, which is exactly what its DepthScaleToCM parameter is
+	 * for. Its own defaults are 0.1 and 10, and matching them is what makes the
+	 * ramp read correctly.
 	 *
-	 *  This is a viewing choice, not a measurement: it decides which distances
-	 *  the colour ramp spans, nothing about what is captured. */
+	 * This has been got wrong twice in the other direction -- once by scaling
+	 * these by 100 on the way in, once by renaming them to CM and defaulting to
+	 * 10/1500. Both put every real surface past the far plane, which is what
+	 * flattened the view to two colours. The presence of a *ScaleToCM parameter
+	 * on a material is the tell that its planes are NOT in centimetres.
+	 *
+	 * A viewing choice, not a measurement: it decides which distances the ramp
+	 * spans, nothing about what is captured.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
-	float DepthMinCM = 10.0f;
+	float DepthMinMetres = 0.1f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.1"))
-	float DepthMaxCM = 1500.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth", meta = (ClampMin = "0.01"))
+	float DepthMaxMetres = 10.0f;
 
 	/** Colormap index the material understands: 0 grayscale, 1 jet, 2 turbo. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Depth")

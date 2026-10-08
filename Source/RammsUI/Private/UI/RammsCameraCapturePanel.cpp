@@ -326,8 +326,8 @@ void URammsCameraCapturePanel::ApplyHUDSettings()
 	{
 		return;
 	}
-	DepthMinCM = Settings->DepthColormapMinCM;
-	DepthMaxCM = Settings->DepthColormapMaxCM;
+	DepthMinMetres = Settings->DepthColormapMinMetres;
+	DepthMaxMetres = Settings->DepthColormapMaxMetres;
 	bDepthColormapRepeat = Settings->bDepthColormapRepeat;
 	DepthColormapIndex = Settings->DepthColormapIndex;
 	MotionSensitivity = Settings->MotionSensitivity;
@@ -497,23 +497,12 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		// Setting a parameter a material does not have is a no-op, so the depth
 		// range goes on unconditionally rather than branching per material.
 		Material->SetTextureParameterValue(TEXT("DataTexture"), Source);
-		// CENTIMETRES, which is what the data is: both modes capture depth with
-		// SCS_SceneColorSceneDepth, measured at 615..1026 cm for real geometry
-		// with an enormous sentinel where the sky is. The material normalises
-		// (depth - Near) / (Far - Near) in whatever units it is handed, so the
-		// planes have to be in the same ones.
-		//
-		// There was a branch here giving one source a 0..1 range, from when the
-		// second one was the tonemapped DMV pass and had no unit at all. Both
-		// read the depth buffer now, so there is one answer.
-		//
-		// Note the range these default to is a VIEWING choice, not a measurement:
-		// the plane values only decide which distances the colour ramp spans.
-		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinCM);
-		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxCM);
-		// Repeating turns the ramp into contour bands, one per (Max - Min), so a
-		// tight range still says something about distant surfaces instead of
-		// flattening them all to the far colour.
+		// METRES. The material's sampled depth is centimetres and its plane inputs
+		// are metres -- that asymmetry is what DepthScaleToCM exists to bridge --
+		// so these pass through unscaled and match the material's own defaults of
+		// 0.1 and 10.
+		Material->SetScalarParameterValue(TEXT("DepthMin"), DepthMinMetres);
+		Material->SetScalarParameterValue(TEXT("DepthMax"), DepthMaxMetres);
 		Material->SetScalarParameterValue(TEXT("DepthWrap"), bDepthColormapRepeat ? 1.0f : 0.0f);
 		Material->SetScalarParameterValue(TEXT("ColormapIndex"), static_cast<float>(DepthColormapIndex));
 		Material->SetScalarParameterValue(TEXT("Sensitivity"), MotionSensitivity);

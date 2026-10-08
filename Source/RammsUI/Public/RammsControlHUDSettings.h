@@ -50,14 +50,16 @@ public:
 	// the C++ class at runtime -- there is no instance in the editor to select,
 	// so its own EditAnywhere properties were unreachable in practice.
 
-	/** Near and far of the depth colour ramp, in CENTIMETRES, which is what the
-	 *  capture produces. A viewing choice: it decides which distances the ramp
-	 *  spans, nothing about what is captured. */
+	/** Near and far of the depth colour ramp, in METRES -- the units the
+	 *  material's plane inputs take, which is what its DepthScaleToCM parameter
+	 *  is there to reconcile with the centimetres it samples. 0.1 and 10 are the
+	 *  material's own defaults and read correctly; larger values push every real
+	 *  surface past the far plane and flatten the view. */
 	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0.0"))
-	float DepthColormapMinCM = 10.0f;
+	float DepthColormapMinMetres = 0.1f;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0.1"))
-	float DepthColormapMaxCM = 1500.0f;
+	UPROPERTY(Config, EditAnywhere, Category = "Camera Capture|Depth", meta = (ClampMin = "0.01"))
+	float DepthColormapMaxMetres = 10.0f;
 
 	/**
 	 * Repeat the ramp past the far plane instead of clamping.
