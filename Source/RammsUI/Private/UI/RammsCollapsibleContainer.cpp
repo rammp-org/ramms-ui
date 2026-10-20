@@ -523,7 +523,7 @@ void URammsCollapsibleContainer::ApplyStyle_Implementation()
 
 	if (HeaderLabel)
 	{
-		HeaderLabel->SetFont(Style->Typography.HeadingSmall);
+		HeaderLabel->SetFont(bCompactHeader ? Style->Typography.Body : Style->Typography.HeadingSmall);
 		HeaderLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
 
@@ -738,7 +738,16 @@ void URammsCollapsibleContainer::UpdateHeaderCornerRadii()
 	URammsUIStyle::ApplyRoundedBrushToBorder(HeaderBorder, Brush);
 	if (Style)
 	{
-		HeaderBorder->SetPadding(Style->Interaction.HeaderPadding);
+		HeaderBorder->SetPadding(bCompactHeader ? FMargin(8.0f, 3.0f) : Style->Interaction.HeaderPadding);
+	}
+}
+
+void URammsCollapsibleContainer::SetCompactHeader(bool bCompact)
+{
+	bCompactHeader = bCompact;
+	if (Style)
+	{
+		ApplyStyle();
 	}
 }
 

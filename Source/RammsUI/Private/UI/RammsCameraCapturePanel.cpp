@@ -242,8 +242,9 @@ void URammsCameraCapturePanel::ApplyStyle_Implementation()
 	}
 	if (PanelBorder)
 	{
-		PanelBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(
-			Style->Colors.Background, Style->Border.CornerRadiusMedium, Style->Colors.Border, Style->Border.BorderWidth);
+		PanelBorder->Background = bHostedInFloatingPanel ? URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::Transparent, 0.0f)
+														 : URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background,
+															   Style->Border.CornerRadiusMedium, Style->Colors.Border, Style->Border.BorderWidth);
 	}
 	if (TitleText)
 	{
@@ -841,4 +842,33 @@ void URammsCameraCapturePanel::HandleNextCameraClicked()
 void URammsCameraCapturePanel::HandleChannelClicked()
 {
 	ToggleChannel();
+}
+
+FText URammsCameraCapturePanel::GetFloatingTitle() const
+{
+	return TitleText ? TitleText->GetText() : FText::GetEmpty();
+}
+
+void URammsCameraCapturePanel::SetHostedInFloatingPanel(bool bHosted)
+{
+	bHostedInFloatingPanel = bHosted;
+	// The floating panel's title bar and minimise stand in for its own; a
+	// collapse from before is undone, or nothing would show the feed again.
+	if (bHosted && bCollapsed)
+	{
+		ToggleCollapsed();
+	}
+	if (TitleHBox)
+	{
+		TitleHBox->SetVisibility(bHosted ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (PanelBorder)
+	{
+		PanelBorder->Background = bHosted ? URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::Transparent, 0.0f)
+			: Style						  ? URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background, Style->Border.CornerRadiusMedium,
+												Style->Colors.Border, Style->Border.BorderWidth)
+										  : URammsUIStyle::MakeRoundedBoxBrush(FLinearColor(0.06f, 0.06f, 0.08f, 0.9f), 4.0f,
+												FLinearColor(0.3f, 0.3f, 0.3f, 1.0f), 1.0f);
+		PanelBorder->SetPadding(FMargin(bHosted ? 6.0f : 8.0f));
+	}
 }

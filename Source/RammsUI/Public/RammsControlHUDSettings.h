@@ -27,9 +27,22 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
 	bool bAutoSpawn = true;
 
-	/** Layout class; empty = URammsSimLayout. Slots: SurfacePanel, Joystick, Status. */
+	/** Layout class; empty = URammsSimLayout. Slots: SurfacePanel, Joystick, Status, CameraCapturePanel. */
 	UPROPERTY(Config, EditAnywhere, Category = "HUD", meta = (AllowAbstract = "false"))
 	TSoftClassPtr<URammsLayoutBase> LayoutClass;
+
+	/** The sim layout's panels float: each in a URammsFloatingPanel the user
+	 *  moves, resizes, minimises, hides and pops out, its place kept per user
+	 *  (URammsHUDLayoutUserSettings), with a panel tray at the top to bring
+	 *  hidden ones back. Off: the fixed columns of before. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD")
+	bool bFloatingPanels = true;
+
+	/** Floating panels may pop out into windows of their own (desktop only;
+	 *  never while Pixel Streaming is asked for on the command line, which
+	 *  streams only the game viewport). */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD")
+	bool bAllowPopOut = true;
 
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
 	bool bShowSurfacePanel = true;

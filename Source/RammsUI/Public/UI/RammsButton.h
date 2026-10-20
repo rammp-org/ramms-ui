@@ -80,6 +80,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	FMargin ContentPadding = FMargin(12.0f, 6.0f);
 
+	/** Caption-sized text (SetCompact). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	bool bCompact = false;
+
+	/** The label's font size over the theme's (0: the theme's), for glyph
+	 *  buttons such as title-bar controls. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	int32 LabelFontSize = 0;
+
+	/** A Ghost button's background under the mouse (alpha 0: a faint wash of
+	 *  the text colour); red for a close button, say. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	FLinearColor GhostHoverColor = FLinearColor::Transparent;
+
 	// Widget references (built programmatically — Transient prevents stale
 	// serialization when placed inside a parent Widget Blueprint)
 	UPROPERTY(Transient)
@@ -136,6 +150,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Style")
 	void SetVariant(ERammsButtonVariant NewVariant);
 
+	/** Caption-sized text and tighter padding, for toolbars and trays (sets
+	 *  ContentPadding to 8 x 3; off sets it back to 12 x 6). */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetCompact(bool bInCompact);
+
+	/** Set ContentPadding at runtime. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetContentPadding(FMargin InPadding);
+
+	/** Set LabelFontSize at runtime. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetLabelFontSize(int32 InSize);
+
+	/** Set GhostHoverColor at runtime. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetGhostHoverColor(FLinearColor InColor);
+
 	UFUNCTION(BlueprintPure, Category = "Button")
 	bool IsButtonEnabled() const { return bButtonEnabled; }
 
@@ -171,4 +202,10 @@ protected:
 
 	/** Apply size overrides to the root SizeBox based on bUseCustomSize */
 	void ApplySizeOverrides();
+
+	/** ContentPadding onto the content's slot. */
+	void ApplyContentPadding();
+
+	/** The theme's font (Body, or Caption when compact) at LabelFontSize. */
+	void ApplyLabelFont();
 };

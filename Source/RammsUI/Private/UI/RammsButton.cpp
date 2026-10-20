@@ -131,12 +131,62 @@ void URammsButton::ApplyStyle_Implementation()
 	if (!Style)
 		return;
 
-	if (ButtonLabel)
-	{
-		ButtonLabel->SetFont(Style->Typography.Body);
-	}
-
+	ApplyLabelFont();
 	UpdateVisualState();
+}
+
+void URammsButton::SetCompact(bool bInCompact)
+{
+	bCompact = bInCompact;
+	ContentPadding = bCompact ? FMargin(8.0f, 3.0f) : FMargin(12.0f, 6.0f);
+	ApplyContentPadding();
+	if (Style)
+	{
+		ApplyStyle();
+	}
+}
+
+void URammsButton::SetContentPadding(FMargin InPadding)
+{
+	ContentPadding = InPadding;
+	ApplyContentPadding();
+}
+
+void URammsButton::SetLabelFontSize(int32 InSize)
+{
+	LabelFontSize = InSize;
+	ApplyLabelFont();
+}
+
+void URammsButton::SetGhostHoverColor(FLinearColor InColor)
+{
+	GhostHoverColor = InColor;
+	UpdateVisualState();
+}
+
+void URammsButton::ApplyContentPadding()
+{
+	if (UWidget* Content = InnerButton ? InnerButton->GetContent() : nullptr)
+	{
+		if (UButtonSlot* BtnSlot = Cast<UButtonSlot>(Content->Slot))
+		{
+			BtnSlot->SetPadding(ContentPadding);
+		}
+	}
+}
+
+void URammsButton::ApplyLabelFont()
+{
+	if (!ButtonLabel || (!Style && LabelFontSize <= 0))
+	{
+		return;
+	}
+	FSlateFontInfo Font = Style ? (bCompact ? Style->Typography.Caption : Style->Typography.Body) : ButtonLabel->GetFont();
+	if (LabelFontSize > 0)
+	{
+		Font.Size = LabelFontSize;
+	}
+	ButtonLabel->SetFont(Font);
 }
 
 void URammsButton::SynchronizeProperties()
@@ -362,17 +412,45 @@ void URammsButton::UpdateVisualState()
 			break;
 	}
 
-	// Ghost variant: text uses variant-appropriate color instead of white
+	// Ghost variant: no background until the mouse is over it -- a faint wash
+	// of the text colour (or GhostHoverColor), stronger while pressed -- and
+	// the text brightens from secondary to primary.
 	if (Variant == ERammsButtonVariant::Ghost)
 	{
-		FLinearColor GhostText = Style ? Style->Colors.TextPrimary : FLinearColor::White;
-		if (CurrentState == ERammsButtonState::Hovered)
-			GhostText.A = 0.8f;
-		else if (CurrentState == ERammsButtonState::Pressed)
-			GhostText.A = 0.6f;
-		else if (CurrentState == ERammsButtonState::Disabled)
-			GhostText = TextDisabledColor;
-		TextColor = GhostText;
+		const FLinearColor Text = Style ? Style->Colors.TextPrimary : FLinearColor::White;
+		const FLinearColor Quiet = Style ? Style->Colors.TextSecondary : FLinearColor(0.75f, 0.75f, 0.75f);
+		const bool		   bTinted = GhostHoverColor.A > 0.0f;
+		switch (CurrentState)
+		{
+			case ERammsButtonState::Hovered:
+				BgColor = bTinted ? GhostHoverColor : FLinearColor(Text.R, Text.G, Text.B, 0.14f);
+				TextColor = bTinted ? FLinearColor::White : Text;
+				break;
+
+			case ERammsButtonState::Pressed:
+				if (bTinted)
+				{
+					BgColor = FLinearColor::LerpUsingHSV(GhostHoverColor, FLinearColor::Black, 0.2f);
+					BgColor.A = GhostHoverColor.A;
+				}
+				else
+				{
+					BgColor = FLinearColor(Text.R, Text.G, Text.B, 0.24f);
+				}
+				TextColor = bTinted ? FLinearColor::White : Text;
+				break;
+
+			case ERammsButtonState::Disabled:
+				BgColor = FLinearColor::Transparent;
+				TextColor = TextDisabledColor;
+				break;
+
+			case ERammsButtonState::Normal:
+			default:
+				BgColor = FLinearColor::Transparent;
+				TextColor = Quiet;
+				break;
+		}
 	}
 
 	// Apply rounded background to the border

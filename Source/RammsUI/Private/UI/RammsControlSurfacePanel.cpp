@@ -20,6 +20,23 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 
+namespace
+{
+	/** An actor or component name made readable: "BP_MyRobot_Curb_C_0"
+	 *  -> "My Robot Curb". */
+	FText ReadableName(FString Name)
+	{
+		Name.RemoveFromStart(TEXT("BP_"));
+		int32 Cut = INDEX_NONE;
+		if (Name.FindLastChar(TEXT('_'), Cut) && Cut > 0 && Name.Mid(Cut + 1).IsNumeric())
+		{
+			Name.LeftInline(Cut); // the instance number
+		}
+		Name.RemoveFromEnd(TEXT("_C"));
+		return FText::FromString(FName::NameToDisplayString(Name, /*bIsBool=*/false));
+	}
+} // namespace
+
 void URammsControlSurfacePanel::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)
@@ -66,6 +83,7 @@ void URammsControlSurfacePanel::ResetCachedWidgets()
 	GroupsVBox = nullptr;
 	Groups.Reset();
 	Rows.Reset();
+	Captions.Reset();
 	Joysticks.Reset();
 	Pads.Reset();
 	BuiltVersion = -1;
@@ -173,6 +191,7 @@ void URammsControlSurfacePanel::Rebuild()
 	GroupsVBox->ClearChildren();
 	Groups.Reset();
 	Rows.Reset();
+	Captions.Reset();
 	Joysticks.Reset();
 	Pads.Reset();
 
@@ -190,8 +209,11 @@ void URammsControlSurfacePanel::Rebuild()
 	BuiltVersion = IRammsControlSurfaceProvider::Execute_GetControlSurfaceVersion(TargetSurface);
 	if (TitleText)
 	{
-		TitleText->SetText(Surface.RobotName.IsEmpty() ? FText::FromString(TargetSurface->GetName()) : Surface.RobotName);
-		TitleText->SetVisibility(bShowRobotName ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		// A name that is an identifier (an actor's, say) is made readable; one already
+		// written for people is kept.
+		const FString Name = Surface.RobotName.IsEmpty() ? TargetSurface->GetName() : Surface.RobotName.ToString();
+		TitleText->SetText(Name.Contains(TEXT(" ")) ? FText::FromString(Name) : ReadableName(Name));
+		ApplyChrome();
 	}
 
 	// Groups in the surface's order; axes inside by Order.
@@ -214,10 +236,34 @@ void URammsControlSurfacePanel::Rebuild()
 	ApplyStyle();
 }
 
+void URammsControlSurfacePanel::InsetInGroup(UWidget* Child, float Top, float Bottom)
+{
+	if (UVerticalBoxSlot* S = Child ? Cast<UVerticalBoxSlot>(Child->Slot) : nullptr)
+	{
+		S->SetPadding(FMargin(8.0f, Top, 8.0f, Bottom));
+	}
+}
+
+UTextBlock* URammsControlSurfacePanel::MakeCaption(const FText& Text)
+{
+	UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Caption->SetText(Text);
+	Caption->SetJustification(ETextJustify::Center);
+	Caption->SetAutoWrapText(true);
+	if (Style)
+	{
+		Caption->SetFont(Style->Typography.Caption);
+		Caption->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+	Captions.Add(Caption);
+	return Caption;
+}
+
 void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsControlAxis>& Axes)
 {
 	URammsCollapsibleContainer* Container = CreateWidget<URammsCollapsibleContainer>(this);
 	Container->SetHeaderTitle(FText::FromName(Group));
+	Container->SetCompactHeader(true);						   // a group in a panel, not a panel
 	Container->SetMaxContentHeight(0.0f);					   // size to content; the panel's own ScrollBox scrolls
 	Container->SetWheelConsumption(EConsumeMouseWheel::Never); // the wheel bubbles up to the panel, which scrolls the list
 	Container->SetScrollingEnabled(false);					   // it sizes to its content; only the panel's list scrolls
@@ -257,10 +303,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 					Joystick->SetStyle(Style);
 				}
 
-				UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "JoystickCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
-				Caption->SetJustification(ETextJustify::Center);
+				UTextBlock* Caption =
+					MakeCaption(FText::Format(NSLOCTEXT("RammsUI", "JoystickCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
 				Container->AddContentChild(Caption);
+				InsetInGroup(Caption, 6.0f, 0.0f);
 				// The joystick's canvas positions its images absolutely, so give it
 				// a fixed box of its own size (plus a margin) in both dimensions and
 				// centre that in the row; otherwise the row is narrower / shorter than
@@ -310,10 +356,10 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 				Pad->SetRegion(URammsControlRow::DisplayRangeFor(Horizontal),
 					URammsControlRow::DisplayRangeFor(Vertical), Vertical.RegionOutline);
 
-				UTextBlock* Caption = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-				Caption->SetText(FText::Format(NSLOCTEXT("RammsUI", "PadCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
-				Caption->SetJustification(ETextJustify::Center);
+				UTextBlock* Caption =
+					MakeCaption(FText::Format(NSLOCTEXT("RammsUI", "PadCaption", "{0} / {1}"), Vertical.DisplayName, Horizontal.DisplayName));
 				Container->AddContentChild(Caption);
+				InsetInGroup(Caption, 6.0f, 0.0f);
 
 				USizeBox*	Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 				const float PadSize = JoystickRadius * 2.0f + 8.0f;
@@ -342,6 +388,7 @@ void URammsControlSurfacePanel::BuildGroup(FName Group, const TArray<FRammsContr
 		}
 		Row->Setup(TargetSurface, Axis, Source);
 		Container->AddContentChild(Row);
+		InsetInGroup(Row);
 		Rows.Add(Row);
 		Consumed.Add(Axis.Id);
 	}
@@ -413,14 +460,19 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 	{
 		return;
 	}
-	if (PanelBorder)
-	{
-		PanelBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background, Style->Border.CornerRadiusMedium, Style->Colors.Border, Style->Border.BorderWidth);
-	}
 	if (TitleText)
 	{
 		TitleText->SetFont(Style->Typography.HeadingMedium);
 		TitleText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+	}
+	ApplyChrome();
+	for (UTextBlock* Caption : Captions)
+	{
+		if (Caption)
+		{
+			Caption->SetFont(Style->Typography.Caption);
+			Caption->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+		}
 	}
 	// The groups, rows and joysticks are created at runtime, outside this
 	// widget's tree: hand them the style directly.
@@ -511,4 +563,41 @@ TArray<FString> URammsControlSurfacePanel::GetLayoutReport() const
 		}
 	}
 	return Out;
+}
+
+FText URammsControlSurfacePanel::GetFloatingTitle() const
+{
+	return TitleText ? TitleText->GetText() : FText::GetEmpty();
+}
+
+void URammsControlSurfacePanel::SetHostedInFloatingPanel(bool bHosted)
+{
+	bHostedInFloatingPanel = bHosted;
+	ApplyChrome();
+}
+
+void URammsControlSurfacePanel::ApplyChrome()
+{
+	// Hosted, the floating panel's frame and title bar stand in for its own.
+	if (PanelBorder)
+	{
+		if (bHostedInFloatingPanel)
+		{
+			PanelBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::Transparent, 0.0f);
+			PanelBorder->SetPadding(FMargin(6.0f, 4.0f));
+		}
+		else
+		{
+			PanelBorder->Background = Style ? URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background, Style->Border.CornerRadiusMedium,
+												  Style->Colors.Border, Style->Border.BorderWidth)
+											: URammsUIStyle::MakeRoundedBoxBrush(FLinearColor(0.06f, 0.06f, 0.08f, 0.9f), 4.0f,
+												  FLinearColor(0.3f, 0.3f, 0.3f, 1.0f), 1.0f);
+			PanelBorder->SetPadding(FMargin(8.0f));
+		}
+	}
+	if (TitleText)
+	{
+		TitleText->SetVisibility(bShowRobotName && !bHostedInFloatingPanel ? ESlateVisibility::SelfHitTestInvisible
+																		   : ESlateVisibility::Collapsed);
+	}
 }
