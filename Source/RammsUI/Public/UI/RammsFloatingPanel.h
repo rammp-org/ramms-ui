@@ -251,9 +251,14 @@ private:
 	FVector2D DragStartMouse = FVector2D::ZeroVector;
 	FVector2D DragStartPosition = FVector2D::ZeroVector;
 	FVector2D DragStartSize = FVector2D::ZeroVector;
+	/** The panel around its body (title bar, frame) when a resize began. */
+	FVector2D DragChrome = FVector2D::ZeroVector;
 
 	FVector2D Placement = FVector2D(-1.0, -1.0);
 	FVector2D BodySize = FVector2D::ZeroVector;
+	/** The largest body the viewport has room for (zero: not known yet). A
+	 *  larger BodySize is shown at this size, and kept for a larger viewport. */
+	FVector2D FitSize = FVector2D::ZeroVector;
 	FVector2D WindowPosition = FVector2D::ZeroVector;
 	FVector2D WindowSize = FVector2D::ZeroVector;
 	FVector2D LastCanvasSize = FVector2D::ZeroVector;

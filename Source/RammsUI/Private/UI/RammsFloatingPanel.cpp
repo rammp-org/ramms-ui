@@ -418,9 +418,12 @@ void URammsFloatingPanel::ApplySize()
 	{
 		return;
 	}
+	// No larger than the viewport has room for (BodySize is kept).
+	const double Width = FitSize.X > 0.0 ? FMath::Min(BodySize.X, FitSize.X) : BodySize.X;
+	const double Height = FitSize.Y > 0.0 ? FMath::Min(BodySize.Y, FitSize.Y) : BodySize.Y;
 	if (BodySize.X > 0.0)
 	{
-		BodyBox->SetWidthOverride(static_cast<float>(BodySize.X));
+		BodyBox->SetWidthOverride(static_cast<float>(Width));
 	}
 	else
 	{
@@ -428,7 +431,7 @@ void URammsFloatingPanel::ApplySize()
 	}
 	if (BodySize.Y > 0.0)
 	{
-		BodyBox->SetHeightOverride(static_cast<float>(BodySize.Y));
+		BodyBox->SetHeightOverride(static_cast<float>(Height));
 	}
 	else
 	{
@@ -520,6 +523,19 @@ void URammsFloatingPanel::UpdateLayout(const FVector2D& CanvasSize, float Margin
 	if (Drag != EDrag::None)
 	{
 		return;
+	}
+	// A body the user has sized fits the viewport too, so its grip stays in
+	// reach: shown smaller while the viewport is (sized on a larger screen, or
+	// the window made smaller since).
+	if (BodyBox && !bMinimized && IsShownInViewport())
+	{
+		const FVector2D Chrome = GetDesiredSize() - BodyBox->GetDesiredSize();
+		const FVector2D Fit(FMath::Max(CanvasSize.X - 2.0 * Margin - Chrome.X, MinSize.X), FMath::Max(CanvasSize.Y - Top - Margin - Chrome.Y, MinSize.Y));
+		if (!Fit.Equals(FitSize, 0.5))
+		{
+			FitSize = Fit;
+			ApplySize();
+		}
 	}
 	const FVector2D Size = GetDesiredSize();
 	const FVector2D Free(FMath::Max(0.0, CanvasSize.X - Size.X - 2.0 * Margin), FMath::Max(0.0, CanvasSize.Y - Size.Y - Top - Margin));
@@ -855,6 +871,7 @@ FReply URammsFloatingPanel::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 	{
 		Drag = EDrag::Resize;
 		DragStartSize = BodyBox ? FVector2D(BodyBox->GetCachedGeometry().GetLocalSize()) : BodySize;
+		DragChrome = FVector2D(GetCachedGeometry().GetLocalSize()) - DragStartSize;
 	}
 	else if (TitleBar && CanvasSlot && TitleBar->GetCachedGeometry().IsUnderLocation(At))
 	{
@@ -876,15 +893,23 @@ FReply URammsFloatingPanel::NativeOnMouseMove(const FGeometry& InGeometry, const
 		return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
 	}
 	// Screen pixels to the canvas' Slate units.
-	const float		Scale = InGeometry.Scale > 0.0f ? InGeometry.Scale : 1.0f;
-	const FVector2D Delta = (InMouseEvent.GetScreenSpacePosition() - DragStartMouse) / Scale;
+	const float		  Scale = InGeometry.Scale > 0.0f ? InGeometry.Scale : 1.0f;
+	const FVector2D	  Delta = (InMouseEvent.GetScreenSpacePosition() - DragStartMouse) / Scale;
+	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 	if (Drag == EDrag::Resize)
 	{
-		BodySize = FVector2D(FMath::Max(DragStartSize.X + Delta.X, MinSize.X), FMath::Max(DragStartSize.Y + Delta.Y, MinSize.Y));
+		// Kept on screen, like a move: the panel's far corner no further than
+		// the viewport's edges, less the margin.
+		FVector2D Max(TNumericLimits<double>::Max());
+		if (CanvasSlot && LastCanvasSize.X > 0.0 && LastCanvasSize.Y > 0.0)
+		{
+			Max = LastCanvasSize - FVector2D(LastMargin) - CanvasSlot->GetPosition() - DragChrome;
+		}
+		BodySize = FVector2D(FMath::Clamp(DragStartSize.X + Delta.X, MinSize.X, FMath::Max(Max.X, MinSize.X)),
+			FMath::Clamp(DragStartSize.Y + Delta.Y, MinSize.Y, FMath::Max(Max.Y, MinSize.Y)));
 		ApplySize();
 		return FReply::Handled();
 	}
-	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 	if (!CanvasSlot)
 	{
 		return FReply::Handled();
