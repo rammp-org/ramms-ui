@@ -133,10 +133,27 @@ void URammsButton::ApplyStyle_Implementation()
 
 	if (ButtonLabel)
 	{
-		ButtonLabel->SetFont(Style->Typography.Body);
+		ButtonLabel->SetFont(bCompact ? Style->Typography.Caption : Style->Typography.Body);
 	}
 
 	UpdateVisualState();
+}
+
+void URammsButton::SetCompact(bool bInCompact)
+{
+	bCompact = bInCompact;
+	ContentPadding = bCompact ? FMargin(8.0f, 3.0f) : FMargin(12.0f, 6.0f);
+	if (UWidget* Content = InnerButton ? InnerButton->GetContent() : nullptr)
+	{
+		if (UButtonSlot* BtnSlot = Cast<UButtonSlot>(Content->Slot))
+		{
+			BtnSlot->SetPadding(ContentPadding);
+		}
+	}
+	if (Style)
+	{
+		ApplyStyle();
+	}
 }
 
 void URammsButton::SynchronizeProperties()

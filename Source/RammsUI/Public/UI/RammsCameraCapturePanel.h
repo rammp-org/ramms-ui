@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
+#include "UI/RammsFloatingPanelContent.h"
 #include "RammsCameraCapturePanel.generated.h"
 
 class UBorder;
@@ -55,7 +56,7 @@ enum class ERammsFeedChannel : uint8
  * subsystem, and refreshes its camera list when the registered set changes.
  */
 UCLASS(meta = (DisplayName = "Ramms Camera Capture Panel"))
-class RAMMSUI_API URammsCameraCapturePanel : public URammsBaseWidget
+class RAMMSUI_API URammsCameraCapturePanel : public URammsBaseWidget, public IRammsFloatingPanelContent
 {
 	GENERATED_BODY()
 
@@ -176,6 +177,12 @@ public:
 	/** Re-read the registered camera list from the subsystem. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void RefreshCameraList();
+
+	// IRammsFloatingPanelContent: its title ("Camera Capture (N)") on the
+	// title bar; hosted, no frame or title row of its own (the floating
+	// panel minimises it).
+	virtual FText GetFloatingTitle() const override;
+	virtual void  SetHostedInFloatingPanel(bool bHosted) override;
 
 protected:
 	virtual void	 NativeConstruct() override;
@@ -357,5 +364,6 @@ protected:
 	bool bStartCollapsed = false;
 
 	bool  bCollapsed = false;
+	bool  bHostedInFloatingPanel = false;
 	float TimeSinceRefresh = 0.0f;
 };

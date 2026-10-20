@@ -80,6 +80,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	FMargin ContentPadding = FMargin(12.0f, 6.0f);
 
+	/** Caption-sized text (SetCompact). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	bool bCompact = false;
+
 	// Widget references (built programmatically — Transient prevents stale
 	// serialization when placed inside a parent Widget Blueprint)
 	UPROPERTY(Transient)
@@ -135,6 +139,11 @@ public:
 	/** Set the color variant at runtime */
 	UFUNCTION(BlueprintCallable, Category = "Style")
 	void SetVariant(ERammsButtonVariant NewVariant);
+
+	/** Caption-sized text and tighter padding, for toolbars and trays (sets
+	 *  ContentPadding to 8 x 3; off sets it back to 12 x 6). */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetCompact(bool bInCompact);
 
 	UFUNCTION(BlueprintPure, Category = "Button")
 	bool IsButtonEnabled() const { return bButtonEnabled; }

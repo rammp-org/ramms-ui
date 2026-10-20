@@ -67,6 +67,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	bool bShowBorder = true;
 
+	/** A smaller header: body text, less padding (SetCompactHeader). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
+	bool bCompactHeader = false;
+
 	/** Maximum height for the content area in pixels. 0 = auto (use content's natural height). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collapsible", meta = (ClampMin = "0.0"))
 	float MaxContentHeight = 0.0f;
@@ -167,6 +171,11 @@ public:
 	/** Set the header title */
 	UFUNCTION(BlueprintCallable, Category = "Collapsible")
 	void SetHeaderTitle(FText Title);
+
+	/** A smaller header -- body text, less padding -- for groups inside a
+	 *  panel (bCompactHeader). */
+	UFUNCTION(BlueprintCallable, Category = "Collapsible")
+	void SetCompactHeader(bool bCompact);
 
 	/** How the content scroll box treats the mouse wheel. Default Always (a
 	 *  standalone panel keeps the wheel); a container nested in a scrolling

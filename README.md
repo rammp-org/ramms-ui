@@ -251,6 +251,21 @@ enum class ERammsOrientationOverride { Auto, ForceLandscape, ForcePortrait };
 
 Abstract base for individual layouts. Auto-discovers injection slots (`NamedSlot`, `Overlay`, `SizeBox`) via `DiscoverSlots()`. Provides `InjectWidget()`, `ClearSlot()`, and `RequestLayoutTransition()`.
 
+### Floating panels — `URammsSimLayout` with `bFloatingPanels`
+
+The robot HUD's default layout (`URammsSimLayout`, spawned by `URammsControlHUDSubsystem`) puts each panel in a `URammsFloatingPanel` the user arranges. On by default; turn it off with `URammsControlHUDSettings::bFloatingPanels` (Project Settings > Plugins > Ramms Control HUD) to get the fixed columns back.
+
+- **Title bar:** drag it to move the panel, `-` / `+` to minimise it to the bar, `x` to hide it, the arrow (↗) to pop it out into a window of its own. Close that window to dock the panel back.
+- **Resize grip:** the bottom-right corner of the robot panel and any provider panel.
+- **Panel tray (top centre):** a slim strip with a button per panel, each marked with its state: ● shown, ▬ minimised, ○ hidden, ↗ in its own window. Click a shown panel to hide it, a hidden one to show it, a minimised one to restore it, and a popped-out one to bring its window forward. After a divider come **Hide all** / **Show all** and **Reset**.
+- **Remembered per user.** Each panel's place, size, minimised / hidden / popped-out state and window rectangle are stored in `Saved/Config/<Platform>/GameUserSettings.ini` (`URammsHUDLayoutUserSettings`), never in the project config. A panel's place is a fraction of the room the viewport leaves around it, so a panel against an edge stays there when the window is resized.
+- **Console:** `ramms.UI.ResetLayout` and `ramms.UI.Panels [show|hide|toggle]`.
+- **Pop-outs** are desktop only. They are turned off by `URammsControlHUDSettings::bAllowPopOut` and whenever the command line asks for Pixel Streaming, which streams only the game viewport. Keyboard focus moves into a popped-out window when you click it, so click back into the game view to drive with the keyboard.
+
+Content can take part in the chrome by implementing `IRammsFloatingPanelContent`: it supplies the title-bar text and drops its own frame while hosted. `URammsControlSurfacePanel` and `URammsCameraCapturePanel` both do.
+
+**Panels from components.** A component on the controlled pawn that implements `IRammsHUDPanelProvider` (RammsControl) offers panels as Slate content, and says whether each is wanted now. The layout hosts each one in a floating panel, wrapped in a `URammsSlateHostWidget`, and shows it while it is wanted. The curb controller's "Curb view" graphs come in this way.
+
 ---
 
 ## Theme System
@@ -318,6 +333,8 @@ All widgets inherit from **`URammsBaseWidget`** (`UUserWidget`), which provides:
 | `URammsNotificationWidget` | Single toast notification with severity level |
 | `URammsNotificationContainer` | Viewport container that stacks and auto-dismisses notifications |
 | `URammsPanel` | Simple styled container panel |
+| `URammsFloatingPanel` | Window chrome around any widget: move, resize, minimise, hide, pop out into its own window; state kept per user (see [Floating panels](#floating-panels--rammssimlayout-with-bfloatingpanels)) |
+| `URammsSlateHostWidget` | Hosts a Slate widget made elsewhere (an `IRammsHUDPanelProvider`'s content) as a UMG widget |
 | `URammsArmController` | Kinova Gen3 7-joint arm control widget |
 | `URammsMebotController` | MEBot motor control widget |
 | `URammsArmTaskWidget` | Arm task selection UI |

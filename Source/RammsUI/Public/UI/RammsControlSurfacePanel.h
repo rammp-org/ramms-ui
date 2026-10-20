@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "RammsControlTypes.h"
+#include "UI/RammsFloatingPanelContent.h"
 #include "RammsControlSurfacePanel.generated.h"
 
 class UBorder;
@@ -29,7 +30,7 @@ class URammsSurfaceJoystick;
  * by TargetRobotName) unless TargetSurface is set.
  */
 UCLASS(meta = (DisplayName = "Ramms Control Surface Panel"))
-class RAMMSUI_API URammsControlSurfacePanel : public URammsBaseWidget
+class RAMMSUI_API URammsControlSurfacePanel : public URammsBaseWidget, public IRammsFloatingPanelContent
 {
 	GENERATED_BODY()
 
@@ -93,11 +94,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FVector2D GetScrollExtent() const;
 
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void   NativeConstruct() override;
+	virtual void   NativeDestruct() override;
+	virtual void   NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual void ApplyStyle_Implementation() override;
+	virtual void   ApplyStyle_Implementation() override;
 
 	/** Pixels the groups list scrolls per wheel notch. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
@@ -111,6 +112,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetScrollOffset(float Offset);
 
+	// IRammsFloatingPanelContent: the robot's name on the title bar; hosted,
+	// no frame or title of its own.
+	virtual FText GetFloatingTitle() const override;
+	virtual void  SetHostedInFloatingPanel(bool bHosted) override;
+
 protected:
 	virtual void	 BuildWidgetTree() override;
 	virtual void	 ResetCachedWidgets() override;
@@ -119,6 +125,11 @@ protected:
 private:
 	UFUNCTION()
 	void OnRegistryChanged(UObject* Provider, bool bRegistered);
+
+	/** Its frame and title, as hosted (a floating panel's) or not. */
+	void ApplyChrome();
+
+	bool bHostedInFloatingPanel = false;
 
 	bool ResolveSurface();
 	void BuildGroup(FName Group, const TArray<FRammsControlAxis>& Axes);
@@ -141,6 +152,14 @@ private:
 	TArray<TObjectPtr<URammsSurfaceJoystick>> Joysticks;
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class URammsSurfacePositionPad>> Pads;
+	/** The joysticks' and pads' captions (styled with the rows). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> Captions;
+
+	/** Lays a group's child out: inset from the group's edges. */
+	static void InsetInGroup(UWidget* Child, float Top = 2.0f, float Bottom = 2.0f);
+	/** A caption for a joystick or pad: small, secondary, wrapping. */
+	UTextBlock* MakeCaption(const FText& Text);
 
 	int32 BuiltVersion = -1;
 	float ReadbackAccum = 0.0f;
