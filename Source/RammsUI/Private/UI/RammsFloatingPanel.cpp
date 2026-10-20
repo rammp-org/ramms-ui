@@ -73,7 +73,7 @@ void URammsFloatingPanel::BuildWidgetTree()
 	TitleSize = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("TitleSize"));
 	Column->AddChildToVerticalBox(TitleSize);
 	TitleBar = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("TitleBar"));
-	TitleBar->SetPadding(FMargin(8.0f, 4.0f, 4.0f, 4.0f));
+	TitleBar->SetPadding(FMargin(8.0f, 2.0f, 2.0f, 2.0f));
 	TitleBar->SetCursor(EMouseCursor::CardinalCross);
 	TitleSize->AddChild(TitleBar);
 
@@ -108,7 +108,13 @@ void URammsFloatingPanel::BuildWidgetTree()
 		URammsButton* Button = WidgetTree->ConstructWidget<URammsButton>(URammsButton::StaticClass(), Name);
 		Button->SetText(FText::FromString(Label));
 		Button->SetVariant(ERammsButtonVariant::Ghost);
-		Button->SetCustomSize(FVector2D(26.0f, 24.0f));
+		// A target easy to hit: the whole box takes the click, the glyph
+		// centred in it at a size to read.
+		Button->SetCustomSize(FVector2D(32.0f, 28.0f));
+		Button->SetContentPadding(FMargin(0.0f));
+		Button->SetLabelFontSize(14);
+		// Its own cursor, not the title bar's move cross: this is a button.
+		Button->SetCursor(EMouseCursor::Hand);
 		if (UHorizontalBoxSlot* S = TitleRow->AddChildToHorizontalBox(Button))
 		{
 			S->SetVerticalAlignment(VAlign_Center);
@@ -124,6 +130,7 @@ void URammsFloatingPanel::BuildWidgetTree()
 	MinimizeButton->OnClicked.AddDynamic(this, &URammsFloatingPanel::HandleMinimizeClicked);
 	CloseButton = AddButton(TEXT("CloseButton"), TEXT("\u00D7"));
 	CloseButton->SetToolTipText(FText::FromString(TEXT("Hide (the panel tray at the top shows it again)")));
+	CloseButton->SetGhostHoverColor(FLinearColor(0.85f, 0.2f, 0.2f, 0.9f)); // red under the mouse
 	CloseButton->OnClicked.AddDynamic(this, &URammsFloatingPanel::HandleCloseClicked);
 
 	// The body: the content, and over its bottom-right corner the resize grip.
@@ -223,6 +230,12 @@ void URammsFloatingPanel::ApplyStyle_Implementation()
 			Button->SetStyle(Style);
 		}
 	}
+	if (CloseButton)
+	{
+		FLinearColor Red = Style->Colors.Error;
+		Red.A = 0.9f;
+		CloseButton->SetGhostHoverColor(Red);
+	}
 	WindowBrush = URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background, 0.0f);
 }
 
@@ -299,6 +312,22 @@ void URammsFloatingPanel::SetMinimized(bool bInMinimized)
 		{
 			FrameSize->ClearMinDesiredWidth();
 		}
+	}
+	if (bInMinimized)
+	{
+		// Placed as the whole panel while minimised, so its title bar stays
+		// where the panel's top is (GetPlacementSize).
+		const FVector2D Whole = GetCachedGeometry().GetLocalSize();
+		if (Whole.Y > 0.0)
+		{
+			ExpandedSize = Whole;
+		}
+	}
+	else
+	{
+		// Moved lower than the whole panel fits while minimised: it comes back
+		// as low as it fits.
+		Placement = FVector2D(FMath::Min(Placement.X, 1.0), FMath::Min(Placement.Y, 1.0));
 	}
 	bMinimized = bInMinimized;
 	ApplyVisibility();
@@ -538,7 +567,15 @@ void URammsFloatingPanel::UpdateLayout(const FVector2D& CanvasSize, float Margin
 		}
 	}
 	const FVector2D Size = GetDesiredSize();
-	const FVector2D Free(FMath::Max(0.0, CanvasSize.X - Size.X - 2.0 * Margin), FMath::Max(0.0, CanvasSize.Y - Size.Y - Top - Margin));
+	if (!bMinimized && IsShownInViewport() && Size.Y > 0.0)
+	{
+		ExpandedSize = Size;
+	}
+	// The room its placement is a fraction of: around the whole panel, even
+	// while minimised (at least a unit, so a minimised title bar keeps its
+	// place below a panel that fills the viewport).
+	const FVector2D Placed = GetPlacementSize();
+	const FVector2D Free(FMath::Max(1.0, CanvasSize.X - Placed.X - 2.0 * Margin), FMath::Max(1.0, CanvasSize.Y - Placed.Y - Top - Margin));
 	if (bPlaceFromPosition)
 	{
 		// Resized where it stood: its placement is where that leaves it.
@@ -549,7 +586,11 @@ void URammsFloatingPanel::UpdateLayout(const FVector2D& CanvasSize, float Margin
 		SaveState();
 	}
 	const FVector2D P = Placement.X < 0.0 || Placement.Y < 0.0 ? DefaultPlacement : Placement;
-	const FVector2D Position = FVector2D(Margin, Top) + P * Free;
+	FVector2D		Position = FVector2D(Margin, Top) + P * Free;
+	// On screen as it is now (a title bar moved lower than the whole panel
+	// fits has a placement past 1).
+	Position.X = FMath::Clamp(Position.X, static_cast<double>(Margin), FMath::Max(static_cast<double>(Margin), CanvasSize.X - Margin - Size.X));
+	Position.Y = FMath::Clamp(Position.Y, static_cast<double>(Top), FMath::Max(static_cast<double>(Top), CanvasSize.Y - Margin - Size.Y));
 	if (!CanvasSlot->GetPosition().Equals(Position, 0.25))
 	{
 		CanvasSlot->SetPosition(Position);
@@ -914,15 +955,19 @@ FReply URammsFloatingPanel::NativeOnMouseMove(const FGeometry& InGeometry, const
 	{
 		return FReply::Handled();
 	}
-	// Kept on screen; the placement follows, as a fraction of the room left.
+	// Kept on screen; the placement follows, as a fraction of the room the
+	// whole panel leaves (past 1 for a minimised title bar moved lower than
+	// the whole panel fits).
 	const FVector2D Size = GetDesiredSize();
+	const FVector2D Placed = GetPlacementSize();
 	const float		M = LastMargin, Top = LastTopInset;
 	const FVector2D Free(FMath::Max(0.0, LastCanvasSize.X - Size.X - 2.0 * M), FMath::Max(0.0, LastCanvasSize.Y - Size.Y - Top - M));
+	const FVector2D PlacedFree(FMath::Max(1.0, LastCanvasSize.X - Placed.X - 2.0 * M), FMath::Max(1.0, LastCanvasSize.Y - Placed.Y - Top - M));
 	FVector2D		Position = DragStartPosition + Delta;
 	Position.X = FMath::Clamp(Position.X, static_cast<double>(M), M + Free.X);
 	Position.Y = FMath::Clamp(Position.Y, static_cast<double>(Top), Top + Free.Y);
 	CanvasSlot->SetPosition(Position);
-	Placement = FVector2D(Free.X > 0.0 ? (Position.X - M) / Free.X : 0.0, Free.Y > 0.0 ? (Position.Y - Top) / Free.Y : 0.0);
+	Placement = FVector2D(PlacedFree.X > 0.0 ? (Position.X - M) / PlacedFree.X : 0.0, PlacedFree.Y > 0.0 ? (Position.Y - Top) / PlacedFree.Y : 0.0);
 	return FReply::Handled();
 }
 

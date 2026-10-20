@@ -196,10 +196,14 @@ private:
 	void CloseWindow(bool bKeepPoppedOut);
 	void ApplyVisibility();
 	void ApplySize();
-	void LoadState();
-	void SaveState();
-	void EndDrag();
-	void Changed();
+	/** The size its placement is a fraction of the room around: the whole
+	 *  panel's, even while minimised (its title bar stays where the panel's
+	 *  top is); its own when that is not known yet. */
+	FVector2D GetPlacementSize() const { return bMinimized && ExpandedSize.Y > 0.0 ? ExpandedSize : GetDesiredSize(); }
+	void	  LoadState();
+	void	  SaveState();
+	void	  EndDrag();
+	void	  Changed();
 
 	UPROPERTY(Transient)
 	TObjectPtr<USizeBox> FrameSize;
@@ -259,6 +263,8 @@ private:
 	/** The largest body the viewport has room for (zero: not known yet). A
 	 *  larger BodySize is shown at this size, and kept for a larger viewport. */
 	FVector2D FitSize = FVector2D::ZeroVector;
+	/** The whole panel's size, when last seen not minimised (zero: not yet). */
+	FVector2D ExpandedSize = FVector2D::ZeroVector;
 	FVector2D WindowPosition = FVector2D::ZeroVector;
 	FVector2D WindowSize = FVector2D::ZeroVector;
 	FVector2D LastCanvasSize = FVector2D::ZeroVector;
