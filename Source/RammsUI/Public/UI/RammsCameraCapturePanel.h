@@ -18,21 +18,28 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UCameraCaptureSubsystem;
 class UIntrinsicSceneCaptureComponent2D;
+class UTexture2D;
+struct FCaptureData;
+struct FCameraCaptureSegTable;
 
 /**
  * Which plane of a camera the feed is showing.
  *
- * Not every camera has all three. Depth exists in both capture modes but lives
- * in a different channel in each; motion vectors are produced only by the DMV
- * pass, so SingleCaptureColorDepth never has them at all. The panel cycles past
- * whatever is unavailable rather than offering a view that cannot be drawn.
+ * Not every camera has all of them. Depth exists in both capture modes but lives
+ * in a different channel in each; motion vectors and class masks each need their
+ * own pass to be switched on. The panel cycles past whatever is unavailable
+ * rather than offering a view that cannot be drawn.
  */
 UENUM(BlueprintType)
 enum class ERammsFeedChannel : uint8
 {
-	Colour UMETA(DisplayName = "Colour"),
-	Depth  UMETA(DisplayName = "Depth"),
-	Motion UMETA(DisplayName = "Motion vectors")
+	Colour			   UMETA(DisplayName = "Colour"),
+	Depth			   UMETA(DisplayName = "Depth"),
+	Motion			   UMETA(DisplayName = "Motion vectors"),
+	/** The segmentation class mask, one colour per fine class. */
+	Classes			   UMETA(DisplayName = "Classes"),
+	/** The same mask, one colour per coarse class. */
+	CoarseClasses	   UMETA(DisplayName = "Coarse classes")
 };
 
 /**
@@ -142,6 +149,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void ToggleSerialization();
 
+	/** Turn the subsystem's segmentation pass (class masks) on or off. */
+	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
+	void ToggleSegmentation();
+
 	/** Move to the next/previous entry in CaptureRateSteps. */
 	UFUNCTION(BlueprintCallable, Category = "Camera Capture")
 	void StepCaptureRate(int32 Delta);
@@ -186,7 +197,10 @@ public:
 
 protected:
 	virtual void	 NativeConstruct() override;
+	virtual void	 NativeDestruct() override;
 	virtual void	 NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply	 NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void	 NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 	virtual void	 ApplyStyle_Implementation() override;
 	virtual void	 BuildWidgetTree() override;
 	virtual void	 ResetCachedWidgets() override;
@@ -209,6 +223,8 @@ protected:
 	void HandleCaptureClicked();
 	UFUNCTION()
 	void HandleSerializationClicked();
+	UFUNCTION()
+	void HandleSegmentationClicked();
 	UFUNCTION()
 	void HandleRateUpClicked();
 	UFUNCTION()
@@ -249,6 +265,8 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> SerializationButton;
 	UPROPERTY(Transient)
+	TObjectPtr<URammsButton> SegmentationButton;
+	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> RateDownButton;
 	UPROPERTY(Transient)
 	TObjectPtr<URammsButton> RateUpButton;
@@ -273,6 +291,10 @@ protected:
 	TObjectPtr<USizeBox> FeedBox;
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> FeedImage;
+
+	/** Under the feed while class masks are on: the class under the pointer. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ClassText;
 
 	/** The registered cameras, as of the last refresh. */
 	TArray<TWeakObjectPtr<UIntrinsicSceneCaptureComponent2D>> Cameras;
@@ -331,6 +353,42 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
 	TSoftObjectPtr<UMaterialInterface> MotionColormapMaterial =
 		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_MotionVectorColormap.M_MotionVectorColormap")));
+
+	/** Class mask to colour: R of the segmentation target indexes a 256x1 lookup texture (ClassLUT), and
+	 *  G marks where the pass ran. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Capture|Materials")
+	TSoftObjectPtr<UMaterialInterface> SegmentationColormapMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/RammsUI/Materials/M_SegmentationColormap.M_SegmentationColormap")));
+
+	/** The two class views: the same material, a different lookup texture. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> ClassesMID;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> CoarseClassesMID;
+
+	/** 256x1 lookups, class value to colour: one colour per fine class, and one per coarse class (indexed by
+	 *  the FINE value, so the mask needs no second lookup). Rebuilt when the class table changes. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ClassesLUT;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> CoarseClassesLUT;
+
+	/** The class table the lookups were built from. */
+	TSharedPtr<const FCameraCaptureSegTable> LUTTable;
+
+	/** Build the lookups and their materials, or rebuild them if the class table changed. */
+	void EnsureClassMaterials();
+
+	/** The latest frame with a class mask from the selected camera, for the pointer readout. */
+	TSharedPtr<const FCaptureData> LastClassFrame;
+	FDelegateHandle				   FrameCapturedHandle;
+	void						   HandleFrameCaptured(TSharedRef<const FCaptureData> Data);
+
+	/** Where the pointer is on the feed, 0-1 in each axis; unset when it is not over the feed. */
+	TOptional<FVector2D> HoverUV;
+
+	/** The class readout under the feed. */
+	void RefreshClassText();
 
 	/**
 	 * Which channels of the motion target carry the vector, dotted against RGBA.
