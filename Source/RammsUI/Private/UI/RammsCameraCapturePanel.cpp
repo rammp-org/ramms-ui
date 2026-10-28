@@ -17,8 +17,10 @@
 #include "UI/RammsButton.h"
 #include "UI/RammsUIStyle.h"
 
+#include "CameraCaptureSegmentation.h"
 #include "CameraCaptureSubsystem.h"
 #include "IntrinsicSceneCaptureComponent2D.h"
+#include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -104,6 +106,7 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 		SerializationButton = AddButtonTo(ControlsHBox, TEXT("SerializationButton"), TEXT("Saving: off"), 1.0f);
 		SerializationButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleSerializationClicked);
 
+
 		if (bShowCaptureRate)
 		{
 			// Its own row. Five controls on one line is more than this column
@@ -131,6 +134,13 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 			RateUpButton = AddButtonTo(RateHBox, TEXT("RateUpButton"), TEXT("+"), 0.0f);
 			RateUpButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleRateUpClicked);
 		}
+
+		// The class-mask toggle shares the rate row: the capture row is full at two buttons, and a third
+		// clipped all three labels.
+		SegmentationButton = AddButtonTo(RateHBox ? RateHBox.Get() : ControlsHBox.Get(), TEXT("SegmentationButton"), TEXT("Classes: off"), 0.0f);
+		SegmentationButton->OnClicked.AddDynamic(this, &URammsCameraCapturePanel::HandleSegmentationClicked);
+		SegmentationButton->SetToolTipText(FText::FromString(
+			TEXT("Capture segmentation class masks (one more render per camera); adds the Classes views")));
 	}
 
 	// ── Camera selector: < name > [channel] ──
@@ -175,6 +185,17 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	FeedImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("FeedImage"));
 	FeedBox->AddChild(FeedImage);
 
+	// What the pointer is over, while class masks are being captured.
+	ClassText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ClassText"));
+	ClassText->SetText(FText::GetEmpty());
+	ClassText->SetAutoWrapText(true);
+	ClassText->SetWrapTextAt(FeedWidth - 4.0f);
+	ClassText->SetVisibility(ESlateVisibility::Collapsed);
+	if (UVerticalBoxSlot* BSlot = ContentVBox->AddChildToVerticalBox(ClassText))
+	{
+		BSlot->SetPadding(FMargin(2.0f, 0.0f, 2.0f, 4.0f));
+	}
+
 	// ── Status last, and wrapped: it is the longest line and the least urgent,
 	// so it is the one that should reflow rather than push anything around. ──
 	if (bShowStatistics)
@@ -205,6 +226,8 @@ void URammsCameraCapturePanel::ResetCachedWidgets()
 	RateHBox = nullptr;
 	CaptureButton = nullptr;
 	SerializationButton = nullptr;
+	SegmentationButton = nullptr;
+	ClassText = nullptr;
 	RateDownButton = nullptr;
 	RateUpButton = nullptr;
 	RateText = nullptr;
@@ -233,6 +256,20 @@ void URammsCameraCapturePanel::NativeConstruct()
 	RefreshLabels();
 }
 
+void URammsCameraCapturePanel::NativeDestruct()
+{
+	if (FrameCapturedHandle.IsValid())
+	{
+		if (UCameraCaptureSubsystem* Sub = GetSubsystem())
+		{
+			Sub->OnFrameCaptured.Remove(FrameCapturedHandle);
+		}
+		FrameCapturedHandle.Reset();
+	}
+	LastClassFrame.Reset();
+	Super::NativeDestruct();
+}
+
 void URammsCameraCapturePanel::ApplyStyle_Implementation()
 {
 	Super::ApplyStyle_Implementation();
@@ -251,7 +288,7 @@ void URammsCameraCapturePanel::ApplyStyle_Implementation()
 		TitleText->SetFont(Style->Typography.HeadingSmall);
 		TitleText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
 	}
-	for (UTextBlock* Text : { StatsText.Get(), RateText.Get(), CameraNameText.Get() })
+	for (UTextBlock* Text : { StatsText.Get(), RateText.Get(), CameraNameText.Get(), ClassText.Get() })
 	{
 		if (Text)
 		{
@@ -261,7 +298,7 @@ void URammsCameraCapturePanel::ApplyStyle_Implementation()
 	}
 	// Buttons are created at runtime, outside this widget's tree, so they are
 	// handed the style directly -- the same thing the control surface panel does.
-	for (URammsButton* Button : { CaptureButton.Get(), SerializationButton.Get(), RateDownButton.Get(),
+	for (URammsButton* Button : { CaptureButton.Get(), SerializationButton.Get(), SegmentationButton.Get(), RateDownButton.Get(),
 			 RateUpButton.Get(), PrevCameraButton.Get(), NextCameraButton.Get(), ChannelButton.Get(),
 			 CollapseButton.Get() })
 	{
@@ -397,6 +434,10 @@ bool URammsCameraCapturePanel::IsChannelAvailable(ERammsFeedChannel Channel) con
 			// mode -- which it was not when motion rode on the depth pass.
 			return Sub && Sub->IsCapturingMotionVectors() && Sub->GetMotionRenderTarget(Camera) != nullptr;
 
+		case ERammsFeedChannel::Classes:
+		case ERammsFeedChannel::CoarseClasses:
+			return Sub && Sub->IsCapturingSegmentation() && Sub->GetSegmentationRenderTarget(Camera) != nullptr;
+
 		default:
 			return false;
 	}
@@ -479,6 +520,20 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		}
 	}
 
+	else if (FeedChannel == ERammsFeedChannel::Classes || FeedChannel == ERammsFeedChannel::CoarseClasses)
+	{
+		EnsureClassMaterials();
+		if (UTextureRenderTarget2D* SegTarget = Sub ? Sub->GetSegmentationRenderTarget(Camera) : nullptr)
+		{
+			Source = SegTarget;
+			Material = FeedChannel == ERammsFeedChannel::Classes ? ClassesMID : CoarseClassesMID;
+		}
+		else
+		{
+			Source = nullptr;
+		}
+	}
+
 	if (!Source)
 	{
 		FeedImage->SetBrushResourceObject(nullptr);
@@ -526,6 +581,194 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 	FeedImage->SetBrushSize(FVector2D(FeedWidth, Height));
 	FeedBox->SetWidthOverride(FeedWidth);
 	FeedBox->SetHeightOverride(Height);
+}
+
+// ---------------------------------------------------------------------------
+// Segmentation classes
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	/** A distinct, stable colour per index: golden-ratio hues, so neighbouring values never look alike. */
+	FColor ClassColour(int32 Index, float HueOffset)
+	{
+		if (Index <= 0)
+		{
+			return FColor::Black;
+		}
+		const float Hue = FMath::Frac(Index * 0.61803398875f + HueOffset);
+		const uint8 Sat = static_cast<uint8>(160 + (Index * 37) % 80);
+		const uint8 Val = static_cast<uint8>(215 + (Index * 13) % 40);
+		return FLinearColor::MakeFromHSV8(static_cast<uint8>(Hue * 255.0f), Sat, Val).ToFColor(false);
+	}
+
+	UTexture2D* MakeLookup(UObject* Outer, const TArray<FColor>& Colours)
+	{
+		UTexture2D* Texture = UTexture2D::CreateTransient(256, 1, PF_B8G8R8A8);
+		if (!Texture)
+		{
+			return nullptr;
+		}
+		// Nearest, or a class on the boundary between two texels would blend into a third colour.
+		Texture->Filter = TF_Nearest;
+		Texture->AddressX = TA_Clamp;
+		Texture->AddressY = TA_Clamp;
+		Texture->SRGB = true;
+		FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
+		void*			  Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Data, Colours.GetData(), 256 * sizeof(FColor));
+		Mip.BulkData.Unlock();
+		Texture->UpdateResource();
+		return Texture;
+	}
+} // namespace
+
+void URammsCameraCapturePanel::EnsureClassMaterials()
+{
+	const UWorld*								 World = GetWorld();
+	const UCameraCaptureSegmentationSubsystem* Labels = World ? World->GetSubsystem<UCameraCaptureSegmentationSubsystem>() : nullptr;
+	if (!Labels)
+	{
+		return;
+	}
+
+	// The lookups follow the class table, which can grow mid-run (a class tag the settings do not list).
+	TSharedRef<const FCameraCaptureSegTable> Table = Labels->GetTable();
+	if (!LUTTable.IsValid() || LUTTable.Get() != &Table.Get() || !ClassesLUT || !CoarseClassesLUT)
+	{
+		TArray<FColor> Fine, Coarse;
+		Fine.SetNumUninitialized(256);
+		Coarse.SetNumUninitialized(256);
+		for (int32 V = 0; V < 256; ++V)
+		{
+			const bool bUsed = !Table->FineNames[V].IsNone() || Table->Reserved.Contains(V);
+			Fine[V] = bUsed ? ClassColour(V, 0.0f) : FColor::Black;
+			Coarse[V] = bUsed ? ClassColour(Table->FineToCoarse[V], 0.37f) : FColor::Black;
+		}
+		ClassesLUT = MakeLookup(this, Fine);
+		CoarseClassesLUT = MakeLookup(this, Coarse);
+		LUTTable = Table;
+	}
+
+	if (!ClassesMID || !CoarseClassesMID)
+	{
+		UMaterialInterface* Base = SegmentationColormapMaterial.IsNull() ? nullptr : SegmentationColormapMaterial.LoadSynchronous();
+		if (!Base)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[RammsCameraCapturePanel] Could not load the segmentation colormap (%s); the class views will show the raw mask."),
+				*SegmentationColormapMaterial.ToSoftObjectPath().ToString());
+			return;
+		}
+		ClassesMID = UMaterialInstanceDynamic::Create(Base, this);
+		CoarseClassesMID = UMaterialInstanceDynamic::Create(Base, this);
+	}
+	ClassesMID->SetTextureParameterValue(TEXT("ClassLUT"), ClassesLUT);
+	CoarseClassesMID->SetTextureParameterValue(TEXT("ClassLUT"), CoarseClassesLUT);
+}
+
+void URammsCameraCapturePanel::HandleFrameCaptured(TSharedRef<const FCaptureData> Data)
+{
+	if (Data->ClassData.Num() == 0)
+	{
+		return;
+	}
+	UIntrinsicSceneCaptureComponent2D* Camera = GetSelectedCamera();
+	// The subsystem names a camera "<actor>::<component>", with the actor name disambiguated when two
+	// actors share one, so match on the component and the start of the actor name.
+	if (!Camera || Data->CameraID.ComponentName != Camera->GetName()
+		|| (Camera->GetOwner() && !Data->CameraID.ActorName.StartsWith(Camera->GetOwner()->GetName())))
+	{
+		return;
+	}
+	LastClassFrame = Data;
+	RefreshClassText();
+}
+
+FReply URammsCameraCapturePanel::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	HoverUV.Reset();
+	if (FeedImage && FeedImage->IsVisible())
+	{
+		const FGeometry& Image = FeedImage->GetCachedGeometry();
+		const FVector2D	 Size = Image.GetLocalSize();
+		const FVector2D	 Local = Image.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+		if (Size.X > 0.0 && Size.Y > 0.0 && Local.X >= 0.0 && Local.Y >= 0.0 && Local.X < Size.X && Local.Y < Size.Y)
+		{
+			HoverUV = Local / Size;
+		}
+	}
+	RefreshClassText();
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+void URammsCameraCapturePanel::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	HoverUV.Reset();
+	RefreshClassText();
+	Super::NativeOnMouseLeave(InMouseEvent);
+}
+
+void URammsCameraCapturePanel::RefreshClassText()
+{
+	if (!ClassText)
+	{
+		return;
+	}
+	UCameraCaptureSubsystem* Sub = GetSubsystem();
+	if (!Sub || !Sub->IsCapturingSegmentation())
+	{
+		ClassText->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+	ClassText->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	// Listen only while there is something to show; the subsystem is per world, so bind lazily.
+	if (!FrameCapturedHandle.IsValid())
+	{
+		FrameCapturedHandle = Sub->OnFrameCaptured.AddUObject(this, &URammsCameraCapturePanel::HandleFrameCaptured);
+	}
+
+	const UWorld*								 World = GetWorld();
+	const UCameraCaptureSegmentationSubsystem* Labels = World ? World->GetSubsystem<UCameraCaptureSegmentationSubsystem>() : nullptr;
+	const FCaptureData*						 Frame = LastClassFrame.Get();
+	if (!Labels || !Frame || Frame->ClassWidth <= 0 || Frame->ClassHeight <= 0)
+	{
+		ClassText->SetText(FText::FromString(Sub->IsCapturing() ? TEXT("Waiting for a class mask...") : TEXT("Start capture to see classes")));
+		return;
+	}
+
+	// The classes in view, most pixels first, when the pointer is not on the feed; the class under it
+	// when it is.
+	TSharedRef<const FCameraCaptureSegTable> Table = Labels->GetTable();
+	auto Describe = [&Table](int32 V) {
+		if (Table->Reserved.Contains(V))
+		{
+			return FString::Printf(TEXT("%d  reserved"), V);
+		}
+		const FName Fine = Table->FineNames.IsValidIndex(V) ? Table->FineNames[V] : NAME_None;
+		const int32 C = Table->FineToCoarse.IsValidIndex(V) ? Table->FineToCoarse[V] : 0;
+		return FString::Printf(TEXT("%s  (%s, %d)"), Fine.IsNone() ? TEXT("?") : *Fine.ToString(),
+			Table->CoarseNames.IsValidIndex(C) ? *Table->CoarseNames[C].ToString() : TEXT("?"), V);
+	};
+	if (HoverUV.IsSet())
+	{
+		const int32 X = FMath::Clamp(static_cast<int32>(HoverUV->X * Frame->ClassWidth), 0, Frame->ClassWidth - 1);
+		const int32 Y = FMath::Clamp(static_cast<int32>(HoverUV->Y * Frame->ClassHeight), 0, Frame->ClassHeight - 1);
+		ClassText->SetText(FText::FromString(Describe(Frame->ClassData[Y * Frame->ClassWidth + X])));
+		return;
+	}
+	int64 Counts[256] = {};
+	for (const uint8 V : Frame->ClassData)
+	{
+		Counts[V]++;
+	}
+	int32 InView = 0;
+	for (int32 V = 1; V < 256; ++V)
+	{
+		InView += Counts[V] > 0 ? 1 : 0;
+	}
+	ClassText->SetText(FText::FromString(FString::Printf(TEXT("%d classes in view; hover to name one"), InView)));
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +836,7 @@ void URammsCameraCapturePanel::RefreshLabels()
 	}
 
 	const bool bEnabled = Sub != nullptr;
-	for (URammsButton* Button : { CaptureButton.Get(), SerializationButton.Get(), RateDownButton.Get(), RateUpButton.Get() })
+	for (URammsButton* Button : { CaptureButton.Get(), SerializationButton.Get(), SegmentationButton.Get(), RateDownButton.Get(), RateUpButton.Get() })
 	{
 		if (Button)
 		{
@@ -617,7 +860,7 @@ void URammsCameraCapturePanel::RefreshLabels()
 		// Disabled when there is nothing to cycle TO, which is the honest state
 		// in single capture with depth off, or with no camera at all.
 		const bool bHasAlternative = IsChannelAvailable(ERammsFeedChannel::Depth)
-			|| IsChannelAvailable(ERammsFeedChannel::Motion);
+			|| IsChannelAvailable(ERammsFeedChannel::Motion) || IsChannelAvailable(ERammsFeedChannel::Classes);
 		ChannelButton->SetEnabled(Cameras.Num() > 0 && bHasAlternative);
 
 		const TCHAR* ChannelName = TEXT("Colour");
@@ -631,6 +874,14 @@ void URammsCameraCapturePanel::RefreshLabels()
 			case ERammsFeedChannel::Motion:
 				ChannelName = TEXT("Motion");
 				ChannelHint = TEXT("Showing motion vectors, colormapped by magnitude and angle");
+				break;
+			case ERammsFeedChannel::Classes:
+				ChannelName = TEXT("Classes");
+				ChannelHint = TEXT("Showing the segmentation class mask, one colour per fine class; point at it to name a class");
+				break;
+			case ERammsFeedChannel::CoarseClasses:
+				ChannelName = TEXT("Coarse");
+				ChannelHint = TEXT("Showing the segmentation class mask, one colour per coarse class; point at it to name a class");
 				break;
 			default:
 				break;
@@ -679,6 +930,12 @@ void URammsCameraCapturePanel::RefreshLabels()
 		SerializationButton->SetText(FText::FromString(
 			Sub->IsSerializationEnabled() ? TEXT("Saving: on") : TEXT("Saving: off")));
 	}
+	if (SegmentationButton)
+	{
+		SegmentationButton->SetText(FText::FromString(
+			Sub->IsCapturingSegmentation() ? TEXT("Classes: on") : TEXT("Classes: off")));
+	}
+	RefreshClassText();
 	if (RateText)
 	{
 		const int32 N = Sub->GetCaptureRate();
@@ -738,6 +995,24 @@ void URammsCameraCapturePanel::ToggleSerialization()
 	}
 }
 
+void URammsCameraCapturePanel::ToggleSegmentation()
+{
+	if (UCameraCaptureSubsystem* Sub = GetSubsystem())
+	{
+		const bool bOn = !Sub->IsCapturingSegmentation();
+		Sub->SetCaptureSegmentation(bOn);
+		// Turning it on is a request to see it: go straight to the class view. Off, the class views are
+		// gone, and UpdateFeedImage falls back to colour by itself.
+		if (bOn)
+		{
+			FeedChannel = ERammsFeedChannel::Classes;
+		}
+		LastClassFrame.Reset();
+		UpdateFeedImage();
+		RefreshLabels();
+	}
+}
+
 void URammsCameraCapturePanel::StepCaptureRate(int32 Delta)
 {
 	UCameraCaptureSubsystem* Sub = GetSubsystem();
@@ -775,10 +1050,10 @@ void URammsCameraCapturePanel::StepCamera(int32 Delta)
 
 void URammsCameraCapturePanel::ToggleChannel()
 {
-	// Walk forward to the next channel this camera can show. At most three steps,
+	// Walk forward to the next channel this camera can show. At most one lap,
 	// and colour is the backstop -- a camera with a render target always has it,
 	// so the loop cannot spin.
-	static constexpr int32 NumChannels = 3;
+	static constexpr int32 NumChannels = static_cast<int32>(ERammsFeedChannel::CoarseClasses) + 1;
 	for (int32 Step = 1; Step <= NumChannels; ++Step)
 	{
 		const ERammsFeedChannel Candidate =
@@ -822,6 +1097,10 @@ void URammsCameraCapturePanel::HandleCaptureClicked()
 void URammsCameraCapturePanel::HandleSerializationClicked()
 {
 	ToggleSerialization();
+}
+void URammsCameraCapturePanel::HandleSegmentationClicked()
+{
+	ToggleSegmentation();
 }
 void URammsCameraCapturePanel::HandleRateUpClicked()
 {
