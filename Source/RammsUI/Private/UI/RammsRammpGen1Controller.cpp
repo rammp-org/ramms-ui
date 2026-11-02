@@ -263,13 +263,8 @@ void URammsRammpGen1Controller::HandleModeButtonClicked(ERammsRammpGen1Mode Mode
 
 void URammsRammpGen1Controller::OnRobotControllerResolved(AActor* ControllerActor)
 {
-	// Sync current mode from the robot
-	ERammsRammpGen1Mode ActualMode = IRammsRobotController::Execute_GetCurrentRammpGen1Mode(ControllerActor);
-	if (ActualMode != CurrentMode)
-	{
-		CurrentMode = ActualMode;
-		UpdateModeButtons();
-	}
+	// Sync current mode from the robot (SetMode tells OnModeChanged's listeners too)
+	SetMode(IRammsRobotController::Execute_GetCurrentRammpGen1Mode(ControllerActor));
 
 	UE_LOG(LogTemp, Log, TEXT("URammsRammpGen1Controller: Resolved robot controller '%s'"), *ControllerActor->GetName());
 }
