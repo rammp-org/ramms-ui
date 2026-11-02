@@ -1,18 +1,18 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "UI/RammsMebotController.h"
+#include "UI/RammsRammpGen1Controller.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/UniformGridSlot.h"
 #include "Interfaces/IRammsRobotController.h"
 
-URammsMebotController::URammsMebotController(const FObjectInitializer& ObjectInitializer)
+URammsRammpGen1Controller::URammsRammpGen1Controller(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	bAutoFindRobotController = true;
 }
 
-void URammsMebotController::ResetCachedWidgets()
+void URammsRammpGen1Controller::ResetCachedWidgets()
 {
 	PanelBorder = nullptr;
 	HeaderText = nullptr;
@@ -22,7 +22,7 @@ void URammsMebotController::ResetCachedWidgets()
 	CurbDescentButton = nullptr;
 }
 
-void URammsMebotController::BuildWidgetTree()
+void URammsRammpGen1Controller::BuildWidgetTree()
 {
 	if (!WidgetTree || PanelBorder)
 		return;
@@ -91,34 +91,34 @@ void URammsMebotController::BuildWidgetTree()
 	}
 }
 
-void URammsMebotController::NativeOnInitialized()
+void URammsRammpGen1Controller::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildWidgetTree();
 }
 
-void URammsMebotController::NativeConstruct()
+void URammsRammpGen1Controller::NativeConstruct()
 {
 	Super::NativeConstruct();
 
 	// Bind button click events (AddUniqueDynamic prevents duplicate bindings on reparent)
 	if (SelfLevelButton)
 	{
-		SelfLevelButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnSelfLevelClicked);
+		SelfLevelButton->OnClicked.AddUniqueDynamic(this, &URammsRammpGen1Controller::OnSelfLevelClicked);
 	}
 	if (CurbAscentButton)
 	{
-		CurbAscentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbAscentClicked);
+		CurbAscentButton->OnClicked.AddUniqueDynamic(this, &URammsRammpGen1Controller::OnCurbAscentClicked);
 	}
 	if (CurbDescentButton)
 	{
-		CurbDescentButton->OnClicked.AddUniqueDynamic(this, &URammsMebotController::OnCurbDescentClicked);
+		CurbDescentButton->OnClicked.AddUniqueDynamic(this, &URammsRammpGen1Controller::OnCurbDescentClicked);
 	}
 
 	UpdateModeButtons();
 }
 
-void URammsMebotController::ApplyStyle_Implementation()
+void URammsRammpGen1Controller::ApplyStyle_Implementation()
 {
 	if (!Style)
 		return;
@@ -145,7 +145,7 @@ void URammsMebotController::ApplyStyle_Implementation()
 		CurbDescentButton->SetStyle(Style);
 }
 
-void URammsMebotController::SynchronizeProperties()
+void URammsRammpGen1Controller::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
 
@@ -177,37 +177,37 @@ void URammsMebotController::SynchronizeProperties()
 	}
 }
 
-void URammsMebotController::SetMode(ERammsMebotMode NewMode)
+void URammsRammpGen1Controller::SetMode(ERammsRammpGen1Mode NewMode)
 {
 	if (CurrentMode == NewMode)
 		return;
 
-	ERammsMebotMode PreviousMode = CurrentMode;
+	ERammsRammpGen1Mode PreviousMode = CurrentMode;
 	CurrentMode = NewMode;
 	UpdateModeButtons();
 	OnModeChanged.Broadcast(CurrentMode, PreviousMode);
 }
 
-void URammsMebotController::CancelMode()
+void URammsRammpGen1Controller::CancelMode()
 {
-	SetMode(ERammsMebotMode::None);
+	SetMode(ERammsRammpGen1Mode::None);
 }
 
-void URammsMebotController::SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon)
+void URammsRammpGen1Controller::SetModeIcon(ERammsRammpGen1Mode Mode, UTexture2D* Icon)
 {
 	switch (Mode)
 	{
-		case ERammsMebotMode::SelfLevel:
+		case ERammsRammpGen1Mode::SelfLevel:
 			SelfLevelIcon = Icon;
 			if (SelfLevelButton)
 				SelfLevelButton->SetButtonImage(Icon);
 			break;
-		case ERammsMebotMode::CurbAscent:
+		case ERammsRammpGen1Mode::CurbAscent:
 			CurbAscentIcon = Icon;
 			if (CurbAscentButton)
 				CurbAscentButton->SetButtonImage(Icon);
 			break;
-		case ERammsMebotMode::CurbDescent:
+		case ERammsRammpGen1Mode::CurbDescent:
 			CurbDescentIcon = Icon;
 			if (CurbDescentButton)
 				CurbDescentButton->SetButtonImage(Icon);
@@ -217,37 +217,37 @@ void URammsMebotController::SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon)
 	}
 }
 
-void URammsMebotController::UpdateModeButtons()
+void URammsRammpGen1Controller::UpdateModeButtons()
 {
 	if (SelfLevelButton)
-		SelfLevelButton->SetActive(CurrentMode == ERammsMebotMode::SelfLevel);
+		SelfLevelButton->SetActive(CurrentMode == ERammsRammpGen1Mode::SelfLevel);
 	if (CurbAscentButton)
-		CurbAscentButton->SetActive(CurrentMode == ERammsMebotMode::CurbAscent);
+		CurbAscentButton->SetActive(CurrentMode == ERammsRammpGen1Mode::CurbAscent);
 	if (CurbDescentButton)
-		CurbDescentButton->SetActive(CurrentMode == ERammsMebotMode::CurbDescent);
+		CurbDescentButton->SetActive(CurrentMode == ERammsRammpGen1Mode::CurbDescent);
 }
 
-void URammsMebotController::OnSelfLevelClicked()
+void URammsRammpGen1Controller::OnSelfLevelClicked()
 {
-	HandleModeButtonClicked(ERammsMebotMode::SelfLevel);
+	HandleModeButtonClicked(ERammsRammpGen1Mode::SelfLevel);
 }
 
-void URammsMebotController::OnCurbAscentClicked()
+void URammsRammpGen1Controller::OnCurbAscentClicked()
 {
-	HandleModeButtonClicked(ERammsMebotMode::CurbAscent);
+	HandleModeButtonClicked(ERammsRammpGen1Mode::CurbAscent);
 }
 
-void URammsMebotController::OnCurbDescentClicked()
+void URammsRammpGen1Controller::OnCurbDescentClicked()
 {
-	HandleModeButtonClicked(ERammsMebotMode::CurbDescent);
+	HandleModeButtonClicked(ERammsRammpGen1Mode::CurbDescent);
 }
 
-void URammsMebotController::HandleModeButtonClicked(ERammsMebotMode Mode)
+void URammsRammpGen1Controller::HandleModeButtonClicked(ERammsRammpGen1Mode Mode)
 {
 	// Toggle: clicking active mode deactivates it
 	if (CurrentMode == Mode)
 	{
-		SetMode(ERammsMebotMode::None);
+		SetMode(ERammsRammpGen1Mode::None);
 	}
 	else
 	{
@@ -257,19 +257,19 @@ void URammsMebotController::HandleModeButtonClicked(ERammsMebotMode Mode)
 	// Forward to robot controller
 	if (ResolvedControllerActor.IsValid())
 	{
-		IRammsRobotController::Execute_RequestMebotMode(ResolvedControllerActor.Get(), CurrentMode);
+		IRammsRobotController::Execute_RequestRammpGen1Mode(ResolvedControllerActor.Get(), CurrentMode);
 	}
 }
 
-void URammsMebotController::OnRobotControllerResolved(AActor* ControllerActor)
+void URammsRammpGen1Controller::OnRobotControllerResolved(AActor* ControllerActor)
 {
 	// Sync current mode from the robot
-	ERammsMebotMode ActualMode = IRammsRobotController::Execute_GetCurrentMebotMode(ControllerActor);
+	ERammsRammpGen1Mode ActualMode = IRammsRobotController::Execute_GetCurrentRammpGen1Mode(ControllerActor);
 	if (ActualMode != CurrentMode)
 	{
 		CurrentMode = ActualMode;
 		UpdateModeButtons();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("URammsMebotController: Resolved robot controller '%s'"), *ControllerActor->GetName());
+	UE_LOG(LogTemp, Log, TEXT("URammsRammpGen1Controller: Resolved robot controller '%s'"), *ControllerActor->GetName());
 }

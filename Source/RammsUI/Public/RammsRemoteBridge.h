@@ -41,7 +41,7 @@ public:
 
 	/**
 	 * Get object paths filtered by class name substring.
-	 * e.g. "StatusPanel", "Toolbar", "MebotController"
+	 * e.g. "StatusPanel", "Toolbar", "RammpGen1Controller"
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Remote")
 	static TArray<FString> FindRammsWidgets(const FString& ClassNameFilter);

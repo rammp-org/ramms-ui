@@ -68,7 +68,7 @@ class RAMMSUI_API IRammsRobotController
 public:
 	// ── Identity ──────────────────────────────────────────────────
 
-	/** Human-readable name for this robot (e.g., "MEBot Alpha") */
+	/** Human-readable name for this robot (e.g., "RAMMP Gen1 Alpha") */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot")
 	FString GetRobotName() const;
 
@@ -106,18 +106,18 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|Arm")
 	ERammsArmTask GetCurrentArmTask() const;
 
-	// ── MEBot / Chair Control ─────────────────────────────────────
+	// ── RAMMP Gen1 / Chair Control ─────────────────────────────────────
 
 	/**
-	 * Request a MEBot driving mode change
+	 * Request a RAMMP Gen1 driving mode change
 	 * @return true if the command was accepted
 	 */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|MEBot")
-	bool RequestMebotMode(ERammsMebotMode Mode);
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|RAMMP Gen1")
+	bool RequestRammpGen1Mode(ERammsRammpGen1Mode Mode);
 
-	/** Get the currently active MEBot mode */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|MEBot")
-	ERammsMebotMode GetCurrentMebotMode() const;
+	/** Get the currently active RAMMP Gen1 mode */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Ramms|Robot|RAMMP Gen1")
+	ERammsRammpGen1Mode GetCurrentRammpGen1Mode() const;
 
 	// ── Seat Control ─────────────────────────────────────────────
 

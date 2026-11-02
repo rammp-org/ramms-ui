@@ -23,11 +23,11 @@ enum class ERammsArmAction : uint8
 	Retract UMETA(DisplayName = "Retract")
 };
 
-// ── MEBot / Chair ────────────────────────────────────────────────
+// ── RAMMP Gen1 / Chair ────────────────────────────────────────────────
 
-/** MEBot driving modes */
+/** RAMMP Gen1 driving modes */
 UENUM(BlueprintType)
-enum class ERammsMebotMode : uint8
+enum class ERammsRammpGen1Mode : uint8
 {
 	None		UMETA(DisplayName = "None"),
 	SelfLevel	UMETA(DisplayName = "Self-Levelling"),
