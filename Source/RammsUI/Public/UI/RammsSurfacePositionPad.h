@@ -183,9 +183,15 @@ public:
 	virtual FReply NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InEvent) override;
 	virtual FReply NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InEvent) override;
 	virtual FReply NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InEvent) override;
+	virtual void   NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
 
 private:
 	UObject* ResolveSink() const;
+
+	/** Starts steering from this pointer, unless another one already is. */
+	FReply BeginDrag(const FGeometry& InGeometry, const FPointerEvent& InEvent);
+	/** Whether this event comes from the pointer steering the pad. */
+	bool IsDragPointer(const FPointerEvent& InEvent) const { return bDragging && static_cast<int32>(InEvent.GetPointerIndex()) == DragPointerIndex; }
 
 	/** The sink last found through the registry.
 	 *
@@ -205,4 +211,7 @@ private:
 	// Declared private below; see the public reflected pair.
 
 	bool bDragging = false;
+
+	/** The pointer (the mouse, or one finger) steering while bDragging. */
+	int32 DragPointerIndex = INDEX_NONE;
 };

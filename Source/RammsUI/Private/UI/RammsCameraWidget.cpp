@@ -2179,6 +2179,13 @@ void URammsCameraWidget::StopStream()
 
 FReply URammsCameraWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (bIsDragging)
+	{
+		// One pointer drags. A second finger would otherwise restart the drag
+		// from where it landed, so the window jumps between the two fingers.
+		return FReply::Handled();
+	}
+
 	// Focus-on-click: bring windowed widget to front when clicked
 	if (bFocusOnClick && DisplayMode == ERammsCameraDisplayMode::Windowed
 		&& InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
@@ -2194,6 +2201,7 @@ FReply URammsCameraWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 	if (bCanDrag && InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
 	{
 		bIsDragging = true;
+		DragPointerIndex = static_cast<int32>(InMouseEvent.GetPointerIndex());
 		DragStartMousePos = InMouseEvent.GetScreenSpacePosition();
 
 		// Read current position from canvas slot or tracked position
@@ -2215,17 +2223,39 @@ FReply URammsCameraWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 
 FReply URammsCameraWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bIsDragging)
+	if (IsDragPointer(InMouseEvent))
 	{
 		bIsDragging = false;
+		DragPointerIndex = INDEX_NONE;
 		return FReply::Handled().ReleaseMouseCapture();
+	}
+	if (bIsDragging)
+	{
+		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
+void URammsCameraWidget::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	// Capture can end without an up (focus lost, the window hidden or its
+	// mode changed mid-drag); a drag left on would carry on with the next
+	// pointer that moves over the window.
+	if (bIsDragging && CaptureLostEvent.PointerIndex == DragPointerIndex)
+	{
+		bIsDragging = false;
+		DragPointerIndex = INDEX_NONE;
+	}
+	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
+}
+
 FReply URammsCameraWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (bIsDragging && !IsDragPointer(InMouseEvent))
+	{
+		return FReply::Handled();
+	}
 	if (bIsDragging)
 	{
 		FVector2D CurrentMousePos = InMouseEvent.GetScreenSpacePosition();

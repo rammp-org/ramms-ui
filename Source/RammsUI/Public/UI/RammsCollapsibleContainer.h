@@ -208,6 +208,14 @@ protected:
 	void			 SetContentSlotFill(bool bFill);
 	float			 GetEffectiveMaxHeight() const;
 
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	/** Buttons and check boxes in the scrolling content press on a precise tap
+	 *  (a touch that lifts without travelling), so a finger drag that starts on
+	 *  one scrolls the content. With the default, the control takes the finger
+	 *  on touch-down and the scroll box never sees the drag: a list of controls
+	 *  only scrolls from the gaps between them. */
+	void UseTapsInScrollingContent();
+
 	UFUNCTION()
 	void OnToggleClicked();
 };

@@ -50,6 +50,11 @@ public class RammsUI : ModuleRules
 			}
 			);
 
+		if (Target.IsInPlatformGroup(UnrealPlatformGroup.Linux))
+		{
+			// RammsTouchLinux: an SDL event filter for the touch cancels UE's Linux layer drops (linked as Slate links it).
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "SDL3");
+		}
 
 		DynamicallyLoadedModuleNames.AddRange(
 			new string[]
