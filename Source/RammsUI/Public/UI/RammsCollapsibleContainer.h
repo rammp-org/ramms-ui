@@ -215,6 +215,16 @@ protected:
 	 *  on touch-down and the scroll box never sees the drag: a list of controls
 	 *  only scrolls from the gaps between them. */
 	void UseTapsInScrollingContent();
+	/** The content takes touch drags only once it has something to scroll. A
+	 *  scroll box takes a drag even when its content fits, and then keeps it from
+	 *  the list around it: a control surface panel's groups, and sections inside
+	 *  a scrolling panel, size to their content. Touch scrolling starts off and
+	 *  turns on the first time the content overflows, for good: a scroll box can
+	 *  keep its claim on a finger after the finger lifts (a touch-up nothing
+	 *  captured sends it no leave), and Slate ensures the switch never changes
+	 *  under a claim. A box with touch scrolling off never claims a finger, so
+	 *  turning it on is always safe. */
+	void UpdateTouchScrolling();
 
 	UFUNCTION()
 	void OnToggleClicked();

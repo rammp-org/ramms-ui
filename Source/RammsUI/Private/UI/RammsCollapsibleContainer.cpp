@@ -145,6 +145,7 @@ void URammsCollapsibleContainer::EnsureScrollableContent()
 
 		ContentScrollBox = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("ContentScrollBox"));
 		ContentScrollBox->SetOrientation(EOrientation::Orient_Vertical);
+		ContentScrollBox->SetIsTouchScrollingEnabled(false); // see UpdateTouchScrolling
 
 		BoxParent->RemoveChild(ContentBox);
 		BoxParent->AddChild(ContentScrollBox);
@@ -187,6 +188,11 @@ void URammsCollapsibleContainer::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildWidgetTree();
+	// Before its Slate widget exists; see UpdateTouchScrolling.
+	if (ContentScrollBox)
+	{
+		ContentScrollBox->SetIsTouchScrollingEnabled(false);
+	}
 }
 
 void URammsCollapsibleContainer::NativePreConstruct()
@@ -561,8 +567,20 @@ FReply URammsCollapsibleContainer::NativeOnPreviewMouseButtonDown(const FGeometr
 	if (InMouseEvent.IsTouchEvent())
 	{
 		UseTapsInScrollingContent();
+		UpdateTouchScrolling();
 	}
 	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void URammsCollapsibleContainer::UpdateTouchScrolling()
+{
+	// Collapsed or animating, the content is clipped short of its size, so it
+	// only counts as overflowing when fully expanded.
+	if (ContentScrollBox && bEnableScrolling && bIsExpanded && !bIsAnimating && !ContentScrollBox->GetIsTouchScrollingEnabled()
+		&& ContentScrollBox->GetScrollOffsetOfEnd() > 1.0f)
+	{
+		ContentScrollBox->SetIsTouchScrollingEnabled(true);
+	}
 }
 
 void URammsCollapsibleContainer::UseTapsInScrollingContent()
