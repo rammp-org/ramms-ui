@@ -49,7 +49,7 @@ flowchart TB
         CamWidget["URammsCameraWidget<br/>Fullscreen / Windowed / Corner"]
         StatusPanel["URammsStatusPanel"]
         ArmCtrl["URammsArmController"]
-        MebotCtrl["URammsMebotController"]
+        RammpGen1Ctrl["URammsRammpGen1Controller"]
         Toolbar["URammsToolbar"]
         OtherW["Other Widgets<br/>(Button, Slider, TextBlock, …)"]
     end
@@ -95,7 +95,7 @@ flowchart TB
 
     %% Widgets → Subsystem (commands)
     ArmCtrl -- "SendCommand" --> EventBus
-    MebotCtrl -- "SendCommand" --> EventBus
+    RammpGen1Ctrl -- "SendCommand" --> EventBus
     Toolbar -- "OnToolbarItemClicked" --> EventBus
 
     %% Theme
@@ -336,7 +336,7 @@ All widgets inherit from **`URammsBaseWidget`** (`UUserWidget`), which provides:
 | `URammsFloatingPanel` | Window chrome around any widget: move, resize, minimise, hide, pop out into its own window; state kept per user (see [Floating panels](#floating-panels--rammssimlayout-with-bfloatingpanels)) |
 | `URammsSlateHostWidget` | Hosts a Slate widget made elsewhere (an `IRammsHUDPanelProvider`'s content) as a UMG widget |
 | `URammsArmController` | Kinova Gen3 7-joint arm control widget |
-| `URammsMebotController` | MEBot motor control widget |
+| `URammsRammpGen1Controller` | RAMMP Gen1 motor control widget |
 | `URammsArmTaskWidget` | Arm task selection UI |
 | `URammsTaskWidget` | General task selection UI |
 | `URammsSeatController` | Seat axis adjustment controls |
@@ -404,7 +404,7 @@ Rich payload struct: `EventName`, typed fields (`bEnabled`, `FloatValue`, `IntVa
 | Interface | Purpose |
 |---|---|
 | `IRammsCameraProvider` | Camera frame source (`OnCameraFrameReady`) |
-| `IRammsRobotController` | Robot command sink — `SendCommand`, `SendCommandWithValue`, `SendCommandWithPayload`, arm/MEBot/seat control, state queries. Full C++ / Blueprint polymorphism via `BlueprintNativeEvent`. |
+| `IRammsRobotController` | Robot command sink — `SendCommand`, `SendCommandWithValue`, `SendCommandWithPayload`, arm/RAMMP Gen1/seat control, state queries. Full C++ / Blueprint polymorphism via `BlueprintNativeEvent`. |
 | `IRammsStateProvider` | Robot state source |
 | `IRammsDataSource` | Generic data source |
 | `IRammsCommandSink` | Generic command sink |

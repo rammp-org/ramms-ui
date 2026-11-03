@@ -10,51 +10,51 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/UniformGridPanel.h"
-#include "RammsMebotController.generated.h"
+#include "RammsRammpGen1Controller.generated.h"
 
 /**
- * Controller widget for MEBot wheelchair modes.
+ * Controller widget for RAMMP Gen1 wheelchair modes.
  * Displays a grid of image buttons for mode selection:
  * Self-Levelling, Curb Ascent, Curb Descent.
  * Only one mode can be active at a time.
  * Auto-discovers actors implementing IRammsRobotController.
  */
-UCLASS(meta = (DisplayName = "Ramms MEBot Controller"))
-class RAMMSUI_API URammsMebotController : public URammsBaseWidget
+UCLASS(meta = (DisplayName = "Ramms RAMMP Gen1 Controller"))
+class RAMMSUI_API URammsRammpGen1Controller : public URammsBaseWidget
 {
 	GENERATED_BODY()
 
 public:
-	URammsMebotController(const FObjectInitializer& ObjectInitializer);
+	URammsRammpGen1Controller(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** Header title */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot")
-	FText HeaderTitle = FText::FromString(TEXT("MEBot Control"));
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1")
+	FText HeaderTitle = FText::FromString(TEXT("RAMMP Gen1 Control"));
 
 	/** Number of columns in the mode grid */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot", meta = (ClampMin = "1", ClampMax = "6"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1", meta = (ClampMin = "1", ClampMax = "6"))
 	int32 GridColumns = 3;
 
 	/** Image button size */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1")
 	FVector2D ButtonImageSize = FVector2D(72.0f, 72.0f);
 
 	/** Icon for self-levelling mode (assign in editor) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot|Icons")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1|Icons")
 	TObjectPtr<UTexture2D> SelfLevelIcon;
 
 	/** Icon for curb ascent mode */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot|Icons")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1|Icons")
 	TObjectPtr<UTexture2D> CurbAscentIcon;
 
 	/** Icon for curb descent mode */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MEBot|Icons")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMP Gen1|Icons")
 	TObjectPtr<UTexture2D> CurbDescentIcon;
 
 	/** Currently active mode */
-	UPROPERTY(BlueprintReadOnly, Category = "MEBot")
-	ERammsMebotMode CurrentMode = ERammsMebotMode::None;
+	UPROPERTY(BlueprintReadOnly, Category = "RAMMP Gen1")
+	ERammsRammpGen1Mode CurrentMode = ERammsRammpGen1Mode::None;
 
 	// Widget references (Transient — rebuilt programmatically)
 	UPROPERTY(Transient)
@@ -77,9 +77,9 @@ protected:
 
 public:
 	/** Fired when mode changes */
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnMebotModeChanged, ERammsMebotMode, NewMode, ERammsMebotMode, PreviousMode);
-	UPROPERTY(BlueprintAssignable, Category = "MEBot")
-	FOnMebotModeChanged OnModeChanged;
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRammpGen1ModeChanged, ERammsRammpGen1Mode, NewMode, ERammsRammpGen1Mode, PreviousMode);
+	UPROPERTY(BlueprintAssignable, Category = "RAMMP Gen1")
+	FOnRammpGen1ModeChanged OnModeChanged;
 
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
@@ -87,20 +87,20 @@ public:
 	virtual void SynchronizeProperties() override;
 
 	/** Set the current mode programmatically */
-	UFUNCTION(BlueprintCallable, Category = "MEBot")
-	void SetMode(ERammsMebotMode NewMode);
+	UFUNCTION(BlueprintCallable, Category = "RAMMP Gen1")
+	void SetMode(ERammsRammpGen1Mode NewMode);
 
 	/** Get the current mode */
-	UFUNCTION(BlueprintPure, Category = "MEBot")
-	ERammsMebotMode GetCurrentMode() const { return CurrentMode; }
+	UFUNCTION(BlueprintPure, Category = "RAMMP Gen1")
+	ERammsRammpGen1Mode GetCurrentMode() const { return CurrentMode; }
 
 	/** Cancel current mode (return to None) */
-	UFUNCTION(BlueprintCallable, Category = "MEBot")
+	UFUNCTION(BlueprintCallable, Category = "RAMMP Gen1")
 	void CancelMode();
 
 	/** Set icon textures at runtime */
-	UFUNCTION(BlueprintCallable, Category = "MEBot")
-	void SetModeIcon(ERammsMebotMode Mode, UTexture2D* Icon);
+	UFUNCTION(BlueprintCallable, Category = "RAMMP Gen1")
+	void SetModeIcon(ERammsRammpGen1Mode Mode, UTexture2D* Icon);
 
 protected:
 	virtual void	 ResetCachedWidgets() override;
@@ -117,7 +117,7 @@ protected:
 	UFUNCTION()
 	void OnCurbDescentClicked();
 
-	void HandleModeButtonClicked(ERammsMebotMode Mode);
+	void HandleModeButtonClicked(ERammsRammpGen1Mode Mode);
 
 protected:
 	virtual void OnRobotControllerResolved(AActor* ControllerActor) override;

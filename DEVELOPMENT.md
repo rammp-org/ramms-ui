@@ -47,7 +47,7 @@ creating layout presets, or extending the system.
        │ inherits
        │
 ┌──────┴──────────────────────────────────────────────────────────┐
-│ URammsMebotController │ URammsArmController │ URammsArmTaskWidget│
+│ URammsRammpGen1Controller │ URammsArmController │ URammsArmTaskWidget│
 │ URammsTaskWidget      │ URammsCameraWidget  │ URammsStatusPanel  │
 │ URammsJoystickWidget  │ URammsButton        │ URammsPanel ...    │
 └─────────────────────────────────────────────────────────────────┘
@@ -71,7 +71,7 @@ creating layout presets, or extending the system.
 All custom widgets inherit from `URammsBaseWidget` (which extends `UUserWidget`).
 
 ### Control Widgets (send commands to robot)
-- **`URammsMebotController`** — MEBot wheelchair modes (Self-Level, Curb Ascent/Descent)
+- **`URammsRammpGen1Controller`** — RAMMP Gen1 wheelchair modes (Self-Level, Curb Ascent/Descent)
 - **`URammsArmController`** — Arm home/retract actions
 - **`URammsArmTaskWidget`** — Arm task selection (Open Door, Order Drink, Drink)
 - **`URammsTaskWidget`** — Task-level Exit/Cancel (event-bus driven)
@@ -264,7 +264,7 @@ void UMyNewWidget::OnRobotControllerResolved(AActor* ControllerActor)
 
 ## Communication Patterns
 
-### Pattern A: Direct Robot Controller (MebotController, ArmController, ArmTaskWidget)
+### Pattern A: Direct Robot Controller (RammpGen1Controller, ArmController, ArmTaskWidget)
 
 Use when the widget **sends commands to a specific robot**.
 
@@ -465,7 +465,7 @@ Plugins/RammsUI/Source/RammsUI/
 │       ├── RammsButton.h
 │       ├── RammsImageButton.h
 │       ├── RammsPanel.h
-│       ├── RammsMebotController.h
+│       ├── RammsRammpGen1Controller.h
 │       ├── RammsArmController.h
 │       ├── RammsArmTaskWidget.h
 │       ├── RammsTaskWidget.h
@@ -478,7 +478,7 @@ Plugins/RammsUI/Source/RammsUI/
 │   └── UI/
 │       ├── RammsBaseWidget.cpp
 │       ├── RammsLayoutManager.cpp
-│       ├── RammsMebotController.cpp
+│       ├── RammsRammpGen1Controller.cpp
 │       ├── RammsArmTaskWidget.cpp
 │       └── ...
 Content/UI/
@@ -494,7 +494,7 @@ Content/UI/
 |------|--------|
 | `ERammsArmAction` | Home, Retract |
 | `ERammsArmTask` | None, OpenDoor, OrderDrink, Drink |
-| `ERammsMebotMode` | None, SelfLevel, CurbAscent, CurbDescent |
+| `ERammsRammpGen1Mode` | None, SelfLevel, CurbAscent, CurbDescent |
 | `ERammsTaskAction` | Exit, Cancel |
 | `ERammsLayoutPreset` | SingleFullscreen, Grid, PictureInPicture, SideBySide, Custom |
 | `ERammsButtonState` | Normal, Hovered, Pressed, Disabled |
