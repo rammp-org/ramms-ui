@@ -197,13 +197,13 @@ namespace RammsTouchLinux
 		}
 		else
 		{
-			PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([]() { Install(); });
+			PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([]() { Install(); });
 		}
 	}
 
 	void Shutdown()
 	{
-		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
 		if (!bInstalled)
 		{
 			return;
