@@ -72,6 +72,10 @@ protected:
 	/** Is the joystick being interacted with */
 	bool bIsActive = false;
 
+	/** The pointer (the mouse, or one finger) holding the thumb while active.
+	 *  Another finger on the joystick neither moves it nor lets it go. */
+	int32 ActivePointerIndex = INDEX_NONE;
+
 	/** Center position of the joystick in local space */
 	FVector2D JoystickCenter = FVector2D::ZeroVector;
 
@@ -106,6 +110,12 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void   NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
+
+	/** Whether this event comes from the pointer holding the thumb. */
+	bool IsActivePointer(const FPointerEvent& InEvent) const { return bIsActive && static_cast<int32>(InEvent.GetPointerIndex()) == ActivePointerIndex; }
+	/** Lets go of the thumb: restores its colour, recentres it (bAutoCenter) and fires OnReleased. */
+	void ReleaseThumb();
 
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;

@@ -285,6 +285,10 @@ protected:
 	UPROPERTY(Transient)
 	bool bIsDragging = false;
 
+	/** The pointer (the mouse, or one finger) dragging while bIsDragging; a
+	 *  second finger on the window does not take the drag over. */
+	int32 DragPointerIndex = INDEX_NONE;
+
 	/** Drag start position (screen space) */
 	FVector2D DragStartMousePos;
 
@@ -660,6 +664,10 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void   NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
+
+	/** Whether this event comes from the pointer dragging the window. */
+	bool IsDragPointer(const FPointerEvent& InEvent) const { return bIsDragging && static_cast<int32>(InEvent.GetPointerIndex()) == DragPointerIndex; }
 
 protected:
 	/** Build the widget tree programmatically */

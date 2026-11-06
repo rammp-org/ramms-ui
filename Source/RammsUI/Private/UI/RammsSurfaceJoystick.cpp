@@ -154,9 +154,14 @@ FReply URammsSurfaceJoystick::NativeOnTouchMoved(const FGeometry& InGeometry, co
 
 FReply URammsSurfaceJoystick::NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
 {
-	// Also covers a cancelled touch: the base's release recentres and the
-	// released delegate lets the axes go.
+	// Only the finger holding the thumb lets the axes go (the base recentres
+	// and its released delegate does the rest); another finger lifting off
+	// the joystick must not stop a drive that is still held.
+	const bool	 bWasHolding = IsActivePointer(InGestureEvent);
 	const FReply Reply = NativeOnMouseButtonUp(InGeometry, InGestureEvent);
-	Release();
+	if (bWasHolding)
+	{
+		Release();
+	}
 	return Reply;
 }

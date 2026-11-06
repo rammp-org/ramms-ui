@@ -252,6 +252,9 @@ private:
 		Resize,
 	};
 	EDrag	  Drag = EDrag::None;
+	/** The pointer (the mouse, or one finger) moving or resizing the panel. */
+	int32	  DragPointerIndex = INDEX_NONE;
+	bool	  IsDragPointer(const FPointerEvent& InEvent) const { return Drag != EDrag::None && static_cast<int32>(InEvent.GetPointerIndex()) == DragPointerIndex; }
 	FVector2D DragStartMouse = FVector2D::ZeroVector;
 	FVector2D DragStartPosition = FVector2D::ZeroVector;
 	FVector2D DragStartSize = FVector2D::ZeroVector;

@@ -906,6 +906,12 @@ FReply URammsFloatingPanel::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 	{
 		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 	}
+	if (Drag != EDrag::None)
+	{
+		// One pointer moves or resizes; a second finger on the title bar would
+		// otherwise restart the drag from where it landed.
+		return FReply::Handled();
+	}
 	const FVector2D	  At = InMouseEvent.GetScreenSpacePosition();
 	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 	if (bResizable && !bMinimized && Grip && Grip->GetCachedGeometry().IsUnderLocation(At))
@@ -924,6 +930,7 @@ FReply URammsFloatingPanel::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 	}
 	DragStartMouse = At;
+	DragPointerIndex = static_cast<int32>(InMouseEvent.GetPointerIndex());
 	return FReply::Handled().CaptureMouse(TakeWidget());
 }
 
@@ -932,6 +939,10 @@ FReply URammsFloatingPanel::NativeOnMouseMove(const FGeometry& InGeometry, const
 	if (Drag == EDrag::None)
 	{
 		return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+	}
+	if (!IsDragPointer(InMouseEvent))
+	{
+		return FReply::Handled();
 	}
 	// Screen pixels to the canvas' Slate units.
 	const float		  Scale = InGeometry.Scale > 0.0f ? InGeometry.Scale : 1.0f;
@@ -973,17 +984,24 @@ FReply URammsFloatingPanel::NativeOnMouseMove(const FGeometry& InGeometry, const
 
 FReply URammsFloatingPanel::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (Drag != EDrag::None)
+	if (IsDragPointer(InMouseEvent))
 	{
 		EndDrag();
 		return FReply::Handled().ReleaseMouseCapture();
+	}
+	if (Drag != EDrag::None)
+	{
+		return FReply::Handled();
 	}
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void URammsFloatingPanel::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
 {
-	EndDrag();
+	if (CaptureLostEvent.PointerIndex == DragPointerIndex)
+	{
+		EndDrag();
+	}
 	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
 }
 
@@ -995,5 +1013,6 @@ void URammsFloatingPanel::EndDrag()
 	}
 	bPlaceFromPosition = Drag == EDrag::Resize;
 	Drag = EDrag::None;
+	DragPointerIndex = INDEX_NONE;
 	SaveState();
 }

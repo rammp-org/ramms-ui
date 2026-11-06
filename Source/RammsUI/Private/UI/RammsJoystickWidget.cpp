@@ -115,9 +115,18 @@ void URammsJoystickWidget::ResetToCenter()
 
 FReply URammsJoystickWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (bIsActive)
+	{
+		// Already held: a second finger landing here would otherwise take the
+		// thumb over, and then either finger lifting would let it go.
+		// Swallowed, so it does not reach the view behind either.
+		return FReply::Handled();
+	}
+
 	if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
 	{
 		bIsActive = true;
+		ActivePointerIndex = static_cast<int32>(InMouseEvent.GetPointerIndex());
 
 		if (ThumbImage)
 		{
@@ -136,24 +145,15 @@ FReply URammsJoystickWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 
 FReply URammsJoystickWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (IsActivePointer(InMouseEvent))
+	{
+		ReleaseThumb();
+		return FReply::Handled().ReleaseMouseCapture();
+	}
 	if (bIsActive)
 	{
-		bIsActive = false;
-
-		if (ThumbImage)
-		{
-			FSlateBrush Brush = ThumbImage->GetBrush();
-			Brush.TintColor = FSlateColor(ThumbColor);
-			ThumbImage->SetBrush(Brush);
-		}
-
-		if (bAutoCenter)
-		{
-			ResetToCenter();
-		}
-
-		OnReleased.Broadcast();
-		return FReply::Handled().ReleaseMouseCapture();
+		// Another finger lifting: the thumb stays where its own finger has it.
+		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
@@ -161,13 +161,50 @@ FReply URammsJoystickWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, 
 
 FReply URammsJoystickWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bIsActive)
+	if (IsActivePointer(InMouseEvent))
 	{
 		UpdateThumbPosition(InGeometry, InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition()));
 		return FReply::Handled();
 	}
+	if (bIsActive)
+	{
+		return FReply::Handled();
+	}
 
 	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+}
+
+void URammsJoystickWidget::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	// Capture can end without a button-up or a touch-end: the window loses
+	// focus, the panel holding the joystick is hidden mid-drag, or another
+	// widget takes the pointer. Still active, the thumb would keep its last
+	// deflection, and a drive joystick would keep driving.
+	if (bIsActive && CaptureLostEvent.PointerIndex == ActivePointerIndex)
+	{
+		ReleaseThumb();
+	}
+	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
+}
+
+void URammsJoystickWidget::ReleaseThumb()
+{
+	bIsActive = false;
+	ActivePointerIndex = INDEX_NONE;
+
+	if (ThumbImage)
+	{
+		FSlateBrush Brush = ThumbImage->GetBrush();
+		Brush.TintColor = FSlateColor(ThumbColor);
+		ThumbImage->SetBrush(Brush);
+	}
+
+	if (bAutoCenter)
+	{
+		ResetToCenter();
+	}
+
+	OnReleased.Broadcast();
 }
 
 void URammsJoystickWidget::UpdateThumbPosition(const FGeometry& InGeometry, FVector2D LocalPos)

@@ -2,6 +2,7 @@
 
 #include "UI/RammsCollapsibleContainer.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/CheckBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/CanvasPanelSlot.h"
@@ -144,6 +145,7 @@ void URammsCollapsibleContainer::EnsureScrollableContent()
 
 		ContentScrollBox = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("ContentScrollBox"));
 		ContentScrollBox->SetOrientation(EOrientation::Orient_Vertical);
+		ContentScrollBox->SetIsTouchScrollingEnabled(false); // see UpdateTouchScrolling
 
 		BoxParent->RemoveChild(ContentBox);
 		BoxParent->AddChild(ContentScrollBox);
@@ -186,6 +188,11 @@ void URammsCollapsibleContainer::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	BuildWidgetTree();
+	// Before its Slate widget exists; see UpdateTouchScrolling.
+	if (ContentScrollBox)
+	{
+		ContentScrollBox->SetIsTouchScrollingEnabled(false);
+	}
 }
 
 void URammsCollapsibleContainer::NativePreConstruct()
@@ -550,6 +557,75 @@ void URammsCollapsibleContainer::ApplyStyle_Implementation()
 	if (ContentScrollBox)
 	{
 		URammsUIStyle::ApplyScrollBarStyle(ContentScrollBox, Style->ScrollBar);
+	}
+}
+
+FReply URammsCollapsibleContainer::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Before the content sees the touch, so content added since the last one
+	// (control rows built at run time) presses the same way.
+	if (InMouseEvent.IsTouchEvent())
+	{
+		UseTapsInScrollingContent();
+		UpdateTouchScrolling();
+	}
+	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void URammsCollapsibleContainer::UpdateTouchScrolling()
+{
+	// Collapsed or animating, the content is clipped short of its size, so it
+	// only counts as overflowing when fully expanded.
+	if (ContentScrollBox && bEnableScrolling && bIsExpanded && !bIsAnimating && !ContentScrollBox->GetIsTouchScrollingEnabled()
+		&& ContentScrollBox->GetScrollOffsetOfEnd() > 1.0f)
+	{
+		ContentScrollBox->SetIsTouchScrollingEnabled(true);
+	}
+}
+
+void URammsCollapsibleContainer::UseTapsInScrollingContent()
+{
+	if (!ContentScrollBox)
+	{
+		return;
+	}
+	// The content's widgets, into nested user widgets (the content is
+	// usually one) as well.
+	TArray<UWidget*> Pending = { ContentScrollBox };
+	while (Pending.Num() > 0)
+	{
+		UWidget* Widget = Pending.Pop();
+		if (UButton* Button = Cast<UButton>(Widget))
+		{
+			if (Button->GetTouchMethod() != EButtonTouchMethod::PreciseTap)
+			{
+				Button->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+			}
+		}
+		else if (UCheckBox* CheckBox = Cast<UCheckBox>(Widget))
+		{
+			if (CheckBox->GetTouchMethod() != EButtonTouchMethod::PreciseTap)
+			{
+				CheckBox->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+			}
+		}
+		if (const UUserWidget* User = Cast<UUserWidget>(Widget))
+		{
+			if (User->WidgetTree && User->WidgetTree->RootWidget)
+			{
+				Pending.Add(User->WidgetTree->RootWidget);
+			}
+		}
+		else if (const UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+			{
+				if (UWidget* Child = Panel->GetChildAt(i))
+				{
+					Pending.Add(Child);
+				}
+			}
+		}
 	}
 }
 

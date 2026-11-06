@@ -475,18 +475,31 @@ FReply URammsSurfacePositionPad::NativeOnMouseButtonDown(const FGeometry& InGeom
 	{
 		return FReply::Unhandled();
 	}
+	return BeginDrag(InGeometry, InMouseEvent);
+}
+
+FReply URammsSurfacePositionPad::BeginDrag(const FGeometry& InGeometry, const FPointerEvent& InEvent)
+{
+	if (bDragging)
+	{
+		// One pointer steers. A second finger would otherwise have the target
+		// jump between the two, and either lifting would end the drag for both.
+		return FReply::Handled();
+	}
 	bDragging = true;
-	CommandAt(InGeometry, InMouseEvent.GetScreenSpacePosition());
+	DragPointerIndex = static_cast<int32>(InEvent.GetPointerIndex());
+	CommandAt(InGeometry, InEvent.GetScreenSpacePosition());
 	// Captured, or a drag that leaves the widget would silently stop steering
-	// while the button is still down.
+	// while the button (or finger) is still down; for a finger, the end event
+	// could not reliably clear the interaction either.
 	return FReply::Handled().CaptureMouse(TakeWidget());
 }
 
 FReply URammsSurfacePositionPad::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (!bDragging)
+	if (!IsDragPointer(InMouseEvent))
 	{
-		return FReply::Unhandled();
+		return bDragging ? FReply::Handled() : FReply::Unhandled();
 	}
 	CommandAt(InGeometry, InMouseEvent.GetScreenSpacePosition());
 	return FReply::Handled();
@@ -494,11 +507,12 @@ FReply URammsSurfacePositionPad::NativeOnMouseMove(const FGeometry& InGeometry, 
 
 FReply URammsSurfacePositionPad::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (!bDragging)
+	if (!IsDragPointer(InMouseEvent))
 	{
-		return FReply::Unhandled();
+		return bDragging ? FReply::Handled() : FReply::Unhandled();
 	}
 	bDragging = false;
+	DragPointerIndex = INDEX_NONE;
 
 	// Nothing is released. These are Position controls: letting go of the pad
 	// means "stop steering it", not "stop holding the pose" -- a lift that
@@ -508,26 +522,27 @@ FReply URammsSurfacePositionPad::NativeOnMouseButtonUp(const FGeometry& InGeomet
 
 FReply URammsSurfacePositionPad::NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InEvent)
 {
-	bDragging = true;
-	CommandAt(InGeometry, InEvent.GetScreenSpacePosition());
-	// Captured, like the mouse path: without it a finger that slides off the
-	// pad stops delivering moves here, so the drag dies mid-gesture and the
-	// end event cannot reliably clear the interaction either.
-	return FReply::Handled().CaptureMouse(TakeWidget());
+	return BeginDrag(InGeometry, InEvent);
 }
 
 FReply URammsSurfacePositionPad::NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InEvent)
 {
-	if (!bDragging)
-	{
-		return FReply::Unhandled();
-	}
-	CommandAt(InGeometry, InEvent.GetScreenSpacePosition());
-	return FReply::Handled();
+	return NativeOnMouseMove(InGeometry, InEvent);
 }
 
 FReply URammsSurfacePositionPad::NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InEvent)
 {
-	bDragging = false;
-	return FReply::Handled().ReleaseMouseCapture();
+	return NativeOnMouseButtonUp(InGeometry, InEvent);
+}
+
+void URammsSurfacePositionPad::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	// Capture can end without an up (focus lost, the panel hidden mid-drag):
+	// stop steering, as a lift would. Nothing is released, as with a lift.
+	if (bDragging && CaptureLostEvent.PointerIndex == DragPointerIndex)
+	{
+		bDragging = false;
+		DragPointerIndex = INDEX_NONE;
+	}
+	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
 }
