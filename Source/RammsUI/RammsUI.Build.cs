@@ -9,7 +9,7 @@ public class RammsUI : ModuleRules
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		PublicIncludePaths.AddRange(
-			new string[] {
+			new string[] { 
 				// ... add public include paths required here ...
 			}
 			);
@@ -37,7 +37,8 @@ public class RammsUI : ModuleRules
 				"RammsControl", // control-surface model the panels render / drive
 				"CameraCapture", // URammsCameraCapturePanel drives the capture subsystem
 				"DeveloperSettings", // URammsControlHUDSettings
-				"ProceduralMeshComponent"
+				"ProceduralMeshComponent",
+                "Json"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
