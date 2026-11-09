@@ -19,7 +19,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsDetectedObjectsJson, const F
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsUIEventsJson, const FString&, UIEventsJson);
 
 UCLASS()
-class RAMMS_API URammsBridgeSubsystem : public UEngineSubsystem
+class RAMMSUI_API URammsBridgeSubsystem : public UEngineSubsystem
 {
 	GENERATED_BODY()
 

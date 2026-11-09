@@ -17,7 +17,7 @@
 class URammsBridgeSubsystem;
 
 UCLASS()
-class RAMMS_API ARammsBridgeReceiver : public AActor
+class RAMMSUI_API ARammsBridgeReceiver : public AActor
 {
 	GENERATED_BODY()
 
