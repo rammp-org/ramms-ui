@@ -51,6 +51,11 @@ public class RammsUI : ModuleRules
 			}
 			);
 
+		if (Target.IsInPlatformGroup(UnrealPlatformGroup.Linux))
+		{
+			// RammsTouchLinux: SDL calls for touchscreens and the touch cancels UE's Linux layer drops (linked as Slate links it).
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "SDL3");
+		}
 
 		DynamicallyLoadedModuleNames.AddRange(
 			new string[]

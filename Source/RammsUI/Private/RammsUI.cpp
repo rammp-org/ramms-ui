@@ -1,6 +1,7 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "RammsUI.h"
+#include "RammsTouchLinux.h"
 #include "Core.h"
 #include "Modules/ModuleManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -25,12 +26,17 @@ void FRammsUIModule::StartupModule()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("RammsUI: Shader directory not found: %s"), *PluginShaderDir);
 	}
+
+	// Linux: with a touchscreen, keep relative mouse mode and text input off; end the touches SDL cancels;
+	// trace touch delivery on request.
+	RammsTouchLinux::Startup();
 }
 
 void FRammsUIModule::ShutdownModule()
 {
 	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
 	// we call this function before unloading the module.
+	RammsTouchLinux::Shutdown();
 }
 
 #undef LOCTEXT_NAMESPACE
