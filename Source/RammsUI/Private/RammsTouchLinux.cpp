@@ -44,16 +44,23 @@ namespace RammsTouchLinux
 			TEXT("Linux: log each finger as SDL delivers it, with its timing: 1 = a line at down, first move and up; ")
 				TEXT("2 = every event as well. 0 = off (default)."));
 
-		/** Events of one finger closer together than this were delivered
-		 *  together (a backlog let go at once), not as the finger moved. */
+		/** Events of one finger that reach the filter closer together than
+		 *  this were delivered together (a backlog let go at once), not as
+		 *  the finger moved. */
 		constexpr uint64 BurstNs = 1000000;
 
 		struct FFingerTrace
 		{
+			// Times are when the event reached the filter (SDL_GetTicksNS),
+			// which is when UE gets it: SDL calls the filter as the event pump
+			// queues the event. The event's own timestamp is when the device or
+			// X server made it, so a backlog delivered at once still looks spread
+			// out by it; the difference is the delivery lag.
 			uint64 DownNs = 0;
 			uint64 FirstMoveNs = 0;
 			uint64 LastNs = 0;
 			uint64 MaxGapNs = 0;
+			uint64 MaxLagNs = 0;
 			uint64 DownFrame = 0;
 			int32  Moves = 0;
 			int32  BurstEvents = 0;
@@ -107,7 +114,9 @@ namespace RammsTouchLinux
 		void TraceFinger(const SDL_Event& Event)
 		{
 			const SDL_TouchFingerEvent& Finger = Event.tfinger;
-			const uint64				Now = static_cast<uint64>(Event.common.timestamp);
+			const uint64				Now = SDL_GetTicksNS();
+			const uint64				Made = static_cast<uint64>(Event.common.timestamp);
+			const uint64				Lag = Now > Made ? Now - Made : 0;
 			const uint64				Id = static_cast<uint64>(Finger.fingerID);
 			const TPair<uint64, uint64> Key(static_cast<uint64>(Finger.touchID), Id);
 			FScopeLock					Lock(&TraceLock);
@@ -117,9 +126,10 @@ namespace RammsTouchLinux
 				FFingerTrace& Trace = Fingers.FindOrAdd(Key);
 				Trace = FFingerTrace();
 				Trace.DownNs = Trace.LastNs = Now;
+				Trace.MaxLagNs = Lag;
 				Trace.DownFrame = GFrameCounter;
-				UE_LOG(LogRammsTouch, Log, TEXT("finger %llu down at (%.3f, %.3f), frame %llu; %d down"),
-					Id, Finger.x, Finger.y, GFrameCounter, Fingers.Num());
+				UE_LOG(LogRammsTouch, Log, TEXT("finger %llu down at (%.3f, %.3f), frame %llu, %.1f ms after it was made; %d down"),
+					Id, Finger.x, Finger.y, GFrameCounter, Ms(Lag), Fingers.Num());
 				return;
 			}
 
@@ -131,6 +141,7 @@ namespace RammsTouchLinux
 			}
 			const uint64 Gap = Now - Trace->LastNs;
 			Trace->MaxGapNs = FMath::Max(Trace->MaxGapNs, Gap);
+			Trace->MaxLagNs = FMath::Max(Trace->MaxLagNs, Lag);
 			if (Gap < BurstNs)
 			{
 				++Trace->BurstEvents;
@@ -147,16 +158,16 @@ namespace RammsTouchLinux
 				}
 				else if (GTrace >= 2)
 				{
-					UE_LOG(LogRammsTouch, Log, TEXT("finger %llu move to (%.3f, %.3f), %.1f ms after the last"),
-						Id, Finger.x, Finger.y, Ms(Gap));
+					UE_LOG(LogRammsTouch, Log, TEXT("finger %llu move to (%.3f, %.3f), %.1f ms after the last, %.1f ms after it was made"),
+						Id, Finger.x, Finger.y, Ms(Gap), Ms(Lag));
 				}
 				return;
 			}
 
 			UE_LOG(LogRammsTouch, Log,
-				TEXT("finger %llu %s after %.1f ms: %d moves, the first at +%.1f ms; longest gap %.1f ms; %d events in bursts"),
+				TEXT("finger %llu %s after %.1f ms: %d moves, the first at +%.1f ms; longest gap %.1f ms; %d events in bursts; longest delivery lag %.1f ms"),
 				Id, Event.type == SDL_EVENT_FINGER_CANCELED ? TEXT("cancelled") : TEXT("up"), Ms(Now - Trace->DownNs), Trace->Moves,
-				Trace->Moves > 0 ? Ms(Trace->FirstMoveNs - Trace->DownNs) : 0.0, Ms(Trace->MaxGapNs), Trace->BurstEvents);
+				Trace->Moves > 0 ? Ms(Trace->FirstMoveNs - Trace->DownNs) : 0.0, Ms(Trace->MaxGapNs), Trace->BurstEvents, Ms(Trace->MaxLagNs));
 			Fingers.Remove(Key);
 		}
 
