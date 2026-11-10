@@ -20,11 +20,10 @@
  *   relative mode (the same as -norelativemousemode). The cursor is still
  *   hidden during capture; it just isn't locked in place.
  *
- * - SDL text input stays off on the app's windows (ramms.Touch.NoTextInput,
- *   read at startup). UE turns text input on for every window it creates,
- *   which tells the desktop a text field has focus, so GNOME opens its
- *   on-screen keyboard. Keys still arrive with it off; typed characters
- *   (text boxes, the console) do not.
+ * GNOME's on-screen keyboard is not handled here. SDL3 on X11 gives the X
+ * input method focus whenever a window gains focus, with text input on or
+ * off, and that is what opens the keyboard. Launch with XMODIFIERS=@im=none
+ * (the LinuxArm64 package's launch script does) so there's no input method.
  *
  * On any Linux machine:
  *

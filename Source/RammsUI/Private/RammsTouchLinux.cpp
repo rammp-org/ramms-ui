@@ -4,7 +4,6 @@
 
 #if PLATFORM_LINUX
 
-	#include "Containers/Ticker.h"
 	#include "CoreGlobals.h"
 	#include "HAL/IConsoleManager.h"
 	#include "HAL/PlatformMisc.h"
@@ -12,8 +11,6 @@
 	#include "Misc/CoreDelegates.h"
 	#include "Misc/Parse.h"
 	#include "Misc/ScopeLock.h"
-
-	#include <atomic>
 
 THIRD_PARTY_INCLUDES_START
 	#include <SDL3/SDL.h>
@@ -31,14 +28,6 @@ namespace RammsTouchLinux
 			GNoRelativeMouse,
 			TEXT("Linux, with a touchscreen: keep relative mouse mode off (as -norelativemousemode), since SDL3's grabs the ")
 				TEXT("window's touches on X11 and holds them back. Read at startup. 1 = on (default), 0 = off."),
-			ECVF_ReadOnly);
-
-		int32					GNoTextInput = 1;
-		FAutoConsoleVariableRef CVarNoTextInput(
-			TEXT("ramms.Touch.NoTextInput"),
-			GNoTextInput,
-			TEXT("Linux, with a touchscreen: keep SDL text input off, so the desktop doesn't open its on-screen keyboard; ")
-				TEXT("keys still arrive, typed characters don't. Read at startup. 1 = on (default), 0 = off."),
 			ECVF_ReadOnly);
 
 		int32					GCancelAsUp = 1;
@@ -80,13 +69,6 @@ namespace RammsTouchLinux
 		bool			bInstalled = false;
 		FDelegateHandle PostEngineInitHandle;
 
-		// Text input: the filter flags a window shown or focused, and the
-		// ticker turns text input off on the game thread (not from inside
-		// SDL's event dispatch).
-		bool					   bTextInputOff = false;
-		std::atomic<bool>		   bTextInputCheck{ false };
-		FTSTicker::FDelegateHandle TextInputTickerHandle;
-
 		double Ms(uint64 Ns)
 		{
 			return static_cast<double>(Ns) / 1.0e6;
@@ -120,27 +102,6 @@ namespace RammsTouchLinux
 			}
 			FPlatformMisc::SetEnvironmentVar(TEXT("UE_NORELATIVEMOUSEMODE"), TEXT("1"));
 			UE_LOG(LogRammsTouch, Log, TEXT("Touchscreen: relative mouse mode off, so SDL doesn't grab the window's touches (ramms.Touch.NoRelativeMouse 0 keeps it)"));
-		}
-
-		bool StopTextInput(float /*DeltaTime*/)
-		{
-			if (!bTextInputCheck.exchange(false))
-			{
-				return true;
-			}
-			int			 Count = 0;
-			SDL_Window** Windows = SDL_GetWindows(&Count);
-			for (int Index = 0; Index < Count; ++Index)
-			{
-				if (SDL_TextInputActive(Windows[Index]))
-				{
-					SDL_StopTextInput(Windows[Index]);
-					UE_LOG(LogRammsTouch, Log, TEXT("Touchscreen: text input off on window %u, so the desktop keeps its keyboard closed (ramms.Touch.NoTextInput 0 keeps it)"),
-						static_cast<uint32>(SDL_GetWindowID(Windows[Index])));
-				}
-			}
-			SDL_free(Windows);
-			return true;
 		}
 
 		void TraceFinger(const SDL_Event& Event)
@@ -239,14 +200,6 @@ namespace RammsTouchLinux
 						TraceMouseButton(*Event);
 					}
 					break;
-				case SDL_EVENT_WINDOW_SHOWN:
-				case SDL_EVENT_WINDOW_FOCUS_GAINED:
-					// A new window comes with text input on.
-					if (bTextInputOff)
-					{
-						bTextInputCheck = true;
-					}
-					break;
 				default:
 					break;
 			}
@@ -271,24 +224,15 @@ namespace RammsTouchLinux
 				PreviousUserData = nullptr;
 			}
 			const int32 Touchscreens = SDL_WasInit(SDL_INIT_VIDEO) ? CountTouchscreens() : 0;
-			if (Touchscreens > 0)
+			if (Touchscreens > 0 && GNoRelativeMouse)
 			{
-				if (GNoRelativeMouse)
-				{
-					KeepRelativeMouseOff();
-				}
-				if (GNoTextInput)
-				{
-					bTextInputOff = true;
-					bTextInputCheck = true;
-					TextInputTickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&StopTextInput));
-				}
+				KeepRelativeMouseOff();
 			}
 
 			SDL_SetEventFilter(&FilterEvent, nullptr);
 			bInstalled = true;
-			UE_LOG(LogRammsTouch, Log, TEXT("SDL touch filter installed (%d touchscreens; ramms.Touch.NoRelativeMouse %d, ramms.Touch.NoTextInput %d, ramms.Touch.CancelAsUp %d, ramms.Touch.Trace %d)"),
-				Touchscreens, GNoRelativeMouse, GNoTextInput, GCancelAsUp, GTrace);
+			UE_LOG(LogRammsTouch, Log, TEXT("SDL touch filter installed (%d touchscreens; ramms.Touch.NoRelativeMouse %d, ramms.Touch.CancelAsUp %d, ramms.Touch.Trace %d)"),
+				Touchscreens, GNoRelativeMouse, GCancelAsUp, GTrace);
 		}
 	} // namespace
 
@@ -308,12 +252,6 @@ namespace RammsTouchLinux
 	void Shutdown()
 	{
 		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
-		if (TextInputTickerHandle.IsValid())
-		{
-			FTSTicker::GetCoreTicker().RemoveTicker(TextInputTickerHandle);
-			TextInputTickerHandle.Reset();
-		}
-		bTextInputOff = false;
 		if (!bInstalled)
 		{
 			return;
