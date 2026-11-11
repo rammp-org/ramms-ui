@@ -39,6 +39,10 @@ class RAMMSUI_API URammsBoundingBoxOverlay : public URammsBaseWidget
 public:
 	// ── Configuration ───────────────────────────────────────────
 
+	/** Draw the built-in boxes, labels and centroids. Turn off when a Blueprint subclass draws its own. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
+	bool bDrawBoxes = true;
+
 	/** When true, LineThickness overrides the style's BoundingBoxLineThickness */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Appearance")
 	bool bOverrideLineThickness = false;
@@ -143,6 +147,18 @@ public:
 	/** Get the number of displayed boxes */
 	UFUNCTION(BlueprintPure, Category = "Bounding Box")
 	int32 GetBoxCount() const { return Boxes.Num(); }
+
+	/**
+	 * Map a normalized (0-1) image point to this overlay's local space, for placing child
+	 * widgets on the image. Pane picks the image in side-by-side view (0 = first).
+	 * Uses the last layout, so it returns zero before the overlay has been drawn once.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Bounding Box")
+	FVector2D NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane = 0) const;
+
+	/** Called whenever the detections change: set, cleared, or expired. Implement in a Blueprint subclass. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Bounding Box")
+	void OnDetectionsChanged(const TArray<FRammsBoundingBox>& NewBoxes);
 
 	// ── Delegates ───────────────────────────────────────────────
 

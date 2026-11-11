@@ -1747,9 +1747,12 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 	if (!BBoxOverlay && ImageContainerOverlay)
 	{
 		APlayerController* PC = GetOwningPlayer();
+		const TSubclassOf<URammsBoundingBoxOverlay> OverlayClass = BoundingBoxOverlayClass
+			? BoundingBoxOverlayClass
+			: TSubclassOf<URammsBoundingBoxOverlay>(URammsBoundingBoxOverlay::StaticClass());
 		BBoxOverlay = PC
-			? CreateWidget<URammsBoundingBoxOverlay>(PC)
-			: CreateWidget<URammsBoundingBoxOverlay>(this);
+			? CreateWidget<URammsBoundingBoxOverlay>(PC, OverlayClass)
+			: CreateWidget<URammsBoundingBoxOverlay>(this, OverlayClass);
 		if (BBoxOverlay)
 		{
 			// Configure before adding to tree (NativeConstruct reads these)
@@ -1810,7 +1813,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 	bBBoxOverlayEnabled = true;
 	if (BBoxOverlay)
 	{
-		BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+		BBoxOverlay->SetVisibility(bInteractiveBoundingBoxOverlay
+				? ESlateVisibility::SelfHitTestInvisible
+				: ESlateVisibility::HitTestInvisible);
 	}
 }
 

@@ -120,6 +120,7 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 		LastDetectionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	}
 	InvalidateLayoutAndVolatility();
+	OnDetectionsChanged(Boxes);
 }
 
 void URammsBoundingBoxOverlay::ClearDetections()
@@ -128,7 +129,25 @@ void URammsBoundingBoxOverlay::ClearDetections()
 	{
 		Boxes.Empty();
 		InvalidateLayoutAndVolatility();
+		OnDetectionsChanged(Boxes);
 	}
+}
+
+FVector2D URammsBoundingBoxOverlay::NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane) const
+{
+	// Same pane split as NativePaint, so child widgets line up with the drawn boxes.
+	const FVector2D FullSize = GetCachedGeometry().GetLocalSize();
+	const int32		EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
+	if (EffectivePanes <= 1)
+	{
+		return NormalizedPoint * FullSize;
+	}
+
+	const int32 ClampedPane = FMath::Clamp(Pane, 0, EffectivePanes - 1);
+	const float TotalGap = PaneGap * (EffectivePanes - 1);
+	const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
+	const float PaneOffset = ClampedPane * (PaneWidth + PaneGap);
+	return FVector2D(PaneOffset + NormalizedPoint.X * PaneWidth, NormalizedPoint.Y * FullSize.Y);
 }
 
 // ── Subsystem ────────────────────────────────────────────────────
@@ -277,7 +296,7 @@ int32 URammsBoundingBoxOverlay::NativePaint(const FPaintArgs& Args,
 	LayerId = Super::NativePaint(Args, AllottedGeometry, MyCullingRect,
 		OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 
-	if (Boxes.Num() == 0)
+	if (!bDrawBoxes || Boxes.Num() == 0)
 	{
 		return LayerId;
 	}

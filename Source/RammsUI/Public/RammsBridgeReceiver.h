@@ -5,7 +5,8 @@
 // outbound UIEventsJson property mirrors the subsystem so the preset subscription fires.
 //
 // Preset exposes:
-//   Functions:  UpdatePanel, UpdateDetectedObjects, UpdateWorldState, PollUIEvents
+//   Functions:  UpdatePanel, UpdateDetectedObjects, UpdateWorldState, OpenCameraFeed,
+//               CloseCameraFeed, PollUIEvents
 //   Property:   UIEventsJson
 
 #pragma once
@@ -36,6 +37,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void UpdateWorldState(const FString& WorldStateJSON);
+
+	/** Asks the UI to show the camera feed. Takes no parameters. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
+	void OpenCameraFeed();
+
+	/** Asks the UI to hide the camera feed. Takes no parameters. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
+	void CloseCameraFeed();
 
 	// ── Outbound (read by the bridge) ─────────────────────────────────
 

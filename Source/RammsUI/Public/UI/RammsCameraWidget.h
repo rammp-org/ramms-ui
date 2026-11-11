@@ -265,6 +265,21 @@ protected:
 		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "10.0"))
 	float DetectionLineThickness = 0.0f;
 
+	/**
+	 * Widget class created for the detection overlay. Pick a Blueprint subclass of
+	 * Bounding Box Overlay to customise it. None = the built-in C++ overlay.
+	 * Read once, when the overlay is first created.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	TSubclassOf<URammsBoundingBoxOverlay> BoundingBoxOverlayClass;
+
+	/**
+	 * Let widgets inside the overlay receive clicks and touches (for example buttons in a
+	 * Blueprint subclass). The overlay itself never blocks input either way.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	bool bInteractiveBoundingBoxOverlay = false;
+
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	bool bMaintainAspectRatio = true;
