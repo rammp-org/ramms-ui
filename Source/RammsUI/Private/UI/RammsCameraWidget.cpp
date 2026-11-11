@@ -1768,8 +1768,9 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			// Forward line thickness override
 			ApplyDetectionLineThicknessToOverlay();
 
-			// Set pane count based on current view mode
+			// Set panes based on current view mode, stacked like the side-by-side images
 			BBoxOverlay->PaneCount = (ViewMode == ERammsCameraViewMode::SideBySide) ? 2 : 1;
+			BBoxOverlay->bVerticalPanes = (ViewMode == ERammsCameraViewMode::SideBySide) && bSBSVertical;
 
 			// Propagate style
 			if (Style)
@@ -1813,9 +1814,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 	bBBoxOverlayEnabled = true;
 	if (BBoxOverlay)
 	{
-		BBoxOverlay->SetVisibility(bInteractiveBoundingBoxOverlay
-				? ESlateVisibility::SelfHitTestInvisible
-				: ESlateVisibility::HitTestInvisible);
+		BBoxOverlay->SetVisibility(GetBoundingBoxOverlayVisibility());
 	}
 }
 
@@ -2348,7 +2347,7 @@ void URammsCameraWidget::SetCameraCollapsed(bool bCollapsed)
 			{
 				BBoxOverlay->SubscribeToSubsystem();
 			}
-			BBoxOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+			BBoxOverlay->SetVisibility(GetBoundingBoxOverlayVisibility());
 		}
 	}
 
@@ -2889,13 +2888,15 @@ void URammsCameraWidget::ApplyViewModeLayout()
 			DataImage->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	// Update bbox overlay pane count for split view
+	// Update bbox overlay panes for split view: two panes, stacked like the images
 	if (BBoxOverlay)
 	{
 		const int32 NewPaneCount = bSBS ? 2 : 1;
-		if (BBoxOverlay->PaneCount != NewPaneCount)
+		const bool	bNewVerticalPanes = bSBS && bSBSVertical;
+		if (BBoxOverlay->PaneCount != NewPaneCount || BBoxOverlay->bVerticalPanes != bNewVerticalPanes)
 		{
 			BBoxOverlay->PaneCount = NewPaneCount;
+			BBoxOverlay->bVerticalPanes = bNewVerticalPanes;
 			BBoxOverlay->InvalidateLayoutAndVolatility();
 		}
 	}

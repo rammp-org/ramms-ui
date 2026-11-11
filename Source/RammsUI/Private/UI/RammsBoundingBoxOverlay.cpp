@@ -133,21 +133,39 @@ void URammsBoundingBoxOverlay::ClearDetections()
 	}
 }
 
+void URammsBoundingBoxOverlay::GetPaneRect(int32 Pane, const FVector2D& FullSize, FVector2D& OutOffset, FVector2D& OutSize) const
+{
+	const int32 EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
+	if (EffectivePanes <= 1)
+	{
+		OutOffset = FVector2D::ZeroVector;
+		OutSize = FullSize;
+		return;
+	}
+
+	// Equal panes along one axis, PaneGap apart: left to right, or top to bottom when bVerticalPanes.
+	const int32 ClampedPane = FMath::Clamp(Pane, 0, EffectivePanes - 1);
+	const float TotalGap = PaneGap * (EffectivePanes - 1);
+	if (bVerticalPanes)
+	{
+		const float PaneHeight = (FullSize.Y - TotalGap) / EffectivePanes;
+		OutOffset = FVector2D(0.0f, ClampedPane * (PaneHeight + PaneGap));
+		OutSize = FVector2D(FullSize.X, PaneHeight);
+	}
+	else
+	{
+		const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
+		OutOffset = FVector2D(ClampedPane * (PaneWidth + PaneGap), 0.0f);
+		OutSize = FVector2D(PaneWidth, FullSize.Y);
+	}
+}
+
 FVector2D URammsBoundingBoxOverlay::NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane) const
 {
 	// Same pane split as NativePaint, so child widgets line up with the drawn boxes.
-	const FVector2D FullSize = GetCachedGeometry().GetLocalSize();
-	const int32		EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
-	if (EffectivePanes <= 1)
-	{
-		return NormalizedPoint * FullSize;
-	}
-
-	const int32 ClampedPane = FMath::Clamp(Pane, 0, EffectivePanes - 1);
-	const float TotalGap = PaneGap * (EffectivePanes - 1);
-	const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
-	const float PaneOffset = ClampedPane * (PaneWidth + PaneGap);
-	return FVector2D(PaneOffset + NormalizedPoint.X * PaneWidth, NormalizedPoint.Y * FullSize.Y);
+	FVector2D Offset, Size;
+	GetPaneRect(Pane, GetCachedGeometry().GetLocalSize(), Offset, Size);
+	return Offset + NormalizedPoint * Size;
 }
 
 // ── Subsystem ────────────────────────────────────────────────────
@@ -309,16 +327,13 @@ int32 URammsBoundingBoxOverlay::NativePaint(const FPaintArgs& Args,
 
 	for (int32 Pane = 0; Pane < EffectivePanes; ++Pane)
 	{
-		// Compute pane geometry: each pane is an equal-width region
+		// Compute pane geometry: equal regions side by side, or stacked when bVerticalPanes
 		FGeometry PaneGeom = AllottedGeometry;
 		if (EffectivePanes > 1)
 		{
-			const float TotalGap = PaneGap * (EffectivePanes - 1);
-			const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
-			const float PaneOffset = Pane * (PaneWidth + PaneGap);
-			PaneGeom = AllottedGeometry.MakeChild(
-				FVector2D(PaneWidth, FullSize.Y),
-				FSlateLayoutTransform(FVector2D(PaneOffset, 0.0f)));
+			FVector2D PaneOffset, PaneSize;
+			GetPaneRect(Pane, FullSize, PaneOffset, PaneSize);
+			PaneGeom = AllottedGeometry.MakeChild(PaneSize, FSlateLayoutTransform(PaneOffset));
 		}
 
 		for (int32 i = 0; i < Boxes.Num(); ++i)

@@ -822,6 +822,13 @@ protected:
 	/** Whether the current SBS layout is vertical (top/bottom stacking for landscape images) */
 	bool bSBSVertical = false;
 
+	/** The detection overlay's visibility while shown: it never blocks input, and its children
+	 *  take clicks and touches only when bInteractiveBoundingBoxOverlay is set. */
+	ESlateVisibility GetBoundingBoxOverlayVisibility() const
+	{
+		return bInteractiveBoundingBoxOverlay ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::HitTestInvisible;
+	}
+
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;
 

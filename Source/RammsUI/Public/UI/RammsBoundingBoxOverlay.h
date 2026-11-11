@@ -127,6 +127,13 @@ public:
 		meta = (ClampMin = "0.0", ClampMax = "20.0"))
 	float PaneGap = 2.0f;
 
+	/**
+	 * Stack panes top to bottom instead of left to right. The camera widget sets this to match
+	 * its side-by-side layout, which stacks the images vertically when the widget is wider than tall.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Layout")
+	bool bVerticalPanes = false;
+
 	// ── API ─────────────────────────────────────────────────────
 
 	/**
@@ -155,6 +162,9 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Bounding Box")
 	FVector2D NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane = 0) const;
+
+	/** One pane's offset and size within an overlay of FullSize (PaneCount, PaneGap, bVerticalPanes). */
+	void GetPaneRect(int32 Pane, const FVector2D& FullSize, FVector2D& OutOffset, FVector2D& OutSize) const;
 
 	/** Called whenever the detections change: set, cleared, or expired. Implement in a Blueprint subclass. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Bounding Box")
