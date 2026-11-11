@@ -34,6 +34,27 @@ void URammsBoundingBoxOverlay::BuildWidgetTree()
 	}
 }
 
+void URammsBoundingBoxOverlay::ResetCachedWidgets()
+{
+	// The tree is being rebuilt: the pooled markers belong to the old marker layer
+	for (URammsDetectionMarker* Marker : Markers)
+	{
+		if (Marker)
+		{
+			Marker->RemoveFromParent();
+		}
+	}
+	Markers.Reset();
+	MarkerLayer = nullptr;
+	LastMarkerLayout = FMarkerLayoutKey();
+	bMarkersDirty = true;
+}
+
+UWidget* URammsBoundingBoxOverlay::GetRootWidgetForValidation()
+{
+	return MarkerLayer;
+}
+
 void URammsBoundingBoxOverlay::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -125,12 +146,24 @@ void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InD
 
 void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 {
-	if (!MarkerLayer || (!bMarkersDirty && LocalSize.Equals(LastMarkerLayoutSize, 0.5)))
+	if (!MarkerLayer)
+	{
+		return;
+	}
+	FMarkerLayoutKey Layout;
+	Layout.Size = LocalSize;
+	Layout.PaneCount = PaneCount;
+	Layout.PaneGap = PaneGap;
+	Layout.bVerticalPanes = bVerticalPanes;
+	Layout.Pane = MarkerPane;
+	Layout.Placement = MarkerPlacement;
+	Layout.MarkerClass = FObjectKey(MarkerWidgetClass.Get());
+	if (!bMarkersDirty && Layout.Matches(LastMarkerLayout))
 	{
 		return;
 	}
 	bMarkersDirty = false;
-	LastMarkerLayoutSize = LocalSize;
+	LastMarkerLayout = Layout;
 
 	// A different marker class: start the pool again
 	if (Markers.Num() > 0 && (!MarkerWidgetClass || !Markers[0] || Markers[0]->GetClass() != MarkerWidgetClass.Get()))

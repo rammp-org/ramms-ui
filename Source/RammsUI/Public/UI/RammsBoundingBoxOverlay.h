@@ -7,6 +7,7 @@
 #include "RammsDetectionTypes.h"
 #include "UI/RammsDetectionMarker.h"
 #include "Fonts/SlateFontInfo.h"
+#include "UObject/ObjectKey.h"
 #include "RammsBoundingBoxOverlay.generated.h"
 
 class UCanvasPanel;
@@ -211,6 +212,8 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void ApplyStyle_Implementation() override;
+	virtual void ResetCachedWidgets() override;
+	virtual UWidget* GetRootWidgetForValidation() override;
 
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
 		const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
@@ -238,10 +241,27 @@ private:
 	/** The detections changed since the markers were last placed */
 	bool bMarkersDirty = false;
 
-	/** Overlay size the markers were last placed for */
-	FVector2D LastMarkerLayoutSize = FVector2D::ZeroVector;
+	/** What the markers were last placed for: when any of it changes, they are placed again */
+	struct FMarkerLayoutKey
+	{
+		FVector2D						Size = FVector2D::ZeroVector;
+		int32							PaneCount = 0;
+		float							PaneGap = 0.0f;
+		bool							bVerticalPanes = false;
+		int32							Pane = 0;
+		ERammsDetectionMarkerPlacement	Placement = ERammsDetectionMarkerPlacement::Box;
+		FObjectKey						MarkerClass;
 
-	/** Give each detection a marker and place it (when the detections or the overlay's size changed) */
+		bool Matches(const FMarkerLayoutKey& Other) const
+		{
+			return Size.Equals(Other.Size, 0.5) && PaneCount == Other.PaneCount && FMath::IsNearlyEqual(PaneGap, Other.PaneGap)
+				&& bVerticalPanes == Other.bVerticalPanes && Pane == Other.Pane && Placement == Other.Placement
+				&& MarkerClass == Other.MarkerClass;
+		}
+	};
+	FMarkerLayoutKey LastMarkerLayout;
+
+	/** Give each detection a marker and place it (when the detections, the overlay's size, its panes or the marker settings changed) */
 	void UpdateMarkers(const FVector2D& LocalSize);
 
 	/** Subsystem detection handler */

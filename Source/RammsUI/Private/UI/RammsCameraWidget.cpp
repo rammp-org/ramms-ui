@@ -1173,6 +1173,7 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 void URammsCameraWidget::SetTexture(UTexture* Texture)
 {
 	CurrentTexture = Texture;
+	CurrentTextureStreamID = StreamID;
 	UpdateDisplayedImages();
 }
 
@@ -1862,7 +1863,8 @@ bool URammsCameraWidget::IsBoundingBoxOverlayVisible() const
 
 FVector2D URammsCameraWidget::GetImageSize() const
 {
-	return CurrentTexture
+	// Zero until the current stream's first frame: after SetStreamID the last frame is the old camera's
+	return CurrentTexture && CurrentTextureStreamID == StreamID
 		? FVector2D(CurrentTexture->GetSurfaceWidth(), CurrentTexture->GetSurfaceHeight())
 		: FVector2D::ZeroVector;
 }
@@ -2055,6 +2057,7 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 				CameraImage ? TEXT("valid") : TEXT("null"));
 		}
 		CurrentTexture = Texture;
+		CurrentTextureStreamID = InStreamID;
 
 		// Auto-detect aspect ratio from incoming RGB texture
 		if (bMaintainAspectRatio && bAutoDetectAspectRatio && Texture)

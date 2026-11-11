@@ -390,6 +390,9 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture> CurrentTexture;
 
+	/** The stream CurrentTexture came from: GetImageSize ignores a texture left from the stream before StreamID */
+	FString CurrentTextureStreamID;
+
 	/** Current data texture (e.g. depth, mask, flow — UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture> CurrentDataTexture;
