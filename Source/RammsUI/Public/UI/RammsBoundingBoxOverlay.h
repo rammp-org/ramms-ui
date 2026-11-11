@@ -5,8 +5,11 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "RammsDetectionTypes.h"
+#include "UI/RammsDetectionMarker.h"
 #include "Fonts/SlateFontInfo.h"
 #include "RammsBoundingBoxOverlay.generated.h"
+
+class UCanvasPanel;
 
 /**
  * How to assign colors to boxes that don't have a custom color.
@@ -134,6 +137,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Layout")
 	bool bVerticalPanes = false;
 
+	// ── Markers ─────────────────────────────────────────────────
+
+	/**
+	 * Widget placed on each detection, for example a tappable outline with the object's label
+	 * (a Blueprint subclass of Ramms Detection Marker). None = no markers. Markers are reused
+	 * from one update to the next and follow the overlay's size.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers")
+	TSubclassOf<URammsDetectionMarker> MarkerWidgetClass;
+
+	/** Box: a marker fills its detection's box. Centroid: it keeps its own size, centred on the detection. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers")
+	ERammsDetectionMarkerPlacement MarkerPlacement = ERammsDetectionMarkerPlacement::Box;
+
+	/** The pane markers sit on in side-by-side view (0 = the first image). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers", meta = (ClampMin = "0", ClampMax = "3"))
+	int32 MarkerPane = 0;
+
 	// ── API ─────────────────────────────────────────────────────
 
 	/**
@@ -205,6 +226,23 @@ private:
 
 	/** Whether subscribed to subsystem */
 	bool bSubscribed = false;
+
+	/** Holds the markers, above the drawn boxes (built by BuildWidgetTree; none in a Blueprint subclass with its own tree) */
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> MarkerLayer;
+
+	/** One marker per detection, reused across updates; extras are collapsed */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URammsDetectionMarker>> Markers;
+
+	/** The detections changed since the markers were last placed */
+	bool bMarkersDirty = false;
+
+	/** Overlay size the markers were last placed for */
+	FVector2D LastMarkerLayoutSize = FVector2D::ZeroVector;
+
+	/** Give each detection a marker and place it (when the detections or the overlay's size changed) */
+	void UpdateMarkers(const FVector2D& LocalSize);
 
 	/** Subsystem detection handler */
 	UFUNCTION()

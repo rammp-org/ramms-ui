@@ -3,7 +3,10 @@
 #include "UI/RammsBoundingBoxOverlay.h"
 #include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Styling/CoreStyle.h"
 #include "Rendering/SlateRenderer.h"
@@ -17,10 +20,18 @@ void URammsBoundingBoxOverlay::BuildWidgetTree()
 		return;
 	}
 
-	// Minimal tree: just an overlay that fills the parent.
-	// All drawing is done in NativePaint.
+	// Minimal tree: an overlay that fills the parent, holding the marker layer.
+	// The boxes themselves are drawn in NativePaint.
 	UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("BBoxRoot"));
 	WidgetTree->RootWidget = Root;
+
+	MarkerLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("MarkerLayer"));
+	MarkerLayer->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (UOverlaySlot* LayerSlot = Root->AddChildToOverlay(MarkerLayer))
+	{
+		LayerSlot->SetHorizontalAlignment(HAlign_Fill);
+		LayerSlot->SetVerticalAlignment(VAlign_Fill);
+	}
 }
 
 void URammsBoundingBoxOverlay::NativeConstruct()
@@ -108,6 +119,96 @@ void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InD
 			ClearDetections();
 		}
 	}
+
+	UpdateMarkers(MyGeometry.GetLocalSize());
+}
+
+void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
+{
+	if (!MarkerLayer || (!bMarkersDirty && LocalSize.Equals(LastMarkerLayoutSize, 0.5)))
+	{
+		return;
+	}
+	bMarkersDirty = false;
+	LastMarkerLayoutSize = LocalSize;
+
+	// A different marker class: start the pool again
+	if (Markers.Num() > 0 && (!MarkerWidgetClass || !Markers[0] || Markers[0]->GetClass() != MarkerWidgetClass.Get()))
+	{
+		for (URammsDetectionMarker* Marker : Markers)
+		{
+			if (Marker)
+			{
+				Marker->RemoveFromParent();
+			}
+		}
+		Markers.Reset();
+	}
+
+	const int32 Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
+	FVector2D	PaneOffset, PaneSize;
+	GetPaneRect(MarkerPane, LocalSize, PaneOffset, PaneSize);
+
+	for (int32 i = 0; i < Wanted; ++i)
+	{
+		if (i >= Markers.Num())
+		{
+			APlayerController*	   PC = GetOwningPlayer();
+			URammsDetectionMarker* NewMarker = PC
+				? CreateWidget<URammsDetectionMarker>(PC, MarkerWidgetClass)
+				: CreateWidget<URammsDetectionMarker>(this, MarkerWidgetClass);
+			if (!NewMarker)
+			{
+				break;
+			}
+			MarkerLayer->AddChildToCanvas(NewMarker);
+			Markers.Add(NewMarker);
+		}
+
+		URammsDetectionMarker*	 Marker = Markers[i];
+		const FRammsBoundingBox& Box = Boxes[i];
+		Marker->SetDetection(Box);
+		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+		UCanvasPanelSlot* MarkerSlot = Cast<UCanvasPanelSlot>(Marker->Slot);
+		if (!MarkerSlot)
+		{
+			continue;
+		}
+		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		{
+			MarkerSlot->SetAutoSize(true);
+			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
+		}
+		else
+		{
+			// The box, or the bounds of a polygon's points
+			FVector2D Min = Box.Position;
+			FVector2D Max = Box.Position + Box.Size;
+			if (Box.Shape == ERammsDetectionShape::Polygon && Box.PolygonPoints.Num() > 0)
+			{
+				Min = Max = Box.PolygonPoints[0];
+				for (const FVector2D& Point : Box.PolygonPoints)
+				{
+					Min = FVector2D::Min(Min, Point);
+					Max = FVector2D::Max(Max, Point);
+				}
+			}
+			MarkerSlot->SetAutoSize(false);
+			MarkerSlot->SetAlignment(FVector2D::ZeroVector);
+			MarkerSlot->SetPosition(PaneOffset + Min * PaneSize);
+			MarkerSlot->SetSize((Max - Min) * PaneSize);
+		}
+	}
+
+	for (int32 i = Wanted; i < Markers.Num(); ++i)
+	{
+		if (Markers[i])
+		{
+			Markers[i]->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 }
 
 // ── API ──────────────────────────────────────────────────────────
@@ -119,6 +220,7 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	{
 		LastDetectionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	}
+	bMarkersDirty = true;
 	InvalidateLayoutAndVolatility();
 	OnDetectionsChanged(Boxes);
 }
@@ -128,6 +230,7 @@ void URammsBoundingBoxOverlay::ClearDetections()
 	if (Boxes.Num() > 0)
 	{
 		Boxes.Empty();
+		bMarkersDirty = true;
 		InvalidateLayoutAndVolatility();
 		OnDetectionsChanged(Boxes);
 	}
