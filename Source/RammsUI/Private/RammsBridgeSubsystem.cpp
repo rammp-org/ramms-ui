@@ -25,6 +25,7 @@ void URammsBridgeSubsystem::Deinitialize()
 {
 	OnPanelJson.Clear();
 	OnDetectedObjectsJson.Clear();
+	OnCameraFeedRequested.Clear();
 	OnUIEventsJsonChanged.Clear();
 	RecentEvents.Empty();
 	Super::Deinitialize();
@@ -40,6 +41,12 @@ void URammsBridgeSubsystem::BroadcastPanelJson(const FString& PanelJson)
 void URammsBridgeSubsystem::BroadcastDetectedObjectsJson(const FString& DetectedObjectsJson)
 {
 	OnDetectedObjectsJson.Broadcast(DetectedObjectsJson);
+}
+
+void URammsBridgeSubsystem::SetCameraFeedOpen(bool bOpen)
+{
+	bCameraFeedOpen = bOpen;
+	OnCameraFeedRequested.Broadcast(bOpen);
 }
 
 // ── Outbound ──────────────────────────────────────────────────────
@@ -104,7 +111,10 @@ void URammsBridgeSubsystem::GetEventsSince(int32 SinceSequence, int32& OutLatest
 
 void URammsBridgeSubsystem::NotifyPropertyChanged(UObject* Object, FName PropertyName)
 {
-#if WITH_EDITOR
+	// Remote Control preset subscriptions run in -game and packaged builds too. The editor learns of the change
+	// from OnObjectPropertyChanged, which exists only WITH_EDITOR; game builds have no such delegate, and Remote
+	// Control polls watched properties there instead (RemoteControl.FramesBetweenPropertyWatch), so they need
+	// nothing here.
 	if (!Object)
 	{
 		return;
@@ -112,13 +122,14 @@ void URammsBridgeSubsystem::NotifyPropertyChanged(UObject* Object, FName Propert
 
 	if (FProperty* Property = Object->GetClass()->FindPropertyByName(PropertyName))
 	{
+#if WITH_EDITOR
 		FPropertyChangedEvent ChangedEvent(Property, EPropertyChangeType::ValueSet);
 		FCoreUObjectDelegates::OnObjectPropertyChanged.Broadcast(Object, ChangedEvent);
+#endif
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Bridge] NotifyPropertyChanged: '%s' has no property '%s'"),
 			*Object->GetName(), *PropertyName.ToString());
 	}
-#endif
 }

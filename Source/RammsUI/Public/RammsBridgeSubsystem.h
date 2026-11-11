@@ -17,6 +17,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsPanelJson, const FString&, PanelJson);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsDetectedObjectsJson, const FString&, DetectedObjectsJson);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsUIEventsJson, const FString&, UIEventsJson);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRammsCameraFeedRequested, bool, bOpen);
 
 UCLASS()
 class RAMMSUI_API URammsBridgeSubsystem : public UEngineSubsystem
@@ -41,6 +42,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void BroadcastDetectedObjectsJson(const FString& DetectedObjectsJson);
+
+	/** Fired when the bridge asks to open (true) or close (false) the camera feed. The UI binds and shows/hides it. */
+	UPROPERTY(BlueprintAssignable, Category = "Ramms Bridge|Inbound")
+	FOnRammsCameraFeedRequested OnCameraFeedRequested;
+
+	/** Records the requested state and fires OnCameraFeedRequested. Fires even if the state is unchanged. */
+	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
+	void SetCameraFeedOpen(bool bOpen);
+
+	/** Last state the bridge asked for. Lets a widget created later start in the right state. */
+	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
+	bool IsCameraFeedOpen() const { return bCameraFeedOpen; }
 
 	// ── Outbound (UE -> bridge) ───────────────────────────────────────
 
@@ -83,6 +96,7 @@ private:
 	TArray<FBufferedEvent> RecentEvents;
 	FString CurrentUIEventsJson = TEXT("{\"latest_seq\":0,\"events\":[]}");
 	int32 Sequence = 0;
+	bool bCameraFeedOpen = false;
 
 	static constexpr int32 MaxRecentEvents = 16;
 };

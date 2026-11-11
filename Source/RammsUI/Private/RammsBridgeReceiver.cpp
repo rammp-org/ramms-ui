@@ -51,6 +51,26 @@ void ARammsBridgeReceiver::UpdateWorldState(const FString& WorldStateJSON)
 	UE_LOG(LogTemp, Log, TEXT("[Bridge] UpdateWorldState (%s): %s"), *GetWorldLabel(), *WorldStateJSON);
 }
 
+void ARammsBridgeReceiver::OpenCameraFeed()
+{
+	UE_LOG(LogTemp, Log, TEXT("[Bridge] OpenCameraFeed (%s)"), *GetWorldLabel());
+
+	if (URammsBridgeSubsystem* Bridge = GetBridge())
+	{
+		Bridge->SetCameraFeedOpen(true);
+	}
+}
+
+void ARammsBridgeReceiver::CloseCameraFeed()
+{
+	UE_LOG(LogTemp, Log, TEXT("[Bridge] CloseCameraFeed (%s)"), *GetWorldLabel());
+
+	if (URammsBridgeSubsystem* Bridge = GetBridge())
+	{
+		Bridge->SetCameraFeedOpen(false);
+	}
+}
+
 // ── Outbound ──────────────────────────────────────────────────────
 
 void ARammsBridgeReceiver::PollUIEvents(int32 SinceSequence, int32& LatestSequence, TArray<FString>& Events)

@@ -265,6 +265,21 @@ protected:
 		meta = (EditCondition = "bShowDetectionOverlay", ClampMin = "0.0", ClampMax = "10.0"))
 	float DetectionLineThickness = 0.0f;
 
+	/**
+	 * Widget class created for the detection overlay. Pick a Blueprint subclass of
+	 * Bounding Box Overlay to customise it. None = the built-in C++ overlay.
+	 * Read once, when the overlay is first created.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	TSubclassOf<URammsBoundingBoxOverlay> BoundingBoxOverlayClass;
+
+	/**
+	 * Let widgets inside the overlay receive clicks and touches (for example buttons in a
+	 * Blueprint subclass). The overlay itself never blocks input either way.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	bool bInteractiveBoundingBoxOverlay = false;
+
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	bool bMaintainAspectRatio = true;
@@ -806,6 +821,13 @@ protected:
 
 	/** Whether the current SBS layout is vertical (top/bottom stacking for landscape images) */
 	bool bSBSVertical = false;
+
+	/** The detection overlay's visibility while shown: it never blocks input, and its children
+	 *  take clicks and touches only when bInteractiveBoundingBoxOverlay is set. */
+	ESlateVisibility GetBoundingBoxOverlayVisibility() const
+	{
+		return bInteractiveBoundingBoxOverlay ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::HitTestInvisible;
+	}
 
 	/** Cached title bar width for UpdateHeaderLayout — skip re-measurement when unchanged */
 	float CachedHeaderCheckWidth = -1.0f;
