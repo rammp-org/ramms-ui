@@ -178,28 +178,68 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		Markers.Reset();
 	}
 
+	// Each object keeps its marker, by Detection.ID, however the detections are ordered, so a
+	// press on one marker always ends on the same object. Markers without an ID can't send a
+	// tap, and are reused in order.
+	TMap<FName, URammsDetectionMarker*>	   ByID;
+	TArray<URammsDetectionMarker*>		   Unkeyed;
+	for (URammsDetectionMarker* Marker : Markers)
+	{
+		if (!Marker)
+		{
+			continue;
+		}
+		const FName ID = Marker->Detection.ID;
+		if (!ID.IsNone() && !ByID.Contains(ID))
+		{
+			ByID.Add(ID, Marker);
+		}
+		else if (ID.IsNone())
+		{
+			Unkeyed.Add(Marker);
+		}
+		else
+		{
+			Marker->RemoveFromParent();
+		}
+	}
+
+	TArray<TObjectPtr<URammsDetectionMarker>> Placed;
 	const int32 Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
 	FVector2D	PaneOffset, PaneSize;
 	GetPaneRect(MarkerPane, LocalSize, PaneOffset, PaneSize);
 
+	int32 NextUnkeyed = 0;
 	for (int32 i = 0; i < Wanted; ++i)
 	{
-		if (i >= Markers.Num())
+		const FRammsBoundingBox& Box = Boxes[i];
+		URammsDetectionMarker*	 Marker = nullptr;
+		if (!Box.ID.IsNone())
 		{
-			APlayerController*	   PC = GetOwningPlayer();
-			URammsDetectionMarker* NewMarker = PC
+			if (URammsDetectionMarker** Found = ByID.Find(Box.ID))
+			{
+				Marker = *Found;
+				ByID.Remove(Box.ID);
+			}
+		}
+		else if (NextUnkeyed < Unkeyed.Num())
+		{
+			Marker = Unkeyed[NextUnkeyed++];
+		}
+		if (!Marker)
+		{
+			APlayerController* PC = GetOwningPlayer();
+			Marker = PC
 				? CreateWidget<URammsDetectionMarker>(PC, MarkerWidgetClass)
 				: CreateWidget<URammsDetectionMarker>(this, MarkerWidgetClass);
-			if (!NewMarker)
+			if (!Marker)
 			{
 				break;
 			}
-			MarkerLayer->AddChildToCanvas(NewMarker);
-			Markers.Add(NewMarker);
+			MarkerLayer->AddChildToCanvas(Marker);
 		}
+		Placed.Add(Marker);
 
-		URammsDetectionMarker*	 Marker = Markers[i];
-		const FRammsBoundingBox& Box = Boxes[i];
 		Marker->SetDetection(Box);
 		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
@@ -213,35 +253,62 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 			MarkerSlot->SetAutoSize(true);
 			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
+			continue;
+		}
+
+		// The box, in pane pixels: a rectangle's corners, a rotated rectangle's corners turned
+		// about its centre the way DrawRotatedRectBox draws them, or a polygon's points
+		TArray<FVector2D, TInlineAllocator<8>> Points;
+		if (Box.Shape == ERammsDetectionShape::Polygon && Box.PolygonPoints.Num() > 0)
+		{
+			for (const FVector2D& Point : Box.PolygonPoints)
+			{
+				Points.Add(Point * PaneSize);
+			}
+		}
+		else if (Box.Shape == ERammsDetectionShape::RotatedRect)
+		{
+			const FVector2D Center = Box.GetCenter() * PaneSize;
+			const FVector2D Half = Box.Size * PaneSize * 0.5;
+			const double	Rad = FMath::DegreesToRadians(Box.AngleDegrees);
+			const double	CosA = FMath::Cos(Rad);
+			const double	SinA = FMath::Sin(Rad);
+			for (const FVector2D& Corner : { FVector2D(-Half.X, -Half.Y), FVector2D(Half.X, -Half.Y), FVector2D(Half.X, Half.Y), FVector2D(-Half.X, Half.Y) })
+			{
+				Points.Add(Center + FVector2D(Corner.X * CosA - Corner.Y * SinA, Corner.X * SinA + Corner.Y * CosA));
+			}
 		}
 		else
 		{
-			// The box, or the bounds of a polygon's points
-			FVector2D Min = Box.Position;
-			FVector2D Max = Box.Position + Box.Size;
-			if (Box.Shape == ERammsDetectionShape::Polygon && Box.PolygonPoints.Num() > 0)
-			{
-				Min = Max = Box.PolygonPoints[0];
-				for (const FVector2D& Point : Box.PolygonPoints)
-				{
-					Min = FVector2D::Min(Min, Point);
-					Max = FVector2D::Max(Max, Point);
-				}
-			}
-			MarkerSlot->SetAutoSize(false);
-			MarkerSlot->SetAlignment(FVector2D::ZeroVector);
-			MarkerSlot->SetPosition(PaneOffset + Min * PaneSize);
-			MarkerSlot->SetSize((Max - Min) * PaneSize);
+			Points.Add(Box.Position * PaneSize);
+			Points.Add((Box.Position + Box.Size) * PaneSize);
 		}
+		FVector2D Min = Points[0];
+		FVector2D Max = Points[0];
+		for (const FVector2D& Point : Points)
+		{
+			Min = FVector2D::Min(Min, Point);
+			Max = FVector2D::Max(Max, Point);
+		}
+		MarkerSlot->SetAutoSize(false);
+		MarkerSlot->SetAlignment(FVector2D::ZeroVector);
+		MarkerSlot->SetPosition(PaneOffset + Min);
+		MarkerSlot->SetSize(Max - Min);
 	}
 
-	for (int32 i = Wanted; i < Markers.Num(); ++i)
+	// An object that has gone loses its marker: removed rather than kept for another object,
+	// so a press on it can't end as a tap on something else
+	for (const TPair<FName, URammsDetectionMarker*>& Gone : ByID)
 	{
-		if (Markers[i])
-		{
-			Markers[i]->SetVisibility(ESlateVisibility::Collapsed);
-		}
+		Gone.Value->RemoveFromParent();
 	}
+	// Spare markers without an ID are kept, collapsed, for later updates
+	for (int32 i = NextUnkeyed; i < Unkeyed.Num(); ++i)
+	{
+		Unkeyed[i]->SetVisibility(ESlateVisibility::Collapsed);
+		Placed.Add(Unkeyed[i]);
+	}
+	Markers = MoveTemp(Placed);
 }
 
 // ── API ──────────────────────────────────────────────────────────

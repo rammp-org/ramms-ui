@@ -142,8 +142,8 @@ public:
 
 	/**
 	 * Widget placed on each detection, for example a tappable outline with the object's label
-	 * (a Blueprint subclass of Ramms Detection Marker). None = no markers. Markers are reused
-	 * from one update to the next and follow the overlay's size.
+	 * (a Blueprint subclass of Ramms Detection Marker). None = no markers. Each object keeps
+	 * its marker from one update to the next (by its ID), and markers follow the overlay's size.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers")
 	TSubclassOf<URammsDetectionMarker> MarkerWidgetClass;
@@ -234,7 +234,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> MarkerLayer;
 
-	/** One marker per detection, reused across updates; extras are collapsed */
+	/** One marker per detection, kept for the same ID across updates; spare markers without an ID are collapsed */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<URammsDetectionMarker>> Markers;
 
