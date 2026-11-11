@@ -111,7 +111,10 @@ void URammsBridgeSubsystem::GetEventsSince(int32 SinceSequence, int32& OutLatest
 
 void URammsBridgeSubsystem::NotifyPropertyChanged(UObject* Object, FName PropertyName)
 {
-	// Not editor-only: Remote Control preset subscriptions also run in -game and packaged builds.
+	// Remote Control preset subscriptions run in -game and packaged builds too. The editor learns of the change
+	// from OnObjectPropertyChanged, which exists only WITH_EDITOR; game builds have no such delegate, and Remote
+	// Control polls watched properties there instead (RemoteControl.FramesBetweenPropertyWatch), so they need
+	// nothing here.
 	if (!Object)
 	{
 		return;
@@ -119,8 +122,10 @@ void URammsBridgeSubsystem::NotifyPropertyChanged(UObject* Object, FName Propert
 
 	if (FProperty* Property = Object->GetClass()->FindPropertyByName(PropertyName))
 	{
+#if WITH_EDITOR
 		FPropertyChangedEvent ChangedEvent(Property, EPropertyChangeType::ValueSet);
 		FCoreUObjectDelegates::OnObjectPropertyChanged.Broadcast(Object, ChangedEvent);
+#endif
 	}
 	else
 	{
