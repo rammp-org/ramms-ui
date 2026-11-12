@@ -758,7 +758,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
 	ERammsCameraStreamSet GetStreamSet() const { return StreamSet; }
 
-	/** Read the stream set from Ramms Camera Streams again and restart the streams (after changing the settings at runtime). */
+	/** Read the stream set from Ramms Camera Streams again and restart the streams (after changing the settings at runtime). Custom: clears the set's data streams only. */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
 	void ApplyStreamSet();
 
@@ -797,6 +797,7 @@ protected:
 	/** The last bridge push this camera applied, and the frame size it was placed for (re-applied when that changes) */
 	FString	  LastBridgeDetectionsJson;
 	FVector2D BridgeDetectionsImageSize = FVector2D::ZeroVector;
+	int32	  BridgeDetectionsCount = 0;
 
 	/** Build the widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;

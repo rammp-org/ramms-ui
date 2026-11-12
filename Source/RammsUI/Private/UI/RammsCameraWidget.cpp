@@ -1866,6 +1866,8 @@ void URammsCameraWidget::HideBoundingBoxOverlay()
 
 void URammsCameraWidget::SetDetections(const TArray<FRammsBoundingBox>& InBoxes)
 {
+	// Detections set from elsewhere replace the bridge's: its kept push mustn't be placed again over them
+	LastBridgeDetectionsJson.Empty();
 	if (!BBoxOverlay)
 	{
 		ShowBoundingBoxOverlay();
@@ -1879,6 +1881,7 @@ void URammsCameraWidget::SetDetections(const TArray<FRammsBoundingBox>& InBoxes)
 
 void URammsCameraWidget::ClearDetections()
 {
+	LastBridgeDetectionsJson.Empty();
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->ClearDetections();
@@ -2003,7 +2006,9 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& DetectedObjectsJs
 				continue;
 			}
 
-			// x_min, y_min, x_max, y_max; all zero means no box, then the centroid alone places it
+			// x_min, y_min, x_max, y_max; all zero means no box, then the centroid alone places it. A
+			// centroid of exactly (0, 0) with no box is skipped: the orchestrator sends that when it has
+			// no box for an object (its "centroid" is [0, 0] when "box" is unset), not an object at the corner
 			double BoxValues[4] = { 0.0, 0.0, 0.0, 0.0 };
 			double CentroidValues[2] = { 0.0, 0.0 };
 			const bool bHasBox = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("box"), BoxKeys, 4, BoxValues)
@@ -2055,6 +2060,7 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& DetectedObjectsJs
 	}
 	LastBridgeDetectionsJson = DetectedObjectsJson;
 	BridgeDetectionsImageSize = GetImageSize();
+	BridgeDetectionsCount = Boxes.Num();
 	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] Bridge detections (stream_id '%s'): %d of this camera's"), *GetName(), *PushSource, Boxes.Num());
 	return Boxes.Num();
 }
@@ -2120,6 +2126,9 @@ void URammsCameraWidget::ApplyStreamSet()
 {
 	if (StreamSet == ERammsCameraStreamSet::Custom)
 	{
+		// The widget's own streams stay as they are; only the set's list of data streams goes
+		DataStreams.Reset();
+		DataStreamIndex = 0;
 		return;
 	}
 	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
@@ -2345,8 +2354,10 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 
 		UpdateDisplayedImages();
 
-		// Pixel boxes from before this frame size (the fallback size, before the first frame) are placed again
-		if (!LastBridgeDetectionsJson.IsEmpty() && !GetImageSize().Equals(BridgeDetectionsImageSize))
+		// Pixel boxes from before this frame size (the fallback size, before the first frame) are placed again,
+		// while the overlay still shows that push (not cleared, expired or replaced since)
+		if (!LastBridgeDetectionsJson.IsEmpty() && !GetImageSize().Equals(BridgeDetectionsImageSize)
+			&& BBoxOverlay && BBoxOverlay->GetBoxCount() == BridgeDetectionsCount)
 		{
 			ApplyBridgeDetections(LastBridgeDetectionsJson);
 		}
