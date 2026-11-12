@@ -22,6 +22,7 @@
 #include "RammsDetectionTypes.h"
 #include "RammsCameraTypes.h"
 #include "UI/RammsDetectionMarker.h"
+#include "RammsCameraStreamSettings.h"
 #include "RammsCameraWidget.generated.h"
 
 class UCanvasPanelSlot;
@@ -120,6 +121,15 @@ protected:
 	/** Automatically find and use the first ARammsCameraProviderBase in the level if no provider is set */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	bool bAutoFindProvider = true;
+
+	/**
+	 * Where this camera's streams come from. Scene / Engine Overlay: Project Settings > Ramms Camera
+	 * Streams (its image, its extra images, which of the bridge's objects are its), read when the
+	 * widget is constructed, in place of StreamID, DataStreamID, DataStreamConfig and
+	 * BridgeDetectionSources. Custom: those properties of this widget.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
+	ERammsCameraStreamSet StreamSet = ERammsCameraStreamSet::Custom;
 
 	/** Stream ID to display (e.g., "camera/wrist/color") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
@@ -741,6 +751,31 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	bool IsBridgeDetectionSource(const FString& Source) const;
 
+	/** Use another stream set (see StreamSet), restarting the streams. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void SetStreamSet(ERammsCameraStreamSet NewStreamSet);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	ERammsCameraStreamSet GetStreamSet() const { return StreamSet; }
+
+	/** Read the stream set from Ramms Camera Streams again and restart the streams (after changing the settings at runtime). */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void ApplyStreamSet();
+
+	/** The stream set's extra images (depth, segmentation ...); empty for Custom. */
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	const TArray<FRammsCameraDataStream>& GetDataStreams() const { return DataStreams; }
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	int32 GetDataStreamIndex() const { return DataStreamIndex; }
+
+	/** Make another of the stream set's extra images the data stream (the Data, Side-by-Side and Overlay views). */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void SetDataStreamIndex(int32 Index);
+
+	/** The material config that shows a data stream of this kind (Ramms Camera Streams' materials). */
+	static FRammsDataStreamMaterialConfig MakeDataStreamConfig(const FRammsCameraDataStream& Stream);
+
 protected:
 	// Mouse/Touch interaction overrides
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -750,6 +785,14 @@ protected:
 protected:
 	UFUNCTION()
 	void HandleBridgeDetectedObjects(const FString& DetectedObjectsJson);
+
+	/** The stream set's extra images, and which is the data stream */
+	UPROPERTY(Transient)
+	TArray<FRammsCameraDataStream> DataStreams;
+	int32 DataStreamIndex = 0;
+
+	/** Take the stream set's streams before they start (no restart) */
+	void LoadStreamSet();
 
 	/** Build the widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;

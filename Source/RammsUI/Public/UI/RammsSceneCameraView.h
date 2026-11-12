@@ -4,6 +4,9 @@
 // robot's scene objects are tappable markers on it, and a button lets the user hide or show the
 // camera. That button is local to the UI; nothing about it goes out over the bridge.
 //
+// Its streams are Project Settings > Ramms Camera Streams' scene camera set (camera/scene/color, with
+// camera/scene/depth as its data stream, and which of the bridge's objects are the scene's).
+//
 // Place it behind the rest of the screen (W_RAMMS_UI puts it at the bottom of its overlay). The
 // view stays empty until the first scene frame arrives, so a robot without a scene camera
 // leaves the screen as it was. The wrist camera's portal (OpenCameraFeed) opens over it.
@@ -27,21 +30,6 @@ class RAMMSUI_API URammsSceneCameraView : public URammsBaseWidget
 	GENERATED_BODY()
 
 public:
-	/** The scene camera's color stream. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera")
-	FString StreamID = TEXT("camera/scene/color");
-
-	/** The scene camera's depth stream (the camera widget's data stream, for its depth views). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera")
-	FString DataStreamID = TEXT("camera/scene/depth");
-
-	/**
-	 * Which of the bridge's objects are the scene camera's: an object's "source", or the push's
-	 * "stream_id" when the object has none. The orchestrator's own objects come with neither ("").
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera")
-	TArray<FString> DetectionSources = { TEXT(""), TEXT("scene"), TEXT("camera/scene/color"), TEXT("camera/scene/depth") };
-
 	/** The marker put on each scene object (a Blueprint subclass of Ramms Detection Marker). None = no markers. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera")
 	TSubclassOf<URammsDetectionMarker> MarkerClass;

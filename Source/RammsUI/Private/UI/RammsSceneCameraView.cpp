@@ -59,8 +59,7 @@ void URammsSceneCameraView::ConfigureCamera()
 	{
 		return;
 	}
-	Camera->StreamID = StreamID;
-	Camera->DataStreamID = DataStreamID;
+	Camera->StreamSet = ERammsCameraStreamSet::Scene;
 	Camera->DisplayMode = ERammsCameraDisplayMode::Widget;
 	Camera->bShowLabel = false;
 	Camera->bShowDisplayModeCycleButton = false;
@@ -73,7 +72,6 @@ void URammsSceneCameraView::ConfigureCamera()
 	Camera->bDrawDetectionBoxes = !MarkerClass;
 	Camera->bInteractiveBoundingBoxOverlay = true;
 	Camera->bReceiveBridgeDetections = true;
-	Camera->BridgeDetectionSources = DetectionSources;
 
 	// The camera built its title bar (stream name, view-mode buttons) when it was created, before
 	// these settings reached it; the background view has none

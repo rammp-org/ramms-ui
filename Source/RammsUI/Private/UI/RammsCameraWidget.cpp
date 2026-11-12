@@ -548,6 +548,7 @@ void URammsCameraWidget::NativeOnInitialized()
 void URammsCameraWidget::NativeConstruct()
 {
 	SetIsFocusable(true);
+	LoadStreamSet();
 
 	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeConstruct: StreamID='%s' Provider=%s Slot=%s Parent=%s Visibility=%d"),
 		*GetName(), *StreamID,
@@ -2054,6 +2055,69 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& DetectedObjectsJs
 void URammsCameraWidget::HandleBridgeDetectedObjects(const FString& DetectedObjectsJson)
 {
 	ApplyBridgeDetections(DetectedObjectsJson);
+}
+
+FRammsDataStreamMaterialConfig URammsCameraWidget::MakeDataStreamConfig(const FRammsCameraDataStream& Stream)
+{
+	const FRammsCameraDataKindMaterials& Materials = GetDefault<URammsCameraStreamSettings>()->GetMaterials(Stream.Kind);
+	FRammsDataStreamMaterialConfig		 Config;
+	Config.VisualizationMaterial = Materials.VisualizationMaterial.LoadSynchronous();
+	Config.OverlayMaterial = Materials.OverlayMaterial.LoadSynchronous();
+	Config.DisplayLabel = Stream.Label.IsEmpty() ? UEnum::GetDisplayValueAsText(Stream.Kind) : Stream.Label;
+	return Config;
+}
+
+void URammsCameraWidget::LoadStreamSet()
+{
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		return;
+	}
+	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
+	StreamID = Set.ColorStreamID;
+	DataStreams = Set.DataStreams;
+	DataStreamIndex = 0;
+	DataStreamID = DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString();
+	DataStreamConfig = DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig();
+	BridgeDetectionSources = Set.DetectionSources;
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetMarkerStreamID(StreamID);
+	}
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Stream set %s: '%s', %d data stream(s)%s%s"), *GetName(),
+		*UEnum::GetValueAsString(StreamSet), *StreamID, DataStreams.Num(),
+		DataStreamID.IsEmpty() ? TEXT("") : TEXT(", data '"), DataStreamID.IsEmpty() ? TEXT("") : *(DataStreamID + TEXT("'")));
+}
+
+void URammsCameraWidget::SetStreamSet(ERammsCameraStreamSet NewStreamSet)
+{
+	StreamSet = NewStreamSet;
+	ApplyStreamSet();
+}
+
+void URammsCameraWidget::ApplyStreamSet()
+{
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		return;
+	}
+	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
+	DataStreams = Set.DataStreams;
+	DataStreamIndex = 0;
+	BridgeDetectionSources = Set.DetectionSources;
+	ConfigureStreams(Set.ColorStreamID, DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString(),
+		DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig());
+}
+
+void URammsCameraWidget::SetDataStreamIndex(int32 Index)
+{
+	if (!DataStreams.IsValidIndex(Index))
+	{
+		return;
+	}
+	DataStreamIndex = Index;
+	SetDataStreamConfig(MakeDataStreamConfig(DataStreams[Index]));
+	SetDataStreamID(DataStreams[Index].StreamID);
 }
 
 void URammsCameraWidget::ApplyZOrder()
