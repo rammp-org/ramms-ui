@@ -31,6 +31,14 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Detection")
 	FRammsBoundingBox Detection;
 
+	/** The stream of the camera this marker is on (e.g. "camera/scene/color"); sent with a tap. */
+	UPROPERTY(BlueprintReadOnly, Category = "Detection")
+	FString StreamID;
+
+	/** This detection is the selected one (the bridge's selected_instance_id). Set before OnDetectionSet. */
+	UPROPERTY(BlueprintReadOnly, Category = "Detection")
+	bool bSelected = false;
+
 	/** Set by the overlay whenever this marker is given a detection, or its detection is updated. */
 	void SetDetection(const FRammsBoundingBox& InDetection);
 
@@ -38,7 +46,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Detection")
 	void OnDetectionSet(const FRammsBoundingBox& InDetection);
 
-	/** Tell the robot this object was tapped: RammsBridgeSubsystem::PostObjectTapped with Detection.ID. */
+	/** Tell the robot this object was tapped: RammsBridgeSubsystem::PostObjectTapped with Detection.ID and StreamID. */
 	UFUNCTION(BlueprintCallable, Category = "Detection")
 	void PostObjectTapped() const;
 };

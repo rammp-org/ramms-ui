@@ -61,9 +61,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
 	void PostButtonPress(const FString& ButtonId);
 
-	/** Call from a detection box's OnClicked with that box's instance_id. */
+	/**
+	 * Call from a detection box's OnClicked with that box's instance_id, and the stream_id of the
+	 * camera it was tapped on (e.g. "camera/scene/color"; left out of the event when empty).
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
-	void PostObjectTapped(const FString& InstanceId);
+	void PostObjectTapped(const FString& InstanceId, const FString& StreamId = TEXT(""));
 
 	/** Fired with the full {"latest_seq":N,"events":[...]} string after every event. Receiver binds. */
 	UPROPERTY(BlueprintAssignable, Category = "Ramms Bridge|Outbound")

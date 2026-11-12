@@ -19,6 +19,6 @@ void URammsDetectionMarker::PostObjectTapped() const
 	}
 	if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
 	{
-		Bridge->PostObjectTapped(Detection.ID.ToString());
+		Bridge->PostObjectTapped(Detection.ID.ToString(), StreamID);
 	}
 }

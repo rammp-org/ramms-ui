@@ -109,6 +109,9 @@ class RAMMSUI_API URammsCameraWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
 
+	/** Configures its camera's settings before the camera is constructed */
+	friend class URammsSceneCameraView;
+
 protected:
 	/** Camera provider (optional - can be set at runtime via SetCameraProvider or auto-found) */
 	UPROPERTY(BlueprintReadWrite, Category = "Camera")
@@ -300,6 +303,23 @@ protected:
 	/** Image size, in pixels, that GetDetectionCoordinateScale assumes before the first frame arrives. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
 	FVector2D FallbackDetectionImageSize = FVector2D(640.0, 480.0);
+
+	/**
+	 * Show the robot's detections from the bridge (UpdateDetectedObjects, via RammsBridgeSubsystem's
+	 * OnDetectedObjectsJson) as this camera's markers. Each push is the full set: this camera keeps
+	 * the objects that are its own (see BridgeDetectionSources) and drops the rest. Read when the
+	 * widget is constructed; ApplyBridgeDetections does the same for one push at any time.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Bridge")
+	bool bReceiveBridgeDetections = false;
+
+	/**
+	 * Which of the bridge's objects are this camera's: an object's "source", or the push's "stream_id"
+	 * when the object has none, must be one of these (case-insensitive). Include "" for objects with
+	 * neither. Empty: StreamID and DataStreamID.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Bridge", meta = (EditCondition = "bReceiveBridgeDetections"))
+	TArray<FString> BridgeDetectionSources;
 
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
@@ -707,6 +727,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	URammsBoundingBoxOverlay* GetBoundingBoxOverlay() const { return BBoxOverlay; }
 
+	/**
+	 * Show this camera's objects from a bridge detections push, {stream_id, selected_instance_id,
+	 * objects: [{instance_id, perception_class, box, centroid, source}]}, replacing its detections.
+	 * box (x_min, y_min, x_max, y_max) and centroid are 0-1 or pixels of this camera's frames, as an
+	 * object ({"X", "Y", "Z", "W"}) or an array. Called for every push when bReceiveBridgeDetections.
+	 * @return how many objects were this camera's, or -1 when the JSON isn't an object.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	int32 ApplyBridgeDetections(const FString& DetectedObjectsJson);
+
+	/** Whether a bridge object with this source (or the push's stream_id) is this camera's (BridgeDetectionSources). */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	bool IsBridgeDetectionSource(const FString& Source) const;
+
 protected:
 	// Mouse/Touch interaction overrides
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -714,6 +748,9 @@ protected:
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 protected:
+	UFUNCTION()
+	void HandleBridgeDetectedObjects(const FString& DetectedObjectsJson);
+
 	/** Build the widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;

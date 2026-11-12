@@ -240,6 +240,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		}
 		Placed.Add(Marker);
 
+		Marker->StreamID = MarkerStreamID;
+		Marker->bSelected = !Box.ID.IsNone() && Box.ID == SelectedDetectionID;
 		Marker->SetDetection(Box);
 		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
@@ -323,6 +325,24 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	bMarkersDirty = true;
 	InvalidateLayoutAndVolatility();
 	OnDetectionsChanged(Boxes);
+}
+
+void URammsBoundingBoxOverlay::SetMarkerStreamID(const FString& InStreamID)
+{
+	if (MarkerStreamID != InStreamID)
+	{
+		MarkerStreamID = InStreamID;
+		bMarkersDirty = true;
+	}
+}
+
+void URammsBoundingBoxOverlay::SetSelectedDetectionID(FName InID)
+{
+	if (SelectedDetectionID != InID)
+	{
+		SelectedDetectionID = InID;
+		bMarkersDirty = true;
+	}
 }
 
 void URammsBoundingBoxOverlay::ClearDetections()
