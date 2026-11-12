@@ -794,6 +794,10 @@ protected:
 	/** Take the stream set's streams before they start (no restart) */
 	void LoadStreamSet();
 
+	/** The last bridge push this camera applied, and the frame size it was placed for (re-applied when that changes) */
+	FString	  LastBridgeDetectionsJson;
+	FVector2D BridgeDetectionsImageSize = FVector2D::ZeroVector;
+
 	/** Build the widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;

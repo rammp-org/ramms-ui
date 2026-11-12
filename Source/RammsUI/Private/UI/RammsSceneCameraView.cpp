@@ -66,7 +66,7 @@ void URammsSceneCameraView::ConfigureCamera()
 	Camera->bEnableDrag = false;
 	Camera->bFocusOnClick = false;
 	Camera->bCollapsible = false;
-	Camera->bMaintainAspectRatio = bMaintainAspectRatio;
+	Camera->SetMaintainAspectRatio(bMaintainAspectRatio); // clears the aspect box's constraints when turned off
 	Camera->DetectionMarkerClass = MarkerClass;
 	Camera->DetectionMarkerPlacement = MarkerPlacement;
 	Camera->bDrawDetectionBoxes = !MarkerClass;

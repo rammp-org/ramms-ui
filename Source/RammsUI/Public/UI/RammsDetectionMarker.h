@@ -15,7 +15,10 @@
 UENUM(BlueprintType)
 enum class ERammsDetectionMarkerPlacement : uint8
 {
-	/** The marker fills the detection's box (the box around its corners when rotated, or around its points for a polygon). */
+	/**
+	 * The marker fills the detection's box (the box around its corners when rotated, or around its points
+	 * for a polygon). A detection with no box (only a centroid) gets the marker at its own size, centred.
+	 */
 	Box,
 	/** The marker keeps its own size and is centred on the detection's centre. */
 	Centroid,

@@ -250,11 +250,15 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		{
 			continue;
 		}
-		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		const auto PlaceAtCentre = [&]()
 		{
 			MarkerSlot->SetAutoSize(true);
 			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
+		};
+		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		{
+			PlaceAtCentre();
 			continue;
 		}
 
@@ -291,6 +295,12 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		{
 			Min = FVector2D::Min(Min, Point);
 			Max = FVector2D::Max(Max, Point);
+		}
+		// A detection with no box (only a centroid) would get an empty marker nothing can tap: it keeps its own size there
+		if ((Max - Min).X < 1.0 || (Max - Min).Y < 1.0)
+		{
+			PlaceAtCentre();
+			continue;
 		}
 		MarkerSlot->SetAutoSize(false);
 		MarkerSlot->SetAlignment(FVector2D::ZeroVector);

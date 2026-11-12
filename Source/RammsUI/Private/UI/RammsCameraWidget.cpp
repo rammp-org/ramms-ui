@@ -1112,8 +1112,13 @@ void URammsCameraWidget::SetStreamID(const FString& NewStreamID)
 
 	// Update stream ID
 	StreamID = NewStreamID;
+
+	// The old camera's detections aren't this camera's: drop them before the markers take the new stream,
+	// so a tap can't send an old object as one on the new camera
+	LastBridgeDetectionsJson.Empty();
 	if (BBoxOverlay)
 	{
+		BBoxOverlay->ClearDetections();
 		BBoxOverlay->SetMarkerStreamID(StreamID);
 	}
 
@@ -2048,6 +2053,8 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& DetectedObjectsJs
 	{
 		BBoxOverlay->SetSelectedDetectionID(Selected.IsEmpty() ? NAME_None : FName(*Selected));
 	}
+	LastBridgeDetectionsJson = DetectedObjectsJson;
+	BridgeDetectionsImageSize = GetImageSize();
 	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] Bridge detections (stream_id '%s'): %d of this camera's"), *GetName(), *PushSource, Boxes.Num());
 	return Boxes.Num();
 }
@@ -2074,12 +2081,26 @@ void URammsCameraWidget::LoadStreamSet()
 		return;
 	}
 	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
+	if (BBoxOverlay && StreamID != Set.ColorStreamID)
+	{
+		BBoxOverlay->ClearDetections();
+		LastBridgeDetectionsJson.Empty();
+	}
 	StreamID = Set.ColorStreamID;
 	DataStreams = Set.DataStreams;
 	DataStreamIndex = 0;
 	DataStreamID = DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString();
 	DataStreamConfig = DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig();
 	BridgeDetectionSources = Set.DetectionSources;
+
+	// Construct can run again (the widget removed and added back) after another data stream was picked:
+	// start the data stream's rendering afresh, as SetDataStreamID / SetDataStreamConfig would
+	CurrentDataTexture = nullptr;
+	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+	CachedStreamMaterialParams.Empty();
+	DataMID = nullptr;
+	OverlayMID = nullptr;
+	bOverlayDiagLogged = false;
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->SetMarkerStreamID(StreamID);
@@ -2105,8 +2126,9 @@ void URammsCameraWidget::ApplyStreamSet()
 	DataStreams = Set.DataStreams;
 	DataStreamIndex = 0;
 	BridgeDetectionSources = Set.DetectionSources;
-	ConfigureStreams(Set.ColorStreamID, DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString(),
-		DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig());
+	// The streams first (clearing their frames), then the material, so its redraw doesn't use the previous stream's frame
+	SetStreams(Set.ColorStreamID, DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString());
+	SetDataStreamConfig(DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig());
 }
 
 void URammsCameraWidget::SetDataStreamIndex(int32 Index)
@@ -2116,8 +2138,9 @@ void URammsCameraWidget::SetDataStreamIndex(int32 Index)
 		return;
 	}
 	DataStreamIndex = Index;
-	SetDataStreamConfig(MakeDataStreamConfig(DataStreams[Index]));
+	// The stream first (clearing its frame), then the material, so its redraw doesn't use the previous stream's frame
 	SetDataStreamID(DataStreams[Index].StreamID);
+	SetDataStreamConfig(MakeDataStreamConfig(DataStreams[Index]));
 }
 
 void URammsCameraWidget::ApplyZOrder()
@@ -2321,6 +2344,12 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 		}
 
 		UpdateDisplayedImages();
+
+		// Pixel boxes from before this frame size (the fallback size, before the first frame) are placed again
+		if (!LastBridgeDetectionsJson.IsEmpty() && !GetImageSize().Equals(BridgeDetectionsImageSize))
+		{
+			ApplyBridgeDetections(LastBridgeDetectionsJson);
+		}
 	}
 	else if (InStreamID == DataStreamID)
 	{
