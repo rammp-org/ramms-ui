@@ -1969,8 +1969,11 @@ namespace RammsCameraBridgeJson
 	}
 }
 
-int32 URammsCameraWidget::ApplyBridgeDetections(const FString& DetectedObjectsJson)
+int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjectsJson)
 {
+	// A copy: the argument can be LastBridgeDetectionsJson itself (a replay), which SetDetections below empties
+	const FString DetectedObjectsJson = InDetectedObjectsJson;
+
 	TSharedPtr<FJsonObject>			Root;
 	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DetectedObjectsJson);
 	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
