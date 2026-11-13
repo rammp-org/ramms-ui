@@ -5,8 +5,12 @@
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
 #include "RammsDetectionTypes.h"
+#include "UI/RammsDetectionMarker.h"
 #include "Fonts/SlateFontInfo.h"
+#include "UObject/ObjectKey.h"
 #include "RammsBoundingBoxOverlay.generated.h"
+
+class UCanvasPanel;
 
 /**
  * How to assign colors to boxes that don't have a custom color.
@@ -127,6 +131,45 @@ public:
 		meta = (ClampMin = "0.0", ClampMax = "20.0"))
 	float PaneGap = 2.0f;
 
+	/**
+	 * Stack panes top to bottom instead of left to right. The camera widget sets this to match
+	 * its side-by-side layout, which stacks the images vertically when the widget is wider than tall.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Layout")
+	bool bVerticalPanes = false;
+
+	// ── Markers ─────────────────────────────────────────────────
+
+	/**
+	 * Widget placed on each detection, for example a tappable outline with the object's label
+	 * (a Blueprint subclass of Ramms Detection Marker). None = no markers. Each object keeps
+	 * its marker from one update to the next (by its ID), and markers follow the overlay's size.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers")
+	TSubclassOf<URammsDetectionMarker> MarkerWidgetClass;
+
+	/** Box: a marker fills its detection's box. Centroid: it keeps its own size, centred on the detection. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers")
+	ERammsDetectionMarkerPlacement MarkerPlacement = ERammsDetectionMarkerPlacement::Box;
+
+	/** The pane markers sit on in side-by-side view (0 = the first image). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers", meta = (ClampMin = "0", ClampMax = "3"))
+	int32 MarkerPane = 0;
+
+	/** Give the markers the stream of the camera they're on, which a tap sends (set by URammsCameraWidget). */
+	UFUNCTION(BlueprintCallable, Category = "Bounding Box|Markers")
+	void SetMarkerStreamID(const FString& InStreamID);
+
+	UFUNCTION(BlueprintPure, Category = "Bounding Box|Markers")
+	const FString& GetMarkerStreamID() const { return MarkerStreamID; }
+
+	/** Mark one detection as selected (its marker's bSelected); None for none. */
+	UFUNCTION(BlueprintCallable, Category = "Bounding Box|Markers")
+	void SetSelectedDetectionID(FName InID);
+
+	UFUNCTION(BlueprintPure, Category = "Bounding Box|Markers")
+	FName GetSelectedDetectionID() const { return SelectedDetectionID; }
+
 	// ── API ─────────────────────────────────────────────────────
 
 	/**
@@ -156,6 +199,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Bounding Box")
 	FVector2D NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane = 0) const;
 
+	/** One pane's offset and size within an overlay of FullSize (PaneCount, PaneGap, bVerticalPanes). */
+	void GetPaneRect(int32 Pane, const FVector2D& FullSize, FVector2D& OutOffset, FVector2D& OutSize) const;
+
 	/** Called whenever the detections change: set, cleared, or expired. Implement in a Blueprint subclass. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Bounding Box")
 	void OnDetectionsChanged(const TArray<FRammsBoundingBox>& NewBoxes);
@@ -180,6 +226,8 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void ApplyStyle_Implementation() override;
+	virtual void ResetCachedWidgets() override;
+	virtual UWidget* GetRootWidgetForValidation() override;
 
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
 		const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
@@ -195,6 +243,46 @@ private:
 
 	/** Whether subscribed to subsystem */
 	bool bSubscribed = false;
+
+	/** Holds the markers, above the drawn boxes (built by BuildWidgetTree; none in a Blueprint subclass with its own tree) */
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> MarkerLayer;
+
+	/** One marker per detection, kept for the same ID across updates; spare markers without an ID are collapsed */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URammsDetectionMarker>> Markers;
+
+	/** The detections changed since the markers were last placed */
+	bool bMarkersDirty = false;
+
+	/** See SetMarkerStreamID */
+	FString MarkerStreamID;
+
+	/** See SetSelectedDetectionID */
+	FName SelectedDetectionID;
+
+	/** What the markers were last placed for: when any of it changes, they are placed again */
+	struct FMarkerLayoutKey
+	{
+		FVector2D						Size = FVector2D::ZeroVector;
+		int32							PaneCount = 0;
+		float							PaneGap = 0.0f;
+		bool							bVerticalPanes = false;
+		int32							Pane = 0;
+		ERammsDetectionMarkerPlacement	Placement = ERammsDetectionMarkerPlacement::Box;
+		FObjectKey						MarkerClass;
+
+		bool Matches(const FMarkerLayoutKey& Other) const
+		{
+			return Size.Equals(Other.Size, 0.5) && PaneCount == Other.PaneCount && FMath::IsNearlyEqual(PaneGap, Other.PaneGap)
+				&& bVerticalPanes == Other.bVerticalPanes && Pane == Other.Pane && Placement == Other.Placement
+				&& MarkerClass == Other.MarkerClass;
+		}
+	};
+	FMarkerLayoutKey LastMarkerLayout;
+
+	/** Give each detection a marker and place it (when the detections, the overlay's size, its panes or the marker settings changed) */
+	void UpdateMarkers(const FVector2D& LocalSize);
 
 	/** Subsystem detection handler */
 	UFUNCTION()

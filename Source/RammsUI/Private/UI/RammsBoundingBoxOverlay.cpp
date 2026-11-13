@@ -3,7 +3,10 @@
 #include "UI/RammsBoundingBoxOverlay.h"
 #include "RammsUISubsystem.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Styling/CoreStyle.h"
 #include "Rendering/SlateRenderer.h"
@@ -17,10 +20,39 @@ void URammsBoundingBoxOverlay::BuildWidgetTree()
 		return;
 	}
 
-	// Minimal tree: just an overlay that fills the parent.
-	// All drawing is done in NativePaint.
+	// Minimal tree: an overlay that fills the parent, holding the marker layer.
+	// The boxes themselves are drawn in NativePaint.
 	UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("BBoxRoot"));
 	WidgetTree->RootWidget = Root;
+
+	MarkerLayer = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("MarkerLayer"));
+	MarkerLayer->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (UOverlaySlot* LayerSlot = Root->AddChildToOverlay(MarkerLayer))
+	{
+		LayerSlot->SetHorizontalAlignment(HAlign_Fill);
+		LayerSlot->SetVerticalAlignment(VAlign_Fill);
+	}
+}
+
+void URammsBoundingBoxOverlay::ResetCachedWidgets()
+{
+	// The tree is being rebuilt: the pooled markers belong to the old marker layer
+	for (URammsDetectionMarker* Marker : Markers)
+	{
+		if (Marker)
+		{
+			Marker->RemoveFromParent();
+		}
+	}
+	Markers.Reset();
+	MarkerLayer = nullptr;
+	LastMarkerLayout = FMarkerLayoutKey();
+	bMarkersDirty = true;
+}
+
+UWidget* URammsBoundingBoxOverlay::GetRootWidgetForValidation()
+{
+	return MarkerLayer;
 }
 
 void URammsBoundingBoxOverlay::NativeConstruct()
@@ -108,6 +140,187 @@ void URammsBoundingBoxOverlay::NativeTick(const FGeometry& MyGeometry, float InD
 			ClearDetections();
 		}
 	}
+
+	UpdateMarkers(MyGeometry.GetLocalSize());
+}
+
+void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
+{
+	if (!MarkerLayer)
+	{
+		return;
+	}
+	FMarkerLayoutKey Layout;
+	Layout.Size = LocalSize;
+	Layout.PaneCount = PaneCount;
+	Layout.PaneGap = PaneGap;
+	Layout.bVerticalPanes = bVerticalPanes;
+	Layout.Pane = MarkerPane;
+	Layout.Placement = MarkerPlacement;
+	Layout.MarkerClass = FObjectKey(MarkerWidgetClass.Get());
+	if (!bMarkersDirty && Layout.Matches(LastMarkerLayout))
+	{
+		return;
+	}
+	bMarkersDirty = false;
+	LastMarkerLayout = Layout;
+
+	// A different marker class: start the pool again
+	if (Markers.Num() > 0 && (!MarkerWidgetClass || !Markers[0] || Markers[0]->GetClass() != MarkerWidgetClass.Get()))
+	{
+		for (URammsDetectionMarker* Marker : Markers)
+		{
+			if (Marker)
+			{
+				Marker->RemoveFromParent();
+			}
+		}
+		Markers.Reset();
+	}
+
+	// Each object keeps its marker, by Detection.ID, however the detections are ordered, so a
+	// press on one marker always ends on the same object. Markers without an ID can't send a
+	// tap, and are reused in order.
+	TMap<FName, URammsDetectionMarker*>	   ByID;
+	TArray<URammsDetectionMarker*>		   Unkeyed;
+	for (URammsDetectionMarker* Marker : Markers)
+	{
+		if (!Marker)
+		{
+			continue;
+		}
+		const FName ID = Marker->Detection.ID;
+		if (!ID.IsNone() && !ByID.Contains(ID))
+		{
+			ByID.Add(ID, Marker);
+		}
+		else if (ID.IsNone())
+		{
+			Unkeyed.Add(Marker);
+		}
+		else
+		{
+			Marker->RemoveFromParent();
+		}
+	}
+
+	TArray<TObjectPtr<URammsDetectionMarker>> Placed;
+	const int32 Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
+	FVector2D	PaneOffset, PaneSize;
+	GetPaneRect(MarkerPane, LocalSize, PaneOffset, PaneSize);
+
+	int32 NextUnkeyed = 0;
+	for (int32 i = 0; i < Wanted; ++i)
+	{
+		const FRammsBoundingBox& Box = Boxes[i];
+		URammsDetectionMarker*	 Marker = nullptr;
+		if (!Box.ID.IsNone())
+		{
+			if (URammsDetectionMarker** Found = ByID.Find(Box.ID))
+			{
+				Marker = *Found;
+				ByID.Remove(Box.ID);
+			}
+		}
+		else if (NextUnkeyed < Unkeyed.Num())
+		{
+			Marker = Unkeyed[NextUnkeyed++];
+		}
+		if (!Marker)
+		{
+			APlayerController* PC = GetOwningPlayer();
+			Marker = PC
+				? CreateWidget<URammsDetectionMarker>(PC, MarkerWidgetClass)
+				: CreateWidget<URammsDetectionMarker>(this, MarkerWidgetClass);
+			if (!Marker)
+			{
+				break;
+			}
+			MarkerLayer->AddChildToCanvas(Marker);
+		}
+		Placed.Add(Marker);
+
+		Marker->StreamID = MarkerStreamID;
+		Marker->bSelected = !Box.ID.IsNone() && Box.ID == SelectedDetectionID;
+		Marker->SetDetection(Box);
+		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+		UCanvasPanelSlot* MarkerSlot = Cast<UCanvasPanelSlot>(Marker->Slot);
+		if (!MarkerSlot)
+		{
+			continue;
+		}
+		const auto PlaceAtCentre = [&]()
+		{
+			MarkerSlot->SetAutoSize(true);
+			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
+		};
+		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		{
+			PlaceAtCentre();
+			continue;
+		}
+
+		// The box, in pane pixels: a rectangle's corners, a rotated rectangle's corners turned
+		// about its centre the way DrawRotatedRectBox draws them, or a polygon's points
+		TArray<FVector2D, TInlineAllocator<8>> Points;
+		if (Box.Shape == ERammsDetectionShape::Polygon && Box.PolygonPoints.Num() > 0)
+		{
+			for (const FVector2D& Point : Box.PolygonPoints)
+			{
+				Points.Add(Point * PaneSize);
+			}
+		}
+		else if (Box.Shape == ERammsDetectionShape::RotatedRect)
+		{
+			const FVector2D Center = Box.GetCenter() * PaneSize;
+			const FVector2D Half = Box.Size * PaneSize * 0.5;
+			const double	Rad = FMath::DegreesToRadians(Box.AngleDegrees);
+			const double	CosA = FMath::Cos(Rad);
+			const double	SinA = FMath::Sin(Rad);
+			for (const FVector2D& Corner : { FVector2D(-Half.X, -Half.Y), FVector2D(Half.X, -Half.Y), FVector2D(Half.X, Half.Y), FVector2D(-Half.X, Half.Y) })
+			{
+				Points.Add(Center + FVector2D(Corner.X * CosA - Corner.Y * SinA, Corner.X * SinA + Corner.Y * CosA));
+			}
+		}
+		else
+		{
+			Points.Add(Box.Position * PaneSize);
+			Points.Add((Box.Position + Box.Size) * PaneSize);
+		}
+		FVector2D Min = Points[0];
+		FVector2D Max = Points[0];
+		for (const FVector2D& Point : Points)
+		{
+			Min = FVector2D::Min(Min, Point);
+			Max = FVector2D::Max(Max, Point);
+		}
+		// A detection with no box (only a centroid) would get an empty marker nothing can tap: it keeps its own size there
+		if ((Max - Min).X < 1.0 || (Max - Min).Y < 1.0)
+		{
+			PlaceAtCentre();
+			continue;
+		}
+		MarkerSlot->SetAutoSize(false);
+		MarkerSlot->SetAlignment(FVector2D::ZeroVector);
+		MarkerSlot->SetPosition(PaneOffset + Min);
+		MarkerSlot->SetSize(Max - Min);
+	}
+
+	// An object that has gone loses its marker: removed rather than kept for another object,
+	// so a press on it can't end as a tap on something else
+	for (const TPair<FName, URammsDetectionMarker*>& Gone : ByID)
+	{
+		Gone.Value->RemoveFromParent();
+	}
+	// Spare markers without an ID are kept, collapsed, for later updates
+	for (int32 i = NextUnkeyed; i < Unkeyed.Num(); ++i)
+	{
+		Unkeyed[i]->SetVisibility(ESlateVisibility::Collapsed);
+		Placed.Add(Unkeyed[i]);
+	}
+	Markers = MoveTemp(Placed);
 }
 
 // ── API ──────────────────────────────────────────────────────────
@@ -119,8 +332,27 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	{
 		LastDetectionTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	}
+	bMarkersDirty = true;
 	InvalidateLayoutAndVolatility();
 	OnDetectionsChanged(Boxes);
+}
+
+void URammsBoundingBoxOverlay::SetMarkerStreamID(const FString& InStreamID)
+{
+	if (MarkerStreamID != InStreamID)
+	{
+		MarkerStreamID = InStreamID;
+		bMarkersDirty = true;
+	}
+}
+
+void URammsBoundingBoxOverlay::SetSelectedDetectionID(FName InID)
+{
+	if (SelectedDetectionID != InID)
+	{
+		SelectedDetectionID = InID;
+		bMarkersDirty = true;
+	}
 }
 
 void URammsBoundingBoxOverlay::ClearDetections()
@@ -128,26 +360,45 @@ void URammsBoundingBoxOverlay::ClearDetections()
 	if (Boxes.Num() > 0)
 	{
 		Boxes.Empty();
+		bMarkersDirty = true;
 		InvalidateLayoutAndVolatility();
 		OnDetectionsChanged(Boxes);
+	}
+}
+
+void URammsBoundingBoxOverlay::GetPaneRect(int32 Pane, const FVector2D& FullSize, FVector2D& OutOffset, FVector2D& OutSize) const
+{
+	const int32 EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
+	if (EffectivePanes <= 1)
+	{
+		OutOffset = FVector2D::ZeroVector;
+		OutSize = FullSize;
+		return;
+	}
+
+	// Equal panes along one axis, PaneGap apart: left to right, or top to bottom when bVerticalPanes.
+	const int32 ClampedPane = FMath::Clamp(Pane, 0, EffectivePanes - 1);
+	const float TotalGap = PaneGap * (EffectivePanes - 1);
+	if (bVerticalPanes)
+	{
+		const float PaneHeight = (FullSize.Y - TotalGap) / EffectivePanes;
+		OutOffset = FVector2D(0.0f, ClampedPane * (PaneHeight + PaneGap));
+		OutSize = FVector2D(FullSize.X, PaneHeight);
+	}
+	else
+	{
+		const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
+		OutOffset = FVector2D(ClampedPane * (PaneWidth + PaneGap), 0.0f);
+		OutSize = FVector2D(PaneWidth, FullSize.Y);
 	}
 }
 
 FVector2D URammsBoundingBoxOverlay::NormalizedToLocal(FVector2D NormalizedPoint, int32 Pane) const
 {
 	// Same pane split as NativePaint, so child widgets line up with the drawn boxes.
-	const FVector2D FullSize = GetCachedGeometry().GetLocalSize();
-	const int32		EffectivePanes = FMath::Clamp(PaneCount, 1, 4);
-	if (EffectivePanes <= 1)
-	{
-		return NormalizedPoint * FullSize;
-	}
-
-	const int32 ClampedPane = FMath::Clamp(Pane, 0, EffectivePanes - 1);
-	const float TotalGap = PaneGap * (EffectivePanes - 1);
-	const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
-	const float PaneOffset = ClampedPane * (PaneWidth + PaneGap);
-	return FVector2D(PaneOffset + NormalizedPoint.X * PaneWidth, NormalizedPoint.Y * FullSize.Y);
+	FVector2D Offset, Size;
+	GetPaneRect(Pane, GetCachedGeometry().GetLocalSize(), Offset, Size);
+	return Offset + NormalizedPoint * Size;
 }
 
 // ── Subsystem ────────────────────────────────────────────────────
@@ -309,16 +560,13 @@ int32 URammsBoundingBoxOverlay::NativePaint(const FPaintArgs& Args,
 
 	for (int32 Pane = 0; Pane < EffectivePanes; ++Pane)
 	{
-		// Compute pane geometry: each pane is an equal-width region
+		// Compute pane geometry: equal regions side by side, or stacked when bVerticalPanes
 		FGeometry PaneGeom = AllottedGeometry;
 		if (EffectivePanes > 1)
 		{
-			const float TotalGap = PaneGap * (EffectivePanes - 1);
-			const float PaneWidth = (FullSize.X - TotalGap) / EffectivePanes;
-			const float PaneOffset = Pane * (PaneWidth + PaneGap);
-			PaneGeom = AllottedGeometry.MakeChild(
-				FVector2D(PaneWidth, FullSize.Y),
-				FSlateLayoutTransform(FVector2D(PaneOffset, 0.0f)));
+			FVector2D PaneOffset, PaneSize;
+			GetPaneRect(Pane, FullSize, PaneOffset, PaneSize);
+			PaneGeom = AllottedGeometry.MakeChild(PaneSize, FSlateLayoutTransform(PaneOffset));
 		}
 
 		for (int32 i = 0; i < Boxes.Num(); ++i)
