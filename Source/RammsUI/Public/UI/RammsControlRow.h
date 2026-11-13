@@ -20,6 +20,14 @@ class UTextBlock;
  *  - Continuous (unpaired) -> label + hold buttons (- / +) that set the axis
  *                            while pressed and release it on let-go
  *  - Action                -> URammsButton
+ *  - Enum                  -> label, the active choice, < / > steppers (no
+ *                            steppers when read-only)
+ *  - Text                  -> label over the words, wrapped, coloured by the
+ *                            control's severity (ERammsControlTextSeverity)
+ *
+ * Every label and value wraps within the space its row gives it and is clipped
+ * to it, so a long one makes the row taller rather than drawing over its
+ * neighbours.
  *
  * Owns its delegate handlers (it knows its Id, sink and source), so the
  * panel just lays rows out and calls Refresh for readback.
@@ -158,6 +166,12 @@ private:
 	/** Shows the active choice of an Enum control. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> EnumValue;
+	/** Shows the words of a Text control. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> TextValue;
+	/** The Text control's severity as last read (ERammsControlTextSeverity), for its colour. */
+	uint8 TextSeverity = 0;
+	void  ApplyTextColour();
 	/** Position / Velocity rows: the live readback, separate from the slider's target. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> LiveValue;

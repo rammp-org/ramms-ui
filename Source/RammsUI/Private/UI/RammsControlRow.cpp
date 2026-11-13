@@ -12,6 +12,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 
 void URammsControlRow::BuildWidgetTree()
 {
@@ -131,17 +132,49 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 	AxisControl = nullptr;
 	ActionButton = nullptr;
 	EnumValue = nullptr;
+	TextValue = nullptr;
+	RateLabel = RateValue = LiveLabel = LiveValue = MinusLabel = PlusLabel = nullptr;
 	MinusButton = PlusButton = nullptr;
+	TextSeverity = 0;
 
 	const FText Label = Axis.DisplayName.IsEmpty() ? FText::FromName(Axis.Id) : Axis.DisplayName;
+	// Words wrap inside the space their slot gives them and never draw past it: a
+	// long label or choice makes its row taller instead of running over the value,
+	// the buttons or the next row.
+	const auto Contain = [](UTextBlock* Text) {
+		Text->SetAutoWrapText(true);
+		Text->SetClipping(EWidgetClipping::ClipToBounds);
+	};
 
-	if (Axis.Kind == ERammsControlKind::Enum && Axis.EnumLabels.Num() > 0)
+	if (Axis.IsText())
+	{
+		// A line the robot reports (a status): its label over it, the words across
+		// the row's whole width.
+		UVerticalBox* Column = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("TextColumn"));
+		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TextLabel"));
+		RateLabel->SetText(Label);
+		Contain(RateLabel);
+		TextValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TextValue"));
+		Contain(TextValue);
+		Column->AddChildToVerticalBox(RateLabel);
+		if (UVerticalBoxSlot* WordsSlot = Column->AddChildToVerticalBox(TextValue))
+		{
+			WordsSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
+		}
+		if (UHorizontalBoxSlot* ColumnSlot = RootBox->AddChildToHorizontalBox(Column))
+		{
+			ColumnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			ColumnSlot->SetPadding(FMargin(0.0f, 2.0f));
+		}
+	}
+	else if (Axis.Kind == ERammsControlKind::Enum && Axis.EnumLabels.Num() > 0)
 	{
 		// Label, the active choice, and a pair of steppers -- the same shape as
 		// a rate row, so a selector does not look like a different species of
 		// control. Clicks step rather than hold: there is nothing to ramp.
 		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumLabel"));
 		RateLabel->SetText(Label);
+		Contain(RateLabel);
 		if (UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel))
 		{
 			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -149,6 +182,23 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		}
 
 		EnumValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumValue"));
+		Contain(EnumValue);
+		if (Axis.bReadOnly)
+		{
+			// A state to show (curb.phase), not a choice to make: no steppers that
+			// can never be pressed, and the words share the row with the label
+			// rather than squeezing into a stepper's column.
+			EnumValue->SetJustification(ETextJustify::Right);
+			if (UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(EnumValue))
+			{
+				ValueSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				ValueSlot->SetPadding(FMargin(6.0f, 0.0f, 2.0f, 0.0f));
+				ValueSlot->SetVerticalAlignment(VAlign_Center);
+			}
+			ApplyStyle();
+			RefreshInternal(/*bPeriodic*/ false);
+			return;
+		}
 		EnumValue->SetJustification(ETextJustify::Center);
 		USizeBox* ValueBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("EnumBox"));
 		ValueBox->SetWidthOverride(ValueColumnWidth * 2.0f);
@@ -173,14 +223,6 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		PlusLabel = NextText;
 		MinusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumPrevClicked);
 		PlusButton->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnEnumNextClicked);
-
-		// A read-only selector still shows which choice is live; it just cannot
-		// be stepped.
-		if (Axis.bReadOnly)
-		{
-			MinusButton->SetIsEnabled(false);
-			PlusButton->SetIsEnabled(false);
-		}
 		Refresh();
 	}
 	else if (Axis.IsAction())
@@ -203,6 +245,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		// Rate axis: label, live value, hold buttons.
 		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateLabel"));
 		RateLabel->SetText(Label);
+		Contain(RateLabel);
 		UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel);
 		if (LabelSlot)
 		{
@@ -237,6 +280,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		// Readback-only state: label + live value, nothing to drag.
 		RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadLabel"));
 		RateLabel->SetText(Label);
+		Contain(RateLabel);
 		UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel);
 		if (LabelSlot)
 		{
@@ -332,6 +376,22 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 	}
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	const float	 Value = IRammsControlSink::Execute_GetAxisValue(Sink, Axis.Id);
+	if (TextValue)
+	{
+		FText Words;
+		IRammsControlSink::Execute_GetAxisText(Sink, Axis.Id, Words);
+		if (!Words.EqualTo(TextValue->GetText()))
+		{
+			TextValue->SetText(Words);
+		}
+		const uint8 Severity = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Value), 0, static_cast<int32>(ERammsControlTextSeverity::Fault)));
+		if (Severity != TextSeverity)
+		{
+			TextSeverity = Severity;
+			ApplyTextColour();
+		}
+		return;
+	}
 	if (EnumValue)
 	{
 		// The value IS the index, so the row always shows whatever is actually
@@ -488,6 +548,30 @@ void URammsControlRow::ApplyStyle_Implementation()
 		RateValue->SetFont(Style->Typography.Monospace); // constant digit widths
 		RateValue->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
 	}
+	if (TextValue)
+	{
+		// A status: its label a caption over the words, which are the point.
+		if (RateLabel)
+		{
+			RateLabel->SetFont(Style->Typography.Caption);
+			RateLabel->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+		}
+		TextValue->SetFont(Style->Typography.Body);
+		ApplyTextColour();
+	}
+}
+
+void URammsControlRow::ApplyTextColour()
+{
+	if (!TextValue || !Style)
+	{
+		return;
+	}
+	const ERammsControlTextSeverity Severity = static_cast<ERammsControlTextSeverity>(TextSeverity);
+	const FLinearColor				Colour = Severity == ERammsControlTextSeverity::Fault ? Style->Colors.Error
+					 : Severity == ERammsControlTextSeverity::Attention					  ? Style->Colors.Warning
+																						  : Style->Colors.TextPrimary;
+	TextValue->SetColorAndOpacity(FSlateColor(Colour));
 }
 
 // --- scripted interaction ------------------------------------------------------
