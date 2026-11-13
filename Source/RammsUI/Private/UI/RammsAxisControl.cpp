@@ -93,6 +93,9 @@ void URammsAxisControl::BuildWidgetTree()
 		UTextBlock::StaticClass(), TEXT("Label"));
 	LabelText->SetText(Config.Label);
 	LabelText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	// A long name wraps in the space its slot gives it, rather than drawing over the value and the reset button.
+	LabelText->SetAutoWrapText(true);
+	LabelText->SetClipping(EWidgetClipping::ClipToBounds);
 
 	UHorizontalBoxSlot* LabelSlot = InfoRow->AddChildToHorizontalBox(LabelText);
 	if (LabelSlot)
@@ -112,6 +115,7 @@ void URammsAxisControl::BuildWidgetTree()
 	ValueText->SetText(FText::FromString(TEXT("0.0")));
 	ValueText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	ValueText->SetJustification(ETextJustify::Center);
+	ValueText->SetClipping(EWidgetClipping::ClipToBounds); // its box grows to fit; clipped all the same
 	ValueSizeBox->AddChild(ValueText);
 
 	UHorizontalBoxSlot* ValSlot = InfoRow->AddChildToHorizontalBox(ValueSizeBox);

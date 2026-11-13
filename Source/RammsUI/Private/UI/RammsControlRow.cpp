@@ -27,8 +27,15 @@ void URammsControlRow::BuildWidgetTree()
 
 void URammsControlRow::ResetCachedWidgets()
 {
+	// Every cached widget, as RammsBaseWidget asks: after the tree is invalidated a refresh or a restyle would
+	// otherwise reach a detached one.
 	RootBox = nullptr;
 	AxisControl = nullptr;
+	ActionButton = nullptr;
+	EnumValue = nullptr;
+	TextValue = nullptr;
+	RateLabel = RateValue = LiveLabel = LiveValue = MinusLabel = PlusLabel = nullptr;
+	MinusButton = PlusButton = nullptr;
 	ActionButton = nullptr;
 	EnumValue = nullptr;
 	RateLabel = nullptr;
@@ -255,6 +262,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		RateValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RateValue"));
 		RateValue->SetText(FText::FromString(TEXT("+0.00")));
 		RateValue->SetJustification(ETextJustify::Right);
+		Contain(RateValue); // a value longer than its column goes onto a second line, not over the buttons
 		USizeBox* RateBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RateBox"));
 		RateBox->SetWidthOverride(ValueColumnWidth);
 		RateBox->AddChild(RateValue);
@@ -289,6 +297,7 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		}
 		RateValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadValue"));
 		RateValue->SetJustification(ETextJustify::Right);
+		Contain(RateValue);
 		USizeBox* ReadBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ReadBox"));
 		ReadBox->SetWidthOverride(ValueColumnWidth);
 		ReadBox->AddChild(RateValue);
@@ -341,6 +350,8 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			LiveLabel->SetJustification(ETextJustify::Right);
 			LiveValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LiveValue"));
 			LiveValue->SetJustification(ETextJustify::Right);
+			Contain(LiveLabel);
+			Contain(LiveValue);
 			Live->AddChildToVerticalBox(LiveLabel);
 			Live->AddChildToVerticalBox(LiveValue);
 			// Fixed width: the number's text changes every refresh (sign flips

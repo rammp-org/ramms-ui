@@ -26,8 +26,10 @@ class UTextBlock;
  *                            control's severity (ERammsControlTextSeverity)
  *
  * Every label and value wraps within the space its row gives it and is clipped
- * to it, so a long one makes the row taller rather than drawing over its
- * neighbours.
+ * to it (a Position / Velocity row's own label and value too: URammsAxisControl),
+ * so a long one makes the row taller rather than drawing over its neighbours.
+ * Not an Action row's name, which sizes its button: URammsButton lays its label
+ * out unconstrained, and a wrapping one there folds narrow with room to spare.
  *
  * Owns its delegate handlers (it knows its Id, sink and source), so the
  * panel just lays rows out and calls Refresh for readback.
