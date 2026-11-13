@@ -21,6 +21,7 @@
 #include "Widgets/Layout/Anchors.h"
 #include "RammsDetectionTypes.h"
 #include "RammsCameraTypes.h"
+#include "UI/RammsDetectionMarker.h"
 #include "RammsCameraWidget.generated.h"
 
 class UCanvasPanelSlot;
@@ -280,6 +281,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
 	bool bInteractiveBoundingBoxOverlay = false;
 
+	/**
+	 * Widget the overlay places on each detection, for example a tappable outline with the
+	 * object's label (a Blueprint subclass of Ramms Detection Marker). None = no markers.
+	 * Read once, when the overlay is first created; set bInteractiveBoundingBoxOverlay for taps.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	TSubclassOf<URammsDetectionMarker> DetectionMarkerClass;
+
+	/** Where the overlay puts each marker: filling the detection's box, or centred on it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	ERammsDetectionMarkerPlacement DetectionMarkerPlacement = ERammsDetectionMarkerPlacement::Box;
+
+	/** Draw the overlay's own boxes, labels and centroids. Turn off when markers show the detections. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	bool bDrawDetectionBoxes = true;
+
+	/** Image size, in pixels, that GetDetectionCoordinateScale assumes before the first frame arrives. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
+	FVector2D FallbackDetectionImageSize = FVector2D(640.0, 480.0);
+
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
 	bool bMaintainAspectRatio = true;
@@ -368,6 +389,9 @@ protected:
 	/** Current texture being displayed (UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture> CurrentTexture;
+
+	/** The stream CurrentTexture came from: GetImageSize ignores a texture left from the stream before StreamID */
+	FString CurrentTextureStreamID;
 
 	/** Current data texture (e.g. depth, mask, flow — UTexture2D or UTextureRenderTarget2D) */
 	UPROPERTY(Transient)
@@ -665,6 +689,19 @@ public:
 	/** Whether the bounding box overlay is currently visible */
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	bool IsBoundingBoxOverlayVisible() const;
+
+	/** Size, in pixels, of the current frame of StreamID; zero before the first frame. */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	FVector2D GetImageSize() const;
+
+	/**
+	 * What to divide a detection's coordinates by for the normalized (0-1) image coordinates
+	 * FRammsBoundingBox uses. (1, 1) when Box (x1, y1, x2, y2) and Centroid are all within 0-1
+	 * already; otherwise they are taken as pixels of the current frame, so its size
+	 * (FallbackDetectionImageSize before the first frame).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	FVector2D GetDetectionCoordinateScale(const FVector4& Box, const FVector2D& Centroid) const;
 
 	/** Get the bounding box overlay widget (may be null if not shown) */
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")

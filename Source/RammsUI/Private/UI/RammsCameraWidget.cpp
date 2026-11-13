@@ -1173,6 +1173,7 @@ void URammsCameraWidget::SetDisplayMode(ERammsCameraDisplayMode NewMode, bool bA
 void URammsCameraWidget::SetTexture(UTexture* Texture)
 {
 	CurrentTexture = Texture;
+	CurrentTextureStreamID = StreamID;
 	UpdateDisplayedImages();
 }
 
@@ -1765,6 +1766,11 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			// Forward lifetime setting
 			BBoxOverlay->DetectionLifetime = DetectionLifetime;
 
+			// Markers, and whether the overlay draws its own boxes under them
+			BBoxOverlay->MarkerWidgetClass = DetectionMarkerClass;
+			BBoxOverlay->MarkerPlacement = DetectionMarkerPlacement;
+			BBoxOverlay->bDrawBoxes = bDrawDetectionBoxes;
+
 			// Forward line thickness override
 			ApplyDetectionLineThicknessToOverlay();
 
@@ -1853,6 +1859,31 @@ void URammsCameraWidget::ClearDetections()
 bool URammsCameraWidget::IsBoundingBoxOverlayVisible() const
 {
 	return BBoxOverlay && BBoxOverlay->GetVisibility() != ESlateVisibility::Collapsed;
+}
+
+FVector2D URammsCameraWidget::GetImageSize() const
+{
+	// Zero until the current stream's first frame: after SetStreamID the last frame is the old camera's
+	return CurrentTexture && CurrentTextureStreamID == StreamID
+		? FVector2D(CurrentTexture->GetSurfaceWidth(), CurrentTexture->GetSurfaceHeight())
+		: FVector2D::ZeroVector;
+}
+
+FVector2D URammsCameraWidget::GetDetectionCoordinateScale(const FVector4& Box, const FVector2D& Centroid) const
+{
+	// Normalized already when every coordinate is within 0-1 (with a little slack for rounding)
+	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+	if (IsUnit(Box.X) && IsUnit(Box.Y) && IsUnit(Box.Z) && IsUnit(Box.W) && IsUnit(Centroid.X) && IsUnit(Centroid.Y))
+	{
+		return FVector2D(1.0, 1.0);
+	}
+
+	const FVector2D ImageSize = GetImageSize();
+	if (ImageSize.X > 0.0 && ImageSize.Y > 0.0)
+	{
+		return ImageSize;
+	}
+	return FVector2D(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
 }
 
 void URammsCameraWidget::ApplyZOrder()
@@ -2026,6 +2057,7 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 				CameraImage ? TEXT("valid") : TEXT("null"));
 		}
 		CurrentTexture = Texture;
+		CurrentTextureStreamID = InStreamID;
 
 		// Auto-detect aspect ratio from incoming RGB texture
 		if (bMaintainAspectRatio && bAutoDetectAspectRatio && Texture)
