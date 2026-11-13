@@ -156,6 +156,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bounding Box|Markers", meta = (ClampMin = "0", ClampMax = "3"))
 	int32 MarkerPane = 0;
 
+	/** Give the markers the stream of the camera they're on, which a tap sends (set by URammsCameraWidget). */
+	UFUNCTION(BlueprintCallable, Category = "Bounding Box|Markers")
+	void SetMarkerStreamID(const FString& InStreamID);
+
+	UFUNCTION(BlueprintPure, Category = "Bounding Box|Markers")
+	const FString& GetMarkerStreamID() const { return MarkerStreamID; }
+
+	/** Mark one detection as selected (its marker's bSelected); None for none. */
+	UFUNCTION(BlueprintCallable, Category = "Bounding Box|Markers")
+	void SetSelectedDetectionID(FName InID);
+
+	UFUNCTION(BlueprintPure, Category = "Bounding Box|Markers")
+	FName GetSelectedDetectionID() const { return SelectedDetectionID; }
+
 	// ── API ─────────────────────────────────────────────────────
 
 	/**
@@ -240,6 +254,12 @@ private:
 
 	/** The detections changed since the markers were last placed */
 	bool bMarkersDirty = false;
+
+	/** See SetMarkerStreamID */
+	FString MarkerStreamID;
+
+	/** See SetSelectedDetectionID */
+	FName SelectedDetectionID;
 
 	/** What the markers were last placed for: when any of it changes, they are placed again */
 	struct FMarkerLayoutKey

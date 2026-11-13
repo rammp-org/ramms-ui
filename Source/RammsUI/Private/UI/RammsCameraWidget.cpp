@@ -17,6 +17,10 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Blueprint/GameViewportSubsystem.h"
 #include "UI/RammsBoundingBoxOverlay.h"
+#include "RammsBridgeSubsystem.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
 
@@ -544,6 +548,7 @@ void URammsCameraWidget::NativeOnInitialized()
 void URammsCameraWidget::NativeConstruct()
 {
 	SetIsFocusable(true);
+	LoadStreamSet();
 
 	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] NativeConstruct: StreamID='%s' Provider=%s Slot=%s Parent=%s Visibility=%d"),
 		*GetName(), *StreamID,
@@ -701,6 +706,15 @@ void URammsCameraWidget::NativeConstruct()
 		ShowBoundingBoxOverlay(EffectiveTag);
 	}
 
+	// The robot's detections, straight from the bridge
+	if (bReceiveBridgeDetections)
+	{
+		if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
+		{
+			Bridge->OnDetectedObjectsJson.AddUniqueDynamic(this, &URammsCameraWidget::HandleBridgeDetectedObjects);
+		}
+	}
+
 	// Update initial layout
 	UpdateLayout(false);
 }
@@ -712,6 +726,11 @@ void URammsCameraWidget::NativeDestruct()
 
 	UnregisterCorner();
 	StopStream();
+
+	if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
+	{
+		Bridge->OnDetectedObjectsJson.RemoveDynamic(this, &URammsCameraWidget::HandleBridgeDetectedObjects);
+	}
 
 	// Unsubscribe from all providers' frame delegates
 	for (auto& Sub : ProviderSubscriptions)
@@ -1093,6 +1112,15 @@ void URammsCameraWidget::SetStreamID(const FString& NewStreamID)
 
 	// Update stream ID
 	StreamID = NewStreamID;
+
+	// The old camera's detections aren't this camera's: drop them before the markers take the new stream,
+	// so a tap can't send an old object as one on the new camera
+	LastBridgeDetectionsJson.Empty();
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->ClearDetections();
+		BBoxOverlay->SetMarkerStreamID(StreamID);
+	}
 
 	// Update label
 	if (CameraLabel && CustomLabel.IsEmpty())
@@ -1768,6 +1796,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 
 			// Markers, and whether the overlay draws its own boxes under them
 			BBoxOverlay->MarkerWidgetClass = DetectionMarkerClass;
+			BBoxOverlay->SetMarkerStreamID(StreamID);
 			BBoxOverlay->MarkerPlacement = DetectionMarkerPlacement;
 			BBoxOverlay->bDrawBoxes = bDrawDetectionBoxes;
 
@@ -1837,6 +1866,8 @@ void URammsCameraWidget::HideBoundingBoxOverlay()
 
 void URammsCameraWidget::SetDetections(const TArray<FRammsBoundingBox>& InBoxes)
 {
+	// Detections set from elsewhere replace the bridge's: its kept push mustn't be placed again over them
+	LastBridgeDetectionsJson.Empty();
 	if (!BBoxOverlay)
 	{
 		ShowBoundingBoxOverlay();
@@ -1850,6 +1881,7 @@ void URammsCameraWidget::SetDetections(const TArray<FRammsBoundingBox>& InBoxes)
 
 void URammsCameraWidget::ClearDetections()
 {
+	LastBridgeDetectionsJson.Empty();
 	if (BBoxOverlay)
 	{
 		BBoxOverlay->ClearDetections();
@@ -1884,6 +1916,243 @@ FVector2D URammsCameraWidget::GetDetectionCoordinateScale(const FVector4& Box, c
 		return ImageSize;
 	}
 	return FVector2D(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+}
+
+bool URammsCameraWidget::IsBridgeDetectionSource(const FString& Source) const
+{
+	if (BridgeDetectionSources.Num() > 0)
+	{
+		return BridgeDetectionSources.ContainsByPredicate([&Source](const FString& Candidate) { return Candidate.Equals(Source, ESearchCase::IgnoreCase); });
+	}
+	return !Source.IsEmpty() && (Source.Equals(StreamID, ESearchCase::IgnoreCase) || Source.Equals(DataStreamID, ESearchCase::IgnoreCase));
+}
+
+namespace RammsCameraBridgeJson
+{
+	/** Read Count numbers from Field: an array, or an object with Keys ({"X": .., "Y": ..}). */
+	static bool ReadNumbers(const FJsonObject& Object, const TCHAR* Field, const TCHAR* const* Keys, int32 Count, double* Out)
+	{
+		const TSharedPtr<FJsonValue> Value = Object.TryGetField(Field);
+		if (!Value.IsValid())
+		{
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		const TSharedPtr<FJsonObject>*		  Fields = nullptr;
+		if (Value->TryGetArray(Array))
+		{
+			if (Array->Num() < Count)
+			{
+				return false;
+			}
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Array)[i].IsValid() || !(*Array)[i]->TryGetNumber(Out[i]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		if (Value->TryGetObject(Fields))
+		{
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Fields)->TryGetNumberField(Keys[i], Out[i]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+}
+
+int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjectsJson)
+{
+	// A copy: the argument can be LastBridgeDetectionsJson itself (a replay), which SetDetections below empties
+	const FString DetectedObjectsJson = InDetectedObjectsJson;
+
+	TSharedPtr<FJsonObject>			Root;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DetectedObjectsJson);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		UE_LOG(LogRammsCameraWidget, Warning, TEXT("[%s] Bridge detections: not a JSON object: %s"), *GetName(), *DetectedObjectsJson.Left(256));
+		return -1;
+	}
+
+	FString PushSource;
+	Root->TryGetStringField(TEXT("stream_id"), PushSource);
+	FString Selected;
+	Root->TryGetStringField(TEXT("selected_instance_id"), Selected);
+
+	static const TCHAR* const BoxKeys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
+	TArray<FRammsBoundingBox>  Boxes;
+	const TArray<TSharedPtr<FJsonValue>>* Objects = nullptr;
+	if (Root->TryGetArrayField(TEXT("objects"), Objects))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Objects)
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Object))
+			{
+				continue;
+			}
+			FString Source;
+			if (!(*Object)->TryGetStringField(TEXT("source"), Source) || Source.IsEmpty())
+			{
+				Source = PushSource;
+			}
+			if (!IsBridgeDetectionSource(Source))
+			{
+				continue;
+			}
+
+			// x_min, y_min, x_max, y_max; all zero means no box, then the centroid alone places it. A
+			// centroid of exactly (0, 0) with no box is skipped: the orchestrator sends that when it has
+			// no box for an object (its "centroid" is [0, 0] when "box" is unset), not an object at the corner
+			double BoxValues[4] = { 0.0, 0.0, 0.0, 0.0 };
+			double CentroidValues[2] = { 0.0, 0.0 };
+			const bool bHasBox = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("box"), BoxKeys, 4, BoxValues)
+				&& (BoxValues[0] != BoxValues[2] || BoxValues[1] != BoxValues[3]);
+			bool bHasCentroid = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("centroid"), BoxKeys, 2, CentroidValues);
+			if (!bHasBox && (!bHasCentroid || (CentroidValues[0] == 0.0 && CentroidValues[1] == 0.0)))
+			{
+				continue;
+			}
+			if (!bHasCentroid)
+			{
+				CentroidValues[0] = (BoxValues[0] + BoxValues[2]) * 0.5;
+				CentroidValues[1] = (BoxValues[1] + BoxValues[3]) * 0.5;
+			}
+
+			const FVector4	Box(BoxValues[0], BoxValues[1], BoxValues[2], BoxValues[3]);
+			const FVector2D Centroid(CentroidValues[0], CentroidValues[1]);
+			const FVector2D Scale = GetDetectionCoordinateScale(bHasBox ? Box : FVector4(Centroid.X, Centroid.Y, Centroid.X, Centroid.Y), Centroid);
+
+			FString InstanceId, PerceptionClass;
+			(*Object)->TryGetStringField(TEXT("instance_id"), InstanceId);
+			(*Object)->TryGetStringField(TEXT("perception_class"), PerceptionClass);
+
+			FRammsBoundingBox& Detection = Boxes.AddDefaulted_GetRef();
+			Detection.ID = InstanceId.IsEmpty() ? NAME_None : FName(*InstanceId);
+			Detection.Label = FText::FromString(PerceptionClass.IsEmpty() ? InstanceId : PerceptionClass);
+			Detection.Shape = ERammsDetectionShape::Rect;
+			Detection.Centroid = Centroid / Scale;
+			Detection.bHasCentroidOverride = true;
+			if (bHasBox)
+			{
+				const FVector2D Min(FMath::Min(Box.X, Box.Z), FMath::Min(Box.Y, Box.W));
+				const FVector2D Max(FMath::Max(Box.X, Box.Z), FMath::Max(Box.Y, Box.W));
+				Detection.Position = Min / Scale;
+				Detection.Size = (Max - Min) / Scale;
+			}
+			else
+			{
+				Detection.Position = Detection.Centroid;
+				Detection.Size = FVector2D::ZeroVector;
+			}
+		}
+	}
+
+	SetDetections(Boxes);
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetSelectedDetectionID(Selected.IsEmpty() ? NAME_None : FName(*Selected));
+	}
+	LastBridgeDetectionsJson = DetectedObjectsJson;
+	BridgeDetectionsImageSize = GetImageSize();
+	BridgeDetectionsCount = Boxes.Num();
+	UE_LOG(LogRammsCameraWidget, Verbose, TEXT("[%s] Bridge detections (stream_id '%s'): %d of this camera's"), *GetName(), *PushSource, Boxes.Num());
+	return Boxes.Num();
+}
+
+void URammsCameraWidget::HandleBridgeDetectedObjects(const FString& DetectedObjectsJson)
+{
+	ApplyBridgeDetections(DetectedObjectsJson);
+}
+
+FRammsDataStreamMaterialConfig URammsCameraWidget::MakeDataStreamConfig(const FRammsCameraDataStream& Stream)
+{
+	const FRammsCameraDataKindMaterials& Materials = GetDefault<URammsCameraStreamSettings>()->GetMaterials(Stream.Kind);
+	FRammsDataStreamMaterialConfig		 Config;
+	Config.VisualizationMaterial = Materials.VisualizationMaterial.LoadSynchronous();
+	Config.OverlayMaterial = Materials.OverlayMaterial.LoadSynchronous();
+	Config.DisplayLabel = Stream.Label.IsEmpty() ? UEnum::GetDisplayValueAsText(Stream.Kind) : Stream.Label;
+	return Config;
+}
+
+void URammsCameraWidget::LoadStreamSet()
+{
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		return;
+	}
+	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
+	if (BBoxOverlay && StreamID != Set.ColorStreamID)
+	{
+		BBoxOverlay->ClearDetections();
+		LastBridgeDetectionsJson.Empty();
+	}
+	StreamID = Set.ColorStreamID;
+	DataStreams = Set.DataStreams;
+	DataStreamIndex = 0;
+	DataStreamID = DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString();
+	DataStreamConfig = DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig();
+	BridgeDetectionSources = Set.DetectionSources;
+
+	// Construct can run again (the widget removed and added back) after another data stream was picked:
+	// start the data stream's rendering afresh, as SetDataStreamID / SetDataStreamConfig would
+	CurrentDataTexture = nullptr;
+	CachedDataDepthFormat = ERammsDepthFormat::Unknown;
+	CachedStreamMaterialParams.Empty();
+	DataMID = nullptr;
+	OverlayMID = nullptr;
+	bOverlayDiagLogged = false;
+	if (BBoxOverlay)
+	{
+		BBoxOverlay->SetMarkerStreamID(StreamID);
+	}
+	UE_LOG(LogRammsCameraWidget, Log, TEXT("[%s] Stream set %s: '%s', %d data stream(s)%s%s"), *GetName(),
+		*UEnum::GetValueAsString(StreamSet), *StreamID, DataStreams.Num(),
+		DataStreamID.IsEmpty() ? TEXT("") : TEXT(", data '"), DataStreamID.IsEmpty() ? TEXT("") : *(DataStreamID + TEXT("'")));
+}
+
+void URammsCameraWidget::SetStreamSet(ERammsCameraStreamSet NewStreamSet)
+{
+	StreamSet = NewStreamSet;
+	ApplyStreamSet();
+}
+
+void URammsCameraWidget::ApplyStreamSet()
+{
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		// The widget's own streams stay as they are; only the set's list of data streams goes
+		DataStreams.Reset();
+		DataStreamIndex = 0;
+		return;
+	}
+	const FRammsCameraStreamSetConfig Set = URammsCameraStreamSettings::GetStreamSet(StreamSet);
+	DataStreams = Set.DataStreams;
+	DataStreamIndex = 0;
+	BridgeDetectionSources = Set.DetectionSources;
+	// The streams first (clearing their frames), then the material, so its redraw doesn't use the previous stream's frame
+	SetStreams(Set.ColorStreamID, DataStreams.Num() > 0 ? DataStreams[0].StreamID : FString());
+	SetDataStreamConfig(DataStreams.Num() > 0 ? MakeDataStreamConfig(DataStreams[0]) : FRammsDataStreamMaterialConfig());
+}
+
+void URammsCameraWidget::SetDataStreamIndex(int32 Index)
+{
+	if (!DataStreams.IsValidIndex(Index))
+	{
+		return;
+	}
+	DataStreamIndex = Index;
+	// The stream first (clearing its frame), then the material, so its redraw doesn't use the previous stream's frame
+	SetDataStreamID(DataStreams[Index].StreamID);
+	SetDataStreamConfig(MakeDataStreamConfig(DataStreams[Index]));
 }
 
 void URammsCameraWidget::ApplyZOrder()
@@ -2087,6 +2356,14 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 		}
 
 		UpdateDisplayedImages();
+
+		// Pixel boxes from before this frame size (the fallback size, before the first frame) are placed again,
+		// while the overlay still shows that push (not cleared, expired or replaced since)
+		if (!LastBridgeDetectionsJson.IsEmpty() && !GetImageSize().Equals(BridgeDetectionsImageSize)
+			&& BBoxOverlay && BBoxOverlay->GetBoxCount() == BridgeDetectionsCount)
+		{
+			ApplyBridgeDetections(LastBridgeDetectionsJson);
+		}
 	}
 	else if (InStreamID == DataStreamID)
 	{

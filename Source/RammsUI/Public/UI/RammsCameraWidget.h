@@ -22,6 +22,7 @@
 #include "RammsDetectionTypes.h"
 #include "RammsCameraTypes.h"
 #include "UI/RammsDetectionMarker.h"
+#include "RammsCameraStreamSettings.h"
 #include "RammsCameraWidget.generated.h"
 
 class UCanvasPanelSlot;
@@ -109,6 +110,9 @@ class RAMMSUI_API URammsCameraWidget : public URammsBaseWidget
 {
 	GENERATED_BODY()
 
+	/** Configures its camera's settings before the camera is constructed */
+	friend class URammsSceneCameraView;
+
 protected:
 	/** Camera provider (optional - can be set at runtime via SetCameraProvider or auto-found) */
 	UPROPERTY(BlueprintReadWrite, Category = "Camera")
@@ -117,6 +121,15 @@ protected:
 	/** Automatically find and use the first ARammsCameraProviderBase in the level if no provider is set */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	bool bAutoFindProvider = true;
+
+	/**
+	 * Where this camera's streams come from. Scene / Engine Overlay: Project Settings > Ramms Camera
+	 * Streams (its image, its extra images, which of the bridge's objects are its), read when the
+	 * widget is constructed, in place of StreamID, DataStreamID, DataStreamConfig and
+	 * BridgeDetectionSources. Custom: those properties of this widget.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
+	ERammsCameraStreamSet StreamSet = ERammsCameraStreamSet::Custom;
 
 	/** Stream ID to display (e.g., "camera/wrist/color") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
@@ -300,6 +313,23 @@ protected:
 	/** Image size, in pixels, that GetDetectionCoordinateScale assumes before the first frame arrives. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection")
 	FVector2D FallbackDetectionImageSize = FVector2D(640.0, 480.0);
+
+	/**
+	 * Show the robot's detections from the bridge (UpdateDetectedObjects, via RammsBridgeSubsystem's
+	 * OnDetectedObjectsJson) as this camera's markers. Each push is the full set: this camera keeps
+	 * the objects that are its own (see BridgeDetectionSources) and drops the rest. Read when the
+	 * widget is constructed; ApplyBridgeDetections does the same for one push at any time.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Bridge")
+	bool bReceiveBridgeDetections = false;
+
+	/**
+	 * Which of the bridge's objects are this camera's: an object's "source", or the push's "stream_id"
+	 * when the object has none, must be one of these (case-insensitive). Include "" for objects with
+	 * neither. Empty: StreamID and DataStreamID.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Bridge", meta = (EditCondition = "bReceiveBridgeDetections"))
+	TArray<FString> BridgeDetectionSources;
 
 	/** Constrain image area to maintain aspect ratio (prevents stretching) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
@@ -707,6 +737,45 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	URammsBoundingBoxOverlay* GetBoundingBoxOverlay() const { return BBoxOverlay; }
 
+	/**
+	 * Show this camera's objects from a bridge detections push, {stream_id, selected_instance_id,
+	 * objects: [{instance_id, perception_class, box, centroid, source}]}, replacing its detections.
+	 * box (x_min, y_min, x_max, y_max) and centroid are 0-1 or pixels of this camera's frames, as an
+	 * object ({"X", "Y", "Z", "W"}) or an array. Called for every push when bReceiveBridgeDetections.
+	 * @return how many objects were this camera's, or -1 when the JSON isn't an object.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Detection")
+	int32 ApplyBridgeDetections(const FString& DetectedObjectsJson);
+
+	/** Whether a bridge object with this source (or the push's stream_id) is this camera's (BridgeDetectionSources). */
+	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
+	bool IsBridgeDetectionSource(const FString& Source) const;
+
+	/** Use another stream set (see StreamSet), restarting the streams. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void SetStreamSet(ERammsCameraStreamSet NewStreamSet);
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	ERammsCameraStreamSet GetStreamSet() const { return StreamSet; }
+
+	/** Read the stream set from Ramms Camera Streams again and restart the streams (after changing the settings at runtime). Custom: clears the set's data streams only. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void ApplyStreamSet();
+
+	/** The stream set's extra images (depth, segmentation ...); empty for Custom. */
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	const TArray<FRammsCameraDataStream>& GetDataStreams() const { return DataStreams; }
+
+	UFUNCTION(BlueprintPure, Category = "Camera|Streams")
+	int32 GetDataStreamIndex() const { return DataStreamIndex; }
+
+	/** Make another of the stream set's extra images the data stream (the Data, Side-by-Side and Overlay views). */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Streams")
+	void SetDataStreamIndex(int32 Index);
+
+	/** The material config that shows a data stream of this kind (Ramms Camera Streams' materials). */
+	static FRammsDataStreamMaterialConfig MakeDataStreamConfig(const FRammsCameraDataStream& Stream);
+
 protected:
 	// Mouse/Touch interaction overrides
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -714,6 +783,22 @@ protected:
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 protected:
+	UFUNCTION()
+	void HandleBridgeDetectedObjects(const FString& DetectedObjectsJson);
+
+	/** The stream set's extra images, and which is the data stream */
+	UPROPERTY(Transient)
+	TArray<FRammsCameraDataStream> DataStreams;
+	int32 DataStreamIndex = 0;
+
+	/** Take the stream set's streams before they start (no restart) */
+	void LoadStreamSet();
+
+	/** The last bridge push this camera applied, and the frame size it was placed for (re-applied when that changes) */
+	FString	  LastBridgeDetectionsJson;
+	FVector2D BridgeDetectionsImageSize = FVector2D::ZeroVector;
+	int32	  BridgeDetectionsCount = 0;
+
 	/** Build the widget tree programmatically */
 	virtual void	 ResetCachedWidgets() override;
 	virtual void	 BuildWidgetTree() override;

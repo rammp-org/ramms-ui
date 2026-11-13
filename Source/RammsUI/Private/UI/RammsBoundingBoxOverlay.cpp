@@ -240,6 +240,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		}
 		Placed.Add(Marker);
 
+		Marker->StreamID = MarkerStreamID;
+		Marker->bSelected = !Box.ID.IsNone() && Box.ID == SelectedDetectionID;
 		Marker->SetDetection(Box);
 		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
@@ -248,11 +250,15 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		{
 			continue;
 		}
-		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		const auto PlaceAtCentre = [&]()
 		{
 			MarkerSlot->SetAutoSize(true);
 			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
+		};
+		if (MarkerPlacement == ERammsDetectionMarkerPlacement::Centroid)
+		{
+			PlaceAtCentre();
 			continue;
 		}
 
@@ -290,6 +296,12 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 			Min = FVector2D::Min(Min, Point);
 			Max = FVector2D::Max(Max, Point);
 		}
+		// A detection with no box (only a centroid) would get an empty marker nothing can tap: it keeps its own size there
+		if ((Max - Min).X < 1.0 || (Max - Min).Y < 1.0)
+		{
+			PlaceAtCentre();
+			continue;
+		}
 		MarkerSlot->SetAutoSize(false);
 		MarkerSlot->SetAlignment(FVector2D::ZeroVector);
 		MarkerSlot->SetPosition(PaneOffset + Min);
@@ -323,6 +335,24 @@ void URammsBoundingBoxOverlay::SetDetections(const TArray<FRammsBoundingBox>& In
 	bMarkersDirty = true;
 	InvalidateLayoutAndVolatility();
 	OnDetectionsChanged(Boxes);
+}
+
+void URammsBoundingBoxOverlay::SetMarkerStreamID(const FString& InStreamID)
+{
+	if (MarkerStreamID != InStreamID)
+	{
+		MarkerStreamID = InStreamID;
+		bMarkersDirty = true;
+	}
+}
+
+void URammsBoundingBoxOverlay::SetSelectedDetectionID(FName InID)
+{
+	if (SelectedDetectionID != InID)
+	{
+		SelectedDetectionID = InID;
+		bMarkersDirty = true;
+	}
 }
 
 void URammsBoundingBoxOverlay::ClearDetections()

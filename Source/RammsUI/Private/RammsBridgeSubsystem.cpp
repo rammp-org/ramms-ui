@@ -59,11 +59,15 @@ void URammsBridgeSubsystem::PostButtonPress(const FString& ButtonId)
 	PushEvent(Event);
 }
 
-void URammsBridgeSubsystem::PostObjectTapped(const FString& InstanceId)
+void URammsBridgeSubsystem::PostObjectTapped(const FString& InstanceId, const FString& StreamId)
 {
 	TSharedRef<FJsonObject> Event = MakeShared<FJsonObject>();
 	Event->SetStringField(TEXT("event_type"), TEXT("object_tapped"));
 	Event->SetStringField(TEXT("instance_id"), InstanceId);
+	if (!StreamId.IsEmpty())
+	{
+		Event->SetStringField(TEXT("stream_id"), StreamId);
+	}
 	PushEvent(Event);
 }
 
