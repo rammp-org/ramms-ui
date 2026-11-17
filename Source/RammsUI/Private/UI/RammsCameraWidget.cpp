@@ -18,7 +18,6 @@
 #include "Blueprint/GameViewportSubsystem.h"
 #include "UI/RammsBoundingBoxOverlay.h"
 #include "RammsBridgeSubsystem.h"
-#include "RammsBridgeDetectionParse.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -1776,7 +1775,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
 	if (!BBoxOverlay && ImageContainerOverlay)
 	{
-		APlayerController*							PC = GetOwningPlayer();
+		APlayerController* PC = GetOwningPlayer();
 		const TSubclassOf<URammsBoundingBoxOverlay> OverlayClass = BoundingBoxOverlayClass
 			? BoundingBoxOverlayClass
 			: TSubclassOf<URammsBoundingBoxOverlay>(URammsBoundingBoxOverlay::StaticClass());
@@ -1902,23 +1901,21 @@ FVector2D URammsCameraWidget::GetImageSize() const
 		: FVector2D::ZeroVector;
 }
 
-FVector2D URammsCameraWidget::GetDetectionPixelDivisor() const
+FVector2D URammsCameraWidget::GetDetectionCoordinateScale(const FVector4& Box, const FVector2D& Centroid) const
 {
+	// Normalized already when every coordinate is within 0-1 (with a little slack for rounding)
+	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+	if (IsUnit(Box.X) && IsUnit(Box.Y) && IsUnit(Box.Z) && IsUnit(Box.W) && IsUnit(Centroid.X) && IsUnit(Centroid.Y))
+	{
+		return FVector2D(1.0, 1.0);
+	}
+
 	const FVector2D ImageSize = GetImageSize();
 	if (ImageSize.X > 0.0 && ImageSize.Y > 0.0)
 	{
 		return ImageSize;
 	}
 	return FVector2D(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
-}
-
-FVector2D URammsCameraWidget::GetDetectionCoordinateScale(const FVector4& Box, const FVector2D& Centroid) const
-{
-	if (RammsBridgeDetectionParse::IsNormalized(Box, Centroid))
-	{
-		return FVector2D(1.0, 1.0);
-	}
-	return GetDetectionPixelDivisor();
 }
 
 bool URammsCameraWidget::IsBridgeDetectionSource(const FString& Source) const
@@ -1930,25 +1927,134 @@ bool URammsCameraWidget::IsBridgeDetectionSource(const FString& Source) const
 	return !Source.IsEmpty() && (Source.Equals(StreamID, ESearchCase::IgnoreCase) || Source.Equals(DataStreamID, ESearchCase::IgnoreCase));
 }
 
+namespace RammsCameraBridgeJson
+{
+	/** Read Count numbers from Field: an array, or an object with Keys ({"X": .., "Y": ..}). */
+	static bool ReadNumbers(const FJsonObject& Object, const TCHAR* Field, const TCHAR* const* Keys, int32 Count, double* Out)
+	{
+		const TSharedPtr<FJsonValue> Value = Object.TryGetField(Field);
+		if (!Value.IsValid())
+		{
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		const TSharedPtr<FJsonObject>*		  Fields = nullptr;
+		if (Value->TryGetArray(Array))
+		{
+			if (Array->Num() < Count)
+			{
+				return false;
+			}
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Array)[i].IsValid() || !(*Array)[i]->TryGetNumber(Out[i]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		if (Value->TryGetObject(Fields))
+		{
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Fields)->TryGetNumberField(Keys[i], Out[i]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+}
+
 int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjectsJson)
 {
 	// A copy: the argument can be LastBridgeDetectionsJson itself (a replay), which SetDetections below empties
 	const FString DetectedObjectsJson = InDetectedObjectsJson;
 
-	const auto IsMine = [this](const FString& Source) { return IsBridgeDetectionSource(Source); };
-
-	RammsBridgeDetectionParse::FResult Parsed;
-
-	const int32 Count = RammsBridgeDetectionParse::Parse(DetectedObjectsJson, IsMine, GetDetectionPixelDivisor(), Parsed);
-	if (Count < 0)
+	TSharedPtr<FJsonObject>			Root;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DetectedObjectsJson);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
 	{
 		UE_LOG(LogRammsCameraWidget, Warning, TEXT("[%s] Bridge detections: not a JSON object: %s"), *GetName(), *DetectedObjectsJson.Left(256));
 		return -1;
 	}
 
-	const TArray<FRammsBoundingBox>& Boxes = Parsed.Boxes;
-	const FString&					 PushSource = Parsed.PushSource;
-	const FString&					 Selected = Parsed.SelectedInstanceId;
+	FString PushSource;
+	Root->TryGetStringField(TEXT("stream_id"), PushSource);
+	FString Selected;
+	Root->TryGetStringField(TEXT("selected_instance_id"), Selected);
+
+	static const TCHAR* const BoxKeys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
+	TArray<FRammsBoundingBox>  Boxes;
+	const TArray<TSharedPtr<FJsonValue>>* Objects = nullptr;
+	if (Root->TryGetArrayField(TEXT("objects"), Objects))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Objects)
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Object))
+			{
+				continue;
+			}
+			FString Source;
+			if (!(*Object)->TryGetStringField(TEXT("source"), Source) || Source.IsEmpty())
+			{
+				Source = PushSource;
+			}
+			if (!IsBridgeDetectionSource(Source))
+			{
+				continue;
+			}
+
+			// x_min, y_min, x_max, y_max; all zero means no box, then the centroid alone places it. A
+			// centroid of exactly (0, 0) with no box is skipped: the orchestrator sends that when it has
+			// no box for an object (its "centroid" is [0, 0] when "box" is unset), not an object at the corner
+			double BoxValues[4] = { 0.0, 0.0, 0.0, 0.0 };
+			double CentroidValues[2] = { 0.0, 0.0 };
+			const bool bHasBox = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("box"), BoxKeys, 4, BoxValues)
+				&& (BoxValues[0] != BoxValues[2] || BoxValues[1] != BoxValues[3]);
+			bool bHasCentroid = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("centroid"), BoxKeys, 2, CentroidValues);
+			if (!bHasBox && (!bHasCentroid || (CentroidValues[0] == 0.0 && CentroidValues[1] == 0.0)))
+			{
+				continue;
+			}
+			if (!bHasCentroid)
+			{
+				CentroidValues[0] = (BoxValues[0] + BoxValues[2]) * 0.5;
+				CentroidValues[1] = (BoxValues[1] + BoxValues[3]) * 0.5;
+			}
+
+			const FVector4	Box(BoxValues[0], BoxValues[1], BoxValues[2], BoxValues[3]);
+			const FVector2D Centroid(CentroidValues[0], CentroidValues[1]);
+			const FVector2D Scale = GetDetectionCoordinateScale(bHasBox ? Box : FVector4(Centroid.X, Centroid.Y, Centroid.X, Centroid.Y), Centroid);
+
+			FString InstanceId, PerceptionClass;
+			(*Object)->TryGetStringField(TEXT("instance_id"), InstanceId);
+			(*Object)->TryGetStringField(TEXT("perception_class"), PerceptionClass);
+
+			FRammsBoundingBox& Detection = Boxes.AddDefaulted_GetRef();
+			Detection.ID = InstanceId.IsEmpty() ? NAME_None : FName(*InstanceId);
+			Detection.Label = FText::FromString(PerceptionClass.IsEmpty() ? InstanceId : PerceptionClass);
+			Detection.Shape = ERammsDetectionShape::Rect;
+			Detection.Centroid = Centroid / Scale;
+			Detection.bHasCentroidOverride = true;
+			if (bHasBox)
+			{
+				const FVector2D Min(FMath::Min(Box.X, Box.Z), FMath::Min(Box.Y, Box.W));
+				const FVector2D Max(FMath::Max(Box.X, Box.Z), FMath::Max(Box.Y, Box.W));
+				Detection.Position = Min / Scale;
+				Detection.Size = (Max - Min) / Scale;
+			}
+			else
+			{
+				Detection.Position = Detection.Centroid;
+				Detection.Size = FVector2D::ZeroVector;
+			}
+		}
+	}
 
 	SetDetections(Boxes);
 	if (BBoxOverlay)
