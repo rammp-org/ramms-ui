@@ -18,6 +18,7 @@
 
 #include "CoreMinimal.h"
 #include "RammsBridgeSubsystem.h"
+#include "RammsCameraStreamSettings.h"
 #include "UI/RammsBaseWidget.h"
 #include "RammsDetectionPOILayer.generated.h"
 
@@ -43,9 +44,26 @@ public:
 	bool bReceiveBridgeDetections = true;
 
 	/**
-	 * Only show objects whose "source" is listed, case-insensitively. EMPTY SHOWS EVERY SOURCE,
-	 * including an empty one -- unlike URammsCameraWidget::BridgeDetectionSources, which falls back
-	 * to its own stream. This layer is not one camera's, and the bridge's clears carry no stream_id.
+	 * Which camera's objects this layer shows. Scene / Engine overlay: that set's DetectionSources
+	 * from Project Settings > Ramms Camera Streams, in place of AcceptedSources, read when the
+	 * widget is constructed -- the same selector URammsCameraWidget uses, so a layer and the camera
+	 * it sits over cannot drift apart. Custom: this layer's own AcceptedSources.
+	 *
+	 * A layer per camera is the normal setup. Detection coordinates are normalized to the image the
+	 * object was found in, so a layer must cover that camera's image rect and show only that
+	 * camera's objects; one layer showing every camera would place another camera's objects against
+	 * the wrong rectangle.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RAMMS|Detection")
+	ERammsCameraStreamSet StreamSet = ERammsCameraStreamSet::Custom;
+
+	/**
+	 * Only show objects whose "source" is listed, case-insensitively; used when StreamSet is Custom,
+	 * and overwritten by the set's sources otherwise. Empty shows every source, including an empty
+	 * one -- fine for a single full-screen layer, wrong as soon as there is more than one.
+	 *
+	 * Filtering does not stop a clear: an empty "objects" array has nothing to filter, so the layer
+	 * still empties.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	TArray<FString> AcceptedSources;

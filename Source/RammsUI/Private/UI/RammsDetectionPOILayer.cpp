@@ -60,6 +60,13 @@ void URammsDetectionPOILayer::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	// Take the chosen camera's sources, so this layer and that camera agree about whose objects
+	// these are without the list being typed twice.
+	if (StreamSet != ERammsCameraStreamSet::Custom)
+	{
+		AcceptedSources = URammsCameraStreamSettings::GetStreamSet(StreamSet).DetectionSources;
+	}
+
 	if (bReceiveBridgeDetections)
 	{
 		if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
