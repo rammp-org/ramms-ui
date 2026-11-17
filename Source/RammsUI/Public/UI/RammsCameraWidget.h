@@ -733,6 +733,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	FVector2D GetDetectionCoordinateScale(const FVector4& Box, const FVector2D& Centroid) const;
 
+	/** The size coordinates outside 0-1 are divided by: the live frame, or FallbackDetectionImageSize before one arrives. */
+	FVector2D GetDetectionPixelDivisor() const;
+
 	/** Get the bounding box overlay widget (may be null if not shown) */
 	UFUNCTION(BlueprintPure, Category = "Camera|Detection")
 	URammsBoundingBoxOverlay* GetBoundingBoxOverlay() const { return BBoxOverlay; }
@@ -789,7 +792,7 @@ protected:
 	/** The stream set's extra images, and which is the data stream */
 	UPROPERTY(Transient)
 	TArray<FRammsCameraDataStream> DataStreams;
-	int32 DataStreamIndex = 0;
+	int32						   DataStreamIndex = 0;
 
 	/** Take the stream set's streams before they start (no restart) */
 	void LoadStreamSet();
