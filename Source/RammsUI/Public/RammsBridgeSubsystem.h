@@ -104,6 +104,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	static bool ParseDetectedObjectsJson(const FString& DetectedObjectsJson, FRammsBridgeDetectedObjects& OutObjects);
 
+	/**
+	 * Whether the bridge's panel JSON carries a "progress" object.
+	 *
+	 * The schema makes progress optional by OMITTING THE KEY rather than sending null, so that the
+	 * key's presence is itself the flag (USER_INPUT_JSON_SCHEMA.md 6.1). Json String To Struct
+	 * cannot express that: it matches keys to property names, so FInteractionPanel's hasprogress --
+	 * which no producer sends, because it is not in the schema -- stays false and the progress bar
+	 * never shows, for the orchestrator's panels as much as for a test push. Set hasprogress from
+	 * this after parsing.
+	 *
+	 * False for a payload that is not a JSON object, or whose "progress" is not an object.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
+	static bool PanelJsonHasProgress(const FString& PanelJson);
+
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void BroadcastPanelJson(const FString& PanelJson);
 
@@ -158,16 +173,16 @@ private:
 
 	struct FBufferedEvent
 	{
-		int32 Seq = 0;
+		int32					Seq = 0;
 		TSharedPtr<FJsonObject> Object;
-		FString Json;
+		FString					Json;
 	};
 
-	TArray<FBufferedEvent> RecentEvents;
+	TArray<FBufferedEvent>		RecentEvents;
 	FRammsBridgeDetectedObjects LastDetectedObjects;
-	FString CurrentUIEventsJson = TEXT("{\"latest_seq\":0,\"events\":[]}");
-	int32 Sequence = 0;
-	bool bCameraFeedOpen = false;
+	FString						CurrentUIEventsJson = TEXT("{\"latest_seq\":0,\"events\":[]}");
+	int32						Sequence = 0;
+	bool						bCameraFeedOpen = false;
 
 	static constexpr int32 MaxRecentEvents = 16;
 };
