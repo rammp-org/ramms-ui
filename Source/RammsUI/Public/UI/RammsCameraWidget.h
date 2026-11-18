@@ -225,10 +225,27 @@ protected:
 	 *   - Scalar    "CornerRadius" (per-corner radius in pixels, uniform)
 	 *   - Vector    "ImageSize"   (widget pixel dimensions, float2)
 	 * The material should use RammsRoundedCorners.ush for corner masking.
-	 * If not set, textures are displayed directly (no corner masking, may break with post-processing).
+	 * Defaults to /RammsUI/Materials/M_CameraImage.
+	 * If cleared, textures are displayed directly (no corner masking, may break with post-processing).
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Style")
 	TObjectPtr<UMaterialInterface> PassthroughMaterial;
+
+	/**
+	 * Use ImageCornerRadii for the camera image's corners instead of deriving them from the
+	 * style (CornerRadiusMedium minus BorderThickness). Turn on to match a border or frame
+	 * drawn on top of the camera image. The mask is applied by PassthroughMaterial.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style|Image Corners", meta = (InlineEditConditionToggle))
+	bool bOverrideImageCornerRadii = false;
+
+	/**
+	 * Corner radii of the camera image area, in pixels: X = top left, Y = top right,
+	 * Z = bottom right, W = bottom left. In side-by-side views each pane takes the outer
+	 * corners it touches. Set at runtime with SetImageCornerRadii.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style|Image Corners", meta = (EditCondition = "bOverrideImageCornerRadii", ClampMin = "0"))
+	FVector4 ImageCornerRadii = FVector4(8.0f, 8.0f, 8.0f, 8.0f);
 
 	/** Base Z-order for this widget (higher values draw on top of lower ones) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
@@ -522,6 +539,28 @@ protected:
 	bool bOverlayDiagLogged = false;
 
 public:
+	URammsCameraWidget(const FObjectInitializer& ObjectInitializer);
+
+	/**
+	 * Round the camera image's corners with these radii, in pixels
+	 * (X = top left, Y = top right, Z = bottom right, W = bottom left).
+	 * Overrides the style-derived radii until ClearImageCornerRadii is called.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetImageCornerRadii(FVector4 Radii);
+
+	/** Round all four corners of the camera image with the same radius, in pixels. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void SetImageCornerRadius(float Radius);
+
+	/** Go back to corner radii derived from the style. */
+	UFUNCTION(BlueprintCallable, Category = "Style")
+	void ClearImageCornerRadii();
+
+	/** The image area's outer corner radii in use (X = TL, Y = TR, Z = BR, W = BL). */
+	UFUNCTION(BlueprintPure, Category = "Style")
+	FVector4 GetImageCornerRadii() const;
+
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;

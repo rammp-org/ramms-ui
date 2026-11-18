@@ -3,6 +3,7 @@
 #include "UI/RammsCameraWidget.h"
 #include "RammsCameraProviderComponent.h"
 #include "Components/CanvasPanelSlot.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Components/OverlaySlot.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -31,6 +32,47 @@ namespace
 
 int32																	 URammsCameraWidget::FocusZOrderCounter = 0;
 TMap<TPair<UWidget*, uint8>, TArray<TWeakObjectPtr<URammsCameraWidget>>> URammsCameraWidget::CornerRegistry;
+
+URammsCameraWidget::URammsCameraWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	// Default passthrough material: masks the image's corners (RammsRoundedCorners.ush)
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultPassthrough(TEXT("/RammsUI/Materials/M_CameraImage.M_CameraImage"));
+	if (DefaultPassthrough.Succeeded())
+	{
+		PassthroughMaterial = DefaultPassthrough.Object;
+	}
+}
+
+void URammsCameraWidget::SetImageCornerRadii(FVector4 Radii)
+{
+	bOverrideImageCornerRadii = true;
+	ImageCornerRadii = FVector4(FMath::Max(Radii.X, 0.0), FMath::Max(Radii.Y, 0.0), FMath::Max(Radii.Z, 0.0), FMath::Max(Radii.W, 0.0));
+	UpdateImageCornerRadii();
+}
+
+void URammsCameraWidget::SetImageCornerRadius(float Radius)
+{
+	SetImageCornerRadii(FVector4(Radius, Radius, Radius, Radius));
+}
+
+void URammsCameraWidget::ClearImageCornerRadii()
+{
+	bOverrideImageCornerRadii = false;
+	UpdateImageCornerRadii();
+}
+
+FVector4 URammsCameraWidget::GetImageCornerRadii() const
+{
+	if (bOverrideImageCornerRadii)
+	{
+		return ImageCornerRadii;
+	}
+	const float OuterRadius = Style ? Style->Border.CornerRadiusMedium : 4.0f;
+	const float R = FMath::Max(OuterRadius - BorderThickness, 0.0f);
+	// Collapsible: the header sits above the image, so its top corners stay square
+	return bCollapsible ? FVector4(0.0f, 0.0f, R, R) : FVector4(R, R, R, R);
+}
 
 void URammsCameraWidget::ResetCachedWidgets()
 {
@@ -763,6 +805,9 @@ void URammsCameraWidget::SynchronizeProperties()
 		// Label text changed — force header layout re-evaluation
 		CachedHeaderCheckWidth = -1.0f;
 	}
+
+	// Image corner radii (style-derived, or the ImageCornerRadii override)
+	UpdateImageCornerRadii();
 
 	// Sync view mode label
 	ApplyViewModeLayout();
@@ -3302,54 +3347,27 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	// Corner masking is handled by materials via CornerRadii vector parameter.
 	// This function computes per-corner radii based on layout mode and sets them
 	// on the appropriate MIDs. The shader uses these to mask corners.
-	float OuterRadius = Style ? Style->Border.CornerRadiusMedium : 4.0f;
-	float R = FMath::Max(OuterRadius - BorderThickness, 0.0f);
-	bool  bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
+	// Outer corners of the whole image area: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
+	const FVector4 Outer = GetImageCornerRadii();
+	const bool	   bSideBySide = (ViewMode == ERammsCameraViewMode::SideBySide);
 
-	// FVector4 CornerRadii: X=TopLeft, Y=TopRight, Z=BottomRight, W=BottomLeft
 	FVector4 RGBRadii, DataRadii;
-
-	if (bCollapsible)
+	if (bSideBySide && bSBSVertical)
 	{
-		// Collapsible: header above, so top corners are always 0
-		if (bSideBySide && bSBSVertical)
-		{
-			// Vertical stack: RGB on top (no corners), Data on bottom (bottom corners)
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, 0.0f);
-			DataRadii = FVector4(0.0f, 0.0f, R, R);
-		}
-		else if (bSideBySide)
-		{
-			// Horizontal stack: RGB left (bottom-left), Data right (bottom-right)
-			RGBRadii = FVector4(0.0f, 0.0f, 0.0f, R);
-			DataRadii = FVector4(0.0f, 0.0f, R, 0.0f);
-		}
-		else
-		{
-			RGBRadii = FVector4(0.0f, 0.0f, R, R);
-			DataRadii = FVector4(0.0f, 0.0f, R, R);
-		}
+		// Vertical stack: RGB on top takes the top corners, Data below takes the bottom corners
+		RGBRadii = FVector4(Outer.X, Outer.Y, 0.0f, 0.0f);
+		DataRadii = FVector4(0.0f, 0.0f, Outer.Z, Outer.W);
+	}
+	else if (bSideBySide)
+	{
+		// Horizontal stack: RGB on the left takes the left corners, Data on the right the right corners
+		RGBRadii = FVector4(Outer.X, 0.0f, 0.0f, Outer.W);
+		DataRadii = FVector4(0.0f, Outer.Y, Outer.Z, 0.0f);
 	}
 	else
 	{
-		// Non-collapsible: title overlays on image, all corners available
-		if (bSideBySide && bSBSVertical)
-		{
-			// Vertical stack: RGB on top (top corners), Data on bottom (bottom corners)
-			RGBRadii = FVector4(R, R, 0.0f, 0.0f);
-			DataRadii = FVector4(0.0f, 0.0f, R, R);
-		}
-		else if (bSideBySide)
-		{
-			// Horizontal stack: RGB left (left corners), Data right (right corners)
-			RGBRadii = FVector4(R, 0.0f, 0.0f, R);
-			DataRadii = FVector4(0.0f, R, R, 0.0f);
-		}
-		else
-		{
-			RGBRadii = FVector4(R, R, R, R);
-			DataRadii = FVector4(R, R, R, R);
-		}
+		RGBRadii = Outer;
+		DataRadii = Outer;
 	}
 
 	// Store for use in UpdateMaterialCornerParams
@@ -3358,6 +3376,18 @@ void URammsCameraWidget::UpdateImageCornerRadii()
 	// Invalidate material param caches so next UpdateMaterialCornerParams pushes new radii
 	LastMaterialImageSize_RGB = FVector2D::ZeroVector;
 	LastMaterialImageSize_Data = FVector2D::ZeroVector;
+
+	// Push now to whatever material each image is drawing, so a change shows without waiting for a new frame
+	for (UImage* Image : { CameraImage.Get(), DataImage.Get() })
+	{
+		if (Image)
+		{
+			if (UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(Image->GetBrush().GetResourceObject()))
+			{
+				UpdateMaterialCornerParams(MID, Image);
+			}
+		}
+	}
 }
 
 void URammsCameraWidget::UpdateHeaderCornerRadii()
