@@ -41,6 +41,12 @@ void URammsBridgeSubsystem::ResetSessionState()
 	LastPanelJson.Empty();
 	bLastPanelWasUpdate = false;
 	LastDetectedObjects = FRammsBridgeDetectedObjects();
+
+	// Same stale-replay problem, and for the same reason: it exists so a widget created later
+	// starts in the right state, which makes a session that ended with the feed open leak "open"
+	// into the next run. The UI event sequence is NOT reset here -- a bridge polling across a PIE
+	// restart holds a since_seq, and starting over at 0 would starve it.
+	bCameraFeedOpen = false;
 }
 
 void URammsBridgeSubsystem::Deinitialize()
@@ -96,13 +102,27 @@ namespace RammsPanelIdentity
 			return FString();
 		}
 
+		// A panel carries at least one of these. Without them every {}-shaped object -- an engine's
+		// bare status panel, or anything else that reaches UpdatePanel -- would reduce to the same
+		// identity and match the idle panel, so a different panel would skip its animation.
+		if (!Root->HasField(TEXT("title")) && !Root->HasField(TEXT("style")) && !Root->HasField(TEXT("buttons")))
+		{
+			return FString();
+		}
+
+		// Absent style means "normal" (USER_INPUT_JSON_SCHEMA.md 6.1 and 6.3), so a producer that
+		// starts sending it explicitly must not read as a different panel.
+		const auto Style = [](const TSharedPtr<FJsonObject>& Object) {
+			FString Value;
+			Object->TryGetStringField(TEXT("style"), Value);
+			return Value.IsEmpty() ? FString(TEXT("normal")) : Value;
+		};
+
 		FString Identity;
 		FString Value;
 		Root->TryGetStringField(TEXT("title"), Value);
 		Identity += Value + TEXT("\x1f");
-		Value.Empty();
-		Root->TryGetStringField(TEXT("style"), Value);
-		Identity += Value + TEXT("\x1f");
+		Identity += Style(Root) + TEXT("\x1f");
 
 		// Buttons in order: a panel whose actions changed is a different panel, even if it kept
 		// its title. Their labels and styles count too, since a relabelled button is a new offer.
@@ -116,12 +136,13 @@ namespace RammsPanelIdentity
 				{
 					continue;
 				}
-				for (const TCHAR* Field : { TEXT("button_id"), TEXT("label"), TEXT("style") })
+				for (const TCHAR* Field : { TEXT("button_id"), TEXT("label") })
 				{
 					FString ButtonValue;
 					(*Button)->TryGetStringField(Field, ButtonValue);
 					Identity += ButtonValue + TEXT("\x1e");
 				}
+				Identity += Style(*Button) + TEXT("\x1e");
 			}
 		}
 		return Identity;
@@ -141,7 +162,12 @@ void URammsBridgeSubsystem::BroadcastPanelJson(const FString& PanelJson)
 	bLastPanelWasUpdate = !LastPanelJson.IsEmpty() && PanelJsonIsSamePanel(LastPanelJson, PanelJson);
 	LastPanelJson = PanelJson;
 
+	// A handler may push a panel of its own in response. That inner call would leave its own
+	// answer behind, and the handlers after it in this broadcast would read it against the payload
+	// they are being handed -- so the outer answer is restored once the inner one is done.
+	const bool bWasUpdate = bLastPanelWasUpdate;
 	OnPanelJson.Broadcast(PanelJson);
+	bLastPanelWasUpdate = bWasUpdate;
 }
 
 void URammsBridgeSubsystem::BroadcastDetectedObjectsJson(const FString& DetectedObjectsJson)
