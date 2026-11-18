@@ -5,6 +5,8 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Engine/Engine.h"
+#include "Interfaces/IRammsCameraProvider.h"
+#include "UObject/UObjectIterator.h"
 #include "UI/RammsDetectionPOI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsDetectionPOI, Log, All);
@@ -204,11 +206,46 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 		bWarnedAboutClass = false; // a new class deserves its own say about the interface
 	}
 
-	// The bridge struct documents its coordinates as "normalized 0-1, or pixels when any value is
-	// > 1", and URammsCameraWidget divides the pixel case by the frame size. Nothing here can: the
-	// layer has no frame. A POI multiplying pixels by its parent's size lands far off screen, and
-	// the boxes over the camera image stay correct, so it reads as a POI-widget bug. Say it once.
+	// FRammsBridgeDetectedObject documents its coordinates as "normalized 0-1, or pixels when any
+	// value is > 1", and the two can arrive in ONE push, so the choice is per object, exactly as
+	// URammsCameraWidget::GetDetectionCoordinateScale makes it. A POI multiplies by its parent's
+	// size, so a pixel centroid of 154.5 lands 154 screens away while a normalized one beside it
+	// looks fine -- which reads as a POI bug rather than a coordinate one.
 	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+
+	// Resolved only when a non-normalized object actually turns up, and once per source per push:
+	// walking the camera providers is not worth doing for the normal case.
+	TMap<FString, FVector2D> DivisorBySource;
+	const auto				 PixelDivisorFor = [this, &DivisorBySource](const FString& Source) -> FVector2D {
+		  if (const FVector2D* Found = DivisorBySource.Find(Source))
+		  {
+			  return *Found;
+		  }
+
+		  // The camera that produced the object knows its own frame size; the fallback is only for
+		  // a stream nothing in the level is serving yet.
+		  FVector2D Divisor(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+		  if (const UWorld* World = GetWorld(); World && !Source.IsEmpty())
+		  {
+			  for (TObjectIterator<UActorComponent> It; It; ++It)
+			  {
+				  UActorComponent* Component = *It;
+				  if (!IsValid(Component) || Component->GetWorld() != World)
+				  {
+					  continue;
+				  }
+				  IRammsCameraProvider*	 Provider = Cast<IRammsCameraProvider>(Component);
+				  FRammsCameraStreamInfo Info;
+				  if (Provider && Provider->GetStreamInfo(Source, Info) && Info.Width > 0 && Info.Height > 0)
+				  {
+					  Divisor = FVector2D(Info.Width, Info.Height);
+					  break;
+				  }
+			  }
+		  }
+		  DivisorBySource.Add(Source, Divisor);
+		  return Divisor;
+	};
 
 	TSet<FName>						Seen;
 	TArray<TObjectPtr<UUserWidget>> KeptUnkeyed;
@@ -227,17 +264,31 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			continue;
 		}
 
-		if (!bWarnedAboutPixels
-			&& (!IsUnit(Object.Centroid.X) || !IsUnit(Object.Centroid.Y)
-				|| (Object.bHasBox
-					&& (!IsUnit(Object.Box.X) || !IsUnit(Object.Box.Y) || !IsUnit(Object.Box.Z) || !IsUnit(Object.Box.W)))))
+		// Normalized when every component is within 0-1; otherwise pixels of the source's frame.
+		// The box decides with the centroid, and an object with no box is judged on the centroid
+		// alone -- the same test the camera widget applies to the same payload.
+		FRammsBridgeDetectedObject Placed = Object;
+		const bool				   bNormalized = IsUnit(Object.Centroid.X) && IsUnit(Object.Centroid.Y)
+			&& (!Object.bHasBox
+				|| (IsUnit(Object.Box.X) && IsUnit(Object.Box.Y) && IsUnit(Object.Box.Z) && IsUnit(Object.Box.W)));
+		if (!bNormalized)
 		{
-			bWarnedAboutPixels = true;
-			UE_LOG(LogRammsDetectionPOI, Warning,
-				TEXT("[%s] object '%s' on stream '%s' has coordinates outside 0-1 (centroid %s). This layer ")
-					TEXT("cannot scale pixels -- it has no frame size -- so its POI will be placed far off. Send ")
-						TEXT("normalized 0-1 coordinates."),
-				*GetName(), *Object.InstanceId, *Objects.StreamId, *Object.Centroid.ToString());
+			const FVector2D Divisor = PixelDivisorFor(Object.Source);
+			Placed.Centroid = FVector2D(Object.Centroid.X / Divisor.X, Object.Centroid.Y / Divisor.Y);
+			if (Object.bHasBox)
+			{
+				Placed.Box = FVector4(
+					Object.Box.X / Divisor.X, Object.Box.Y / Divisor.Y,
+					Object.Box.Z / Divisor.X, Object.Box.W / Divisor.Y);
+			}
+			if (!bWarnedAboutPixels)
+			{
+				bWarnedAboutPixels = true;
+				UE_LOG(LogRammsDetectionPOI, Log,
+					TEXT("[%s] object '%s' on stream '%s' is in pixels (centroid %s); dividing by %s. A wrong ")
+						TEXT("divisor puts every such POI in the wrong place, so check that against the real frame."),
+					*GetName(), *Object.InstanceId, *Object.Source, *Object.Centroid.ToString(), *Divisor.ToString());
+			}
 		}
 
 		const FName Id = Object.InstanceId.IsEmpty() ? NAME_None : FName(*Object.InstanceId);
@@ -305,7 +356,7 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			Seen.Add(Id);
 		}
 
-		IRammsDetectionPOI::Execute_SetDetectedObject(POI, Object);
+		IRammsDetectionPOI::Execute_SetDetectedObject(POI, Placed);
 	}
 
 	// An object this push leaves out is gone, so its POI goes with it: left on screen it is a ghost,

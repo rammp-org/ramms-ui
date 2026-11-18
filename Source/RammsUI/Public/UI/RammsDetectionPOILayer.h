@@ -69,6 +69,18 @@ public:
 	TArray<FString> AcceptedSources;
 
 	/**
+	 * Frame size that pixel coordinates are divided by when the camera that produced them cannot
+	 * be found in the level -- the same fallback, and the same default, as
+	 * URammsCameraWidget::FallbackDetectionImageSize.
+	 *
+	 * A detection whose values are all within 0-1 is taken as normalized and is not divided at
+	 * all, so this only matters for a producer sending pixels. When the object's `source` names a
+	 * camera that is present, that camera's own frame size wins over this.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
+	FVector2D FallbackDetectionImageSize = FVector2D(640.0, 480.0);
+
+	/**
 	 * Show objects that arrive with no instance_id. Nothing can key a widget on them, so they are
 	 * reused in order and a tap on one has no id to send.
 	 */
