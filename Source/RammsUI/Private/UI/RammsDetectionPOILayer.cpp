@@ -6,7 +6,8 @@
 #include "Components/CanvasPanel.h"
 #include "Engine/Engine.h"
 #include "Interfaces/IRammsCameraProvider.h"
-#include "UObject/UObjectIterator.h"
+#include "EngineUtils.h"
+#include "RammsCameraProviderComponent.h"
 #include "UI/RammsDetectionPOI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsDetectionPOI, Log, All);
@@ -125,6 +126,52 @@ void URammsDetectionPOILayer::HandleDetectedObjects(const FRammsBridgeDetectedOb
 	SetDetectedObjects(InObjects);
 }
 
+FVector2D URammsDetectionPOILayer::ResolvePixelDivisor()
+{
+	if (ResolvedImageSize.X > 0.0 && ResolvedImageSize.Y > 0.0)
+	{
+		return ResolvedImageSize;
+	}
+
+	// Key on the stream THIS LAYER covers, not on the object's "source". They are not the same
+	// thing: source is a detection alias, and the shipped scene set accepts "" and "scene" for a
+	// stream actually registered as "camera/scene/color" (RammsCameraStreamSettings.cpp). Asking a
+	// provider for a stream called "scene" never matches, which is how the first version of this
+	// silently fell back to 640x480 every time while claiming to use the camera's own size.
+	const FString StreamID = StreamSet != ERammsCameraStreamSet::Custom
+		? URammsCameraStreamSettings::GetStreamSet(StreamSet).ColorStreamID
+		: FString();
+
+	const UWorld* World = GetWorld();
+	if (World && !StreamID.IsEmpty())
+	{
+		// Both shapes, as URammsCameraWidget's own auto-find does: ARammsCameraProviderBase is an
+		// AActor, so a component-only sweep misses every level built on it.
+		for (TActorIterator<AActor> It(const_cast<UWorld*>(World)); It; ++It)
+		{
+			IRammsCameraProvider* Provider = It->GetClass()->ImplementsInterface(URammsCameraProvider::StaticClass())
+				? Cast<IRammsCameraProvider>(*It)
+				: nullptr;
+			if (!Provider)
+			{
+				Provider = It->FindComponentByClass<URammsCameraProviderComponent>();
+			}
+
+			FRammsCameraStreamInfo Info;
+			if (Provider && Provider->GetStreamInfo(StreamID, Info) && Info.Width > 0 && Info.Height > 0)
+			{
+				// Registration-time, not per frame: a producer that changes resolution without
+				// changing stream id leaves this stale, where the camera widget follows its texture.
+				ResolvedImageSize = FVector2D(Info.Width, Info.Height);
+				return ResolvedImageSize;
+			}
+		}
+	}
+
+	// Not cached: a provider may register later, and then the next pixel object picks it up.
+	return FVector2D(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+}
+
 bool URammsDetectionPOILayer::IsAcceptedSource(const FString& Source) const
 {
 	if (AcceptedSources.IsEmpty())
@@ -213,40 +260,6 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	// looks fine -- which reads as a POI bug rather than a coordinate one.
 	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
 
-	// Resolved only when a non-normalized object actually turns up, and once per source per push:
-	// walking the camera providers is not worth doing for the normal case.
-	TMap<FString, FVector2D> DivisorBySource;
-	const auto				 PixelDivisorFor = [this, &DivisorBySource](const FString& Source) -> FVector2D {
-		  if (const FVector2D* Found = DivisorBySource.Find(Source))
-		  {
-			  return *Found;
-		  }
-
-		  // The camera that produced the object knows its own frame size; the fallback is only for
-		  // a stream nothing in the level is serving yet.
-		  FVector2D Divisor(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
-		  if (const UWorld* World = GetWorld(); World && !Source.IsEmpty())
-		  {
-			  for (TObjectIterator<UActorComponent> It; It; ++It)
-			  {
-				  UActorComponent* Component = *It;
-				  if (!IsValid(Component) || Component->GetWorld() != World)
-				  {
-					  continue;
-				  }
-				  IRammsCameraProvider*	 Provider = Cast<IRammsCameraProvider>(Component);
-				  FRammsCameraStreamInfo Info;
-				  if (Provider && Provider->GetStreamInfo(Source, Info) && Info.Width > 0 && Info.Height > 0)
-				  {
-					  Divisor = FVector2D(Info.Width, Info.Height);
-					  break;
-				  }
-			  }
-		  }
-		  DivisorBySource.Add(Source, Divisor);
-		  return Divisor;
-	};
-
 	TSet<FName>						Seen;
 	TArray<TObjectPtr<UUserWidget>> KeptUnkeyed;
 	int32							NextUnkeyed = 0;
@@ -273,20 +286,21 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 				|| (IsUnit(Object.Box.X) && IsUnit(Object.Box.Y) && IsUnit(Object.Box.Z) && IsUnit(Object.Box.W)));
 		if (!bNormalized)
 		{
-			const FVector2D Divisor = PixelDivisorFor(Object.Source);
+			const FVector2D Divisor = ResolvePixelDivisor();
 			Placed.Centroid = FVector2D(Object.Centroid.X / Divisor.X, Object.Centroid.Y / Divisor.Y);
-			if (Object.bHasBox)
+			// URammsBridgeSubsystem fills Box whether or not bHasBox, so scaling it only when the
+			// flag is set hands Blueprint a struct with a normalized centroid and a pixel box.
+			Placed.Box = FVector4(
+				Object.Box.X / Divisor.X, Object.Box.Y / Divisor.Y,
+				Object.Box.Z / Divisor.X, Object.Box.W / Divisor.Y);
+			// Said again whenever the divisor changes: a provider registering after the first push
+			// moves every pixel POI, and a line printed once per layer cannot show that.
+			if (!Divisor.Equals(LastReportedDivisor, 0.5))
 			{
-				Placed.Box = FVector4(
-					Object.Box.X / Divisor.X, Object.Box.Y / Divisor.Y,
-					Object.Box.Z / Divisor.X, Object.Box.W / Divisor.Y);
-			}
-			if (!bWarnedAboutPixels)
-			{
-				bWarnedAboutPixels = true;
+				LastReportedDivisor = Divisor;
 				UE_LOG(LogRammsDetectionPOI, Log,
-					TEXT("[%s] object '%s' on stream '%s' is in pixels (centroid %s); dividing by %s. A wrong ")
-						TEXT("divisor puts every such POI in the wrong place, so check that against the real frame."),
+					TEXT("[%s] object '%s' (source '%s') is in pixels (centroid %s); dividing by %s. A wrong ")
+						TEXT("divisor puts every such POI in the wrong place, so check it against the real frame."),
 					*GetName(), *Object.InstanceId, *Object.Source, *Object.Centroid.ToString(), *Divisor.ToString());
 			}
 		}

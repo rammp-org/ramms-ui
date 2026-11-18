@@ -114,7 +114,13 @@ private:
 	UFUNCTION()
 	void HandleDetectedObjects(const FRammsBridgeDetectedObjects& InObjects);
 
-	bool		 IsAcceptedSource(const FString& Source) const;
+	bool IsAcceptedSource(const FString& Source) const;
+
+	/**
+	 * The frame size that pixel coordinates are divided by: this layer's own camera, found once
+	 * and remembered, else FallbackDetectionImageSize.
+	 */
+	FVector2D	 ResolvePixelDivisor();
 	UUserWidget* CreatePOI();
 
 	UPROPERTY(Transient)
@@ -134,9 +140,14 @@ private:
 	/** Likewise for a missing canvas, which is permanent once it happens. */
 	bool bWarnedAboutCanvas = false;
 
-	/** Likewise for coordinates outside 0-1, and for a duplicate instance_id. */
-	bool bWarnedAboutPixels = false;
+	/** Likewise for a duplicate instance_id. */
 	bool bWarnedAboutDuplicateId = false;
+
+	/** The divisor last reported, so a change is said rather than swallowed by a one-shot flag. */
+	FVector2D LastReportedDivisor = FVector2D::ZeroVector;
+
+	/** A frame size found from a provider. Zero until one is found, so a late provider still is. */
+	FVector2D ResolvedImageSize = FVector2D::ZeroVector;
 
 	/** The last payload, re-applied when the layer's size changes (see NativeTick). */
 	UPROPERTY(Transient)
