@@ -119,6 +119,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
 	static bool PanelJsonHasProgress(const FString& PanelJson);
 
+	/**
+	 * A panel's progress "pct" as a 0-1 fraction, accepting either scale a producer may send.
+	 *
+	 * USER_INPUT_JSON_SCHEMA.md 6.4 states the convention as 0.0-1.0, matching
+	 * UProgressBar::Percent, and in the same breath records fridge_ui_demo as yielding
+	 * 0.0-100.0 because the widget it targets binds a Percent (0-100) field. Nothing on the
+	 * bridge rescales or validates it, so the UI is where the two can be reconciled: an engine
+	 * following the documented convention and one following the demo both get the right bar,
+	 * instead of each having to know which widget it is talking to.
+	 *
+	 * Over 1 is read as a percentage and divided by 100; 1 or less is already a fraction. That
+	 * is the same rule this codebase uses for detection coordinates, where every component
+	 * within 0-1 means normalized and anything larger means pixels. It makes 1.0 mean full
+	 * rather than one percent -- the ambiguity is inherent in accepting both, and a producer
+	 * wanting 1% can send 1.0 on the percentage scale only by sending 0.01.
+	 *
+	 * Clamped to 0-1. A negative, infinite or NaN pct gives 0.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
+	static float PanelProgressFraction(float Pct);
+
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void BroadcastPanelJson(const FString& PanelJson);
 
