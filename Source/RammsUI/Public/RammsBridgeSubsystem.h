@@ -77,6 +77,7 @@ class RAMMSUI_API URammsBridgeSubsystem : public UEngineSubsystem
 	GENERATED_BODY()
 
 public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
 	// ── Inbound (bridge -> UE) ────────────────────────────────────────
@@ -140,8 +141,52 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
 	static float PanelProgressFraction(float Pct);
 
+	/**
+	 * Whether two panel payloads are the SAME panel, differing only in what a running action
+	 * updates.
+	 *
+	 * Identity is the title, the buttons (their ids, labels and styles, in order) and the panel
+	 * style. The message and the progress are what a step changes as it runs, so they are not part
+	 * of it -- an engine pushing "opening door, 30%" then "opening door, 65%" is one panel twice,
+	 * not two panels. A style change is a new panel: an error panel should announce itself.
+	 *
+	 * Keep the previous payload yourself and pass it here: that way what the answer depends on is
+	 * visible in the graph, and it is the same answer wherever it is asked. Use it to play a
+	 * panel's entrance animation only when the panel actually changed.
+	 *
+	 * False when either payload is not a JSON object, INCLUDING two identical malformed ones, so a
+	 * payload that cannot be understood animates rather than being silently treated as an update.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
+	static bool PanelJsonIsSamePanel(const FString& PanelJsonA, const FString& PanelJsonB);
+
+	/**
+	 * Whether the panel currently being broadcast is an update to the one before it.
+	 *
+	 * Convenience over PanelJsonIsSamePanel for the common case: read it inside an OnPanelJson
+	 * handler and play the entrance animation only when it is false. It describes the payload
+	 * being delivered -- it is set before the broadcast -- so it is only meaningful there; ask the
+	 * pure comparison instead if you need an answer at any other time, or want the inputs visible.
+	 *
+	 * False for the first panel of a session, and for anything that changes the panel's identity.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Ramms Bridge|Inbound")
+	bool IsPanelAnUpdate() const { return bLastPanelWasUpdate; }
+
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void BroadcastPanelJson(const FString& PanelJson);
+
+	/**
+	 * Forget what the last session showed: the panel it ended on and the objects it had.
+	 *
+	 * Called automatically when a play session starts. It exists because this is a
+	 * UEngineSubsystem: it outlives a PIE run, so without this the first panel of a new run is
+	 * compared against the last panel of the previous one -- and a session that ends on the idle
+	 * panel and begins with it reads as an update, which skips the entrance animation and leaves
+	 * the panel hidden.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
+	void ResetSessionState();
 
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Inbound")
 	void BroadcastDetectedObjectsJson(const FString& DetectedObjectsJson);
@@ -201,9 +246,17 @@ private:
 
 	TArray<FBufferedEvent>		RecentEvents;
 	FRammsBridgeDetectedObjects LastDetectedObjects;
-	FString						CurrentUIEventsJson = TEXT("{\"latest_seq\":0,\"events\":[]}");
-	int32						Sequence = 0;
-	bool						bCameraFeedOpen = false;
+
+	/** The panel before the one being broadcast, and what comparing their identities said. */
+	FString LastPanelJson;
+	bool	bLastPanelWasUpdate = false;
+
+	/** Registration for the play-session reset; released in Deinitialize. */
+	FDelegateHandle GameInstanceStartHandle;
+
+	FString CurrentUIEventsJson = TEXT("{\"latest_seq\":0,\"events\":[]}");
+	int32	Sequence = 0;
+	bool	bCameraFeedOpen = false;
 
 	static constexpr int32 MaxRecentEvents = 16;
 };

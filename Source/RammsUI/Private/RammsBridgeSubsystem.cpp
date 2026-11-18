@@ -2,6 +2,8 @@
 
 #include "RammsBridgeSubsystem.h"
 
+#include "Engine/World.h"
+
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -21,8 +23,37 @@ namespace
 	}
 } // namespace
 
+void URammsBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	// A UEngineSubsystem outlives a play session, so whatever the last run ended with is still
+	// here when the next one starts. For the detections that only means a stale replay; for the
+	// panel it is worse, because the first panel of a run then reads as an update to the last
+	// panel of the previous one and its entrance animation -- which is what makes it visible --
+	// is skipped. A walkthrough that ends on the idle panel and starts with it does exactly that.
+	GameInstanceStartHandle = FWorldDelegates::OnStartGameInstance.AddWeakLambda(
+		this, [this](UGameInstance*) { ResetSessionState(); });
+}
+
+void URammsBridgeSubsystem::ResetSessionState()
+{
+	LastPanelJson.Empty();
+	bLastPanelWasUpdate = false;
+	LastDetectedObjects = FRammsBridgeDetectedObjects();
+
+	// Same stale-replay problem, and for the same reason: it exists so a widget created later
+	// starts in the right state, which makes a session that ended with the feed open leak "open"
+	// into the next run. The UI event sequence is NOT reset here -- a bridge polling across a PIE
+	// restart holds a since_seq, and starting over at 0 would starve it.
+	bCameraFeedOpen = false;
+}
+
 void URammsBridgeSubsystem::Deinitialize()
 {
+	FWorldDelegates::OnStartGameInstance.Remove(GameInstanceStartHandle);
+	GameInstanceStartHandle.Reset();
+
 	OnPanelJson.Clear();
 	OnDetectedObjectsJson.Clear();
 	OnDetectedObjects.Clear();
@@ -56,9 +87,87 @@ float URammsBridgeSubsystem::PanelProgressFraction(float Pct)
 	return FMath::Clamp(Fraction, 0.0f, 1.0f);
 }
 
+namespace RammsPanelIdentity
+{
+	/** The fields a running action changes are excluded; what is left is the panel's identity. */
+	static FString Of(const FString& PanelJson)
+	{
+		TSharedPtr<FJsonObject>			Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PanelJson);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			// Not a JSON object: it has no identity to match, so it can never be "the same panel"
+			// as anything, including itself. A malformed payload replays the animation, which is
+			// the safe way round -- the alternative is a panel that silently never animates.
+			return FString();
+		}
+
+		// A panel carries at least one of these. Without them every {}-shaped object -- an engine's
+		// bare status panel, or anything else that reaches UpdatePanel -- would reduce to the same
+		// identity and match the idle panel, so a different panel would skip its animation.
+		if (!Root->HasField(TEXT("title")) && !Root->HasField(TEXT("style")) && !Root->HasField(TEXT("buttons")))
+		{
+			return FString();
+		}
+
+		// Absent style means "normal" (USER_INPUT_JSON_SCHEMA.md 6.1 and 6.3), so a producer that
+		// starts sending it explicitly must not read as a different panel.
+		const auto Style = [](const TSharedPtr<FJsonObject>& Object) {
+			FString Value;
+			Object->TryGetStringField(TEXT("style"), Value);
+			return Value.IsEmpty() ? FString(TEXT("normal")) : Value;
+		};
+
+		FString Identity;
+		FString Value;
+		Root->TryGetStringField(TEXT("title"), Value);
+		Identity += Value + TEXT("\x1f");
+		Identity += Style(Root) + TEXT("\x1f");
+
+		// Buttons in order: a panel whose actions changed is a different panel, even if it kept
+		// its title. Their labels and styles count too, since a relabelled button is a new offer.
+		const TArray<TSharedPtr<FJsonValue>>* Buttons = nullptr;
+		if (Root->TryGetArrayField(TEXT("buttons"), Buttons))
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : *Buttons)
+			{
+				const TSharedPtr<FJsonObject>* Button = nullptr;
+				if (!Entry.IsValid() || !Entry->TryGetObject(Button))
+				{
+					continue;
+				}
+				for (const TCHAR* Field : { TEXT("button_id"), TEXT("label") })
+				{
+					FString ButtonValue;
+					(*Button)->TryGetStringField(Field, ButtonValue);
+					Identity += ButtonValue + TEXT("\x1e");
+				}
+				Identity += Style(*Button) + TEXT("\x1e");
+			}
+		}
+		return Identity;
+	}
+} // namespace RammsPanelIdentity
+
+bool URammsBridgeSubsystem::PanelJsonIsSamePanel(const FString& PanelJsonA, const FString& PanelJsonB)
+{
+	const FString A = RammsPanelIdentity::Of(PanelJsonA);
+	return !A.IsEmpty() && A == RammsPanelIdentity::Of(PanelJsonB);
+}
+
 void URammsBridgeSubsystem::BroadcastPanelJson(const FString& PanelJson)
 {
+	// Set before the broadcast: a handler reads it to decide whether to play the entrance
+	// animation, so it has to describe the payload being delivered, not the one before it.
+	bLastPanelWasUpdate = !LastPanelJson.IsEmpty() && PanelJsonIsSamePanel(LastPanelJson, PanelJson);
+	LastPanelJson = PanelJson;
+
+	// A handler may push a panel of its own in response. That inner call would leave its own
+	// answer behind, and the handlers after it in this broadcast would read it against the payload
+	// they are being handed -- so the outer answer is restored once the inner one is done.
+	const bool bWasUpdate = bLastPanelWasUpdate;
 	OnPanelJson.Broadcast(PanelJson);
+	bLastPanelWasUpdate = bWasUpdate;
 }
 
 void URammsBridgeSubsystem::BroadcastDetectedObjectsJson(const FString& DetectedObjectsJson)
