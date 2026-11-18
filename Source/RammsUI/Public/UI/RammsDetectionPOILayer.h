@@ -108,6 +108,7 @@ protected:
 	virtual void	 BuildWidgetTree() override;
 	virtual void	 NativeConstruct() override;
 	virtual void	 NativeDestruct() override;
+	virtual void	 NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void	 ResetCachedWidgets() override;
 	virtual UWidget* GetRootWidgetForValidation() override;
 
@@ -131,4 +132,22 @@ private:
 
 	/** So a POI class that does not implement the interface is reported once, not once per push. */
 	bool bWarnedAboutClass = false;
+
+	/** Likewise for a missing canvas, which is permanent once it happens. */
+	bool bWarnedAboutCanvas = false;
+
+	/** Likewise for coordinates outside 0-1, and for a duplicate instance_id. */
+	bool bWarnedAboutPixels = false;
+	bool bWarnedAboutDuplicateId = false;
+
+	/** The last payload, re-applied when the layer's size changes (see NativeTick). */
+	UPROPERTY(Transient)
+	FRammsBridgeDetectedObjects LastObjects;
+
+	/** The size the POIs were last placed for. */
+	FVector2D LastLayoutSize = FVector2D::ZeroVector;
+
+	/** The class the pooled POIs were made from, so changing POIWidgetClass can reset the pool. */
+	UPROPERTY(Transient)
+	TSubclassOf<UUserWidget> PooledClass;
 };
