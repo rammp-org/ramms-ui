@@ -13,13 +13,13 @@ namespace
 {
 	FString ToCondensedJson(const TSharedRef<FJsonObject>& Object)
 	{
-		FString Out;
+		FString															 Out;
 		TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
 			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
 		FJsonSerializer::Serialize(Object, Writer);
 		return Out;
 	}
-}
+} // namespace
 
 void URammsBridgeSubsystem::Deinitialize()
 {
@@ -33,6 +33,18 @@ void URammsBridgeSubsystem::Deinitialize()
 }
 
 // â”€â”€ Inbound â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+bool URammsBridgeSubsystem::PanelJsonHasProgress(const FString& PanelJson)
+{
+	TSharedPtr<FJsonObject>			Root;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PanelJson);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject>* Progress = nullptr;
+	return Root->TryGetObjectField(TEXT("progress"), Progress) && Progress && Progress->IsValid();
+}
 
 void URammsBridgeSubsystem::BroadcastPanelJson(const FString& PanelJson)
 {
@@ -56,7 +68,7 @@ namespace
 	/** Reads Count numbers from Field: a bare array, or an object with Keys ({"X": .., "Y": ..}). */
 	bool ReadBridgeNumbers(const FJsonObject& Object, const TCHAR* Field, int32 Count, double* Out)
 	{
-		static const TCHAR* const Keys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
+		static const TCHAR* const	 Keys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
 		const TSharedPtr<FJsonValue> Value = Object.TryGetField(Field);
 		if (!Value.IsValid())
 		{
@@ -92,7 +104,7 @@ namespace
 		}
 		return false;
 	}
-}
+} // namespace
 
 bool URammsBridgeSubsystem::ParseDetectedObjectsJson(const FString& DetectedObjectsJson, FRammsBridgeDetectedObjects& OutObjects)
 {
@@ -183,9 +195,9 @@ void URammsBridgeSubsystem::PushEvent(const TSharedRef<FJsonObject>& Event)
 	Event->SetNumberField(TEXT("seq"), ++Sequence);
 
 	FBufferedEvent& Buffered = RecentEvents.AddDefaulted_GetRef();
-	Buffered.Seq    = Sequence;
+	Buffered.Seq = Sequence;
 	Buffered.Object = Event;
-	Buffered.Json   = ToCondensedJson(Event);
+	Buffered.Json = ToCondensedJson(Event);
 
 	if (RecentEvents.Num() > MaxRecentEvents)
 	{
