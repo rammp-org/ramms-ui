@@ -86,20 +86,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
 	int32 GetPOICount() const;
 
-	/**
-	 * Report a tap on this object to the bridge: its instance_id, with its source as the stream the
-	 * tap happened on (RammsBridgeSubsystem::PostObjectTapped, which the bridge polls as an
-	 * object_tapped event). Does nothing for an object with no instance_id, since there is nothing
-	 * to name.
-	 *
-	 * Call this from the POI's own tap handler. A POI needs no reference to whatever placed it or to
-	 * the UI around it: the struct it was given already says which object it is and which camera saw
-	 * it, so it works the same in any layer. This is what URammsDetectionMarker::PostObjectTapped
-	 * does for the markers drawn over a camera image.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
-	static void PostObjectTapped(const FRammsBridgeDetectedObject& DetectedObject);
-
 	/** The canvas the POIs are on, for anything that needs to measure or add to it. */
 	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
 	UCanvasPanel* GetPOICanvas() const { return POICanvas; }
