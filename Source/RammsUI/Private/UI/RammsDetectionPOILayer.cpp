@@ -6,6 +6,7 @@
 #include "Components/CanvasPanel.h"
 #include "Engine/Engine.h"
 #include "Interfaces/IRammsCameraProvider.h"
+#include "Engine/Texture.h"
 #include "EngineUtils.h"
 #include "RammsCameraProviderComponent.h"
 #include "UI/RammsDetectionPOI.h"
@@ -52,6 +53,7 @@ void URammsDetectionPOILayer::ResetCachedWidgets()
 	POIsById.Reset();
 	UnkeyedPOIs.Reset();
 	POICanvas = nullptr;
+	CachedProvider = nullptr; // another world's provider is not ours
 }
 
 UWidget* URammsDetectionPOILayer::GetRootWidgetForValidation()
@@ -126,50 +128,100 @@ void URammsDetectionPOILayer::HandleDetectedObjects(const FRammsBridgeDetectedOb
 	SetDetectedObjects(InObjects);
 }
 
-FVector2D URammsDetectionPOILayer::ResolvePixelDivisor()
+IRammsCameraProvider* URammsDetectionPOILayer::FindStreamProvider(const FString& StreamID)
 {
-	if (ResolvedImageSize.X > 0.0 && ResolvedImageSize.Y > 0.0)
+	if (UObject* Cached = CachedProvider.Get())
 	{
-		return ResolvedImageSize;
-	}
-
-	// Key on the stream THIS LAYER covers, not on the object's "source". They are not the same
-	// thing: source is a detection alias, and the shipped scene set accepts "" and "scene" for a
-	// stream actually registered as "camera/scene/color" (RammsCameraStreamSettings.cpp). Asking a
-	// provider for a stream called "scene" never matches, which is how the first version of this
-	// silently fell back to 640x480 every time while claiming to use the camera's own size.
-	const FString StreamID = StreamSet != ERammsCameraStreamSet::Custom
-		? URammsCameraStreamSettings::GetStreamSet(StreamSet).ColorStreamID
-		: FString();
-
-	const UWorld* World = GetWorld();
-	if (World && !StreamID.IsEmpty())
-	{
-		// Both shapes, as URammsCameraWidget's own auto-find does: ARammsCameraProviderBase is an
-		// AActor, so a component-only sweep misses every level built on it.
-		for (TActorIterator<AActor> It(const_cast<UWorld*>(World)); It; ++It)
+		if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Cached))
 		{
-			IRammsCameraProvider* Provider = It->GetClass()->ImplementsInterface(URammsCameraProvider::StaticClass())
-				? Cast<IRammsCameraProvider>(*It)
-				: nullptr;
-			if (!Provider)
-			{
-				Provider = It->FindComponentByClass<URammsCameraProviderComponent>();
-			}
-
-			FRammsCameraStreamInfo Info;
-			if (Provider && Provider->GetStreamInfo(StreamID, Info) && Info.Width > 0 && Info.Height > 0)
-			{
-				// Registration-time, not per frame: a producer that changes resolution without
-				// changing stream id leaves this stale, where the camera widget follows its texture.
-				ResolvedImageSize = FVector2D(Info.Width, Info.Height);
-				return ResolvedImageSize;
-			}
+			return Provider;
 		}
 	}
 
-	// Not cached: a provider may register later, and then the next pixel object picks it up.
-	return FVector2D(FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+	UWorld* World = GetWorld();
+	if (!World || StreamID.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	// Both shapes, as URammsCameraWidget's auto-find does: ARammsCameraProviderBase is an AActor,
+	// so a component-only sweep misses every level built on the actor form, and an actor can carry
+	// a provider component as well as implementing the interface itself.
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		TArray<IRammsCameraProvider*, TInlineAllocator<2>> Candidates;
+		if (It->GetClass()->ImplementsInterface(URammsCameraProvider::StaticClass()))
+		{
+			Candidates.Add(Cast<IRammsCameraProvider>(*It));
+		}
+		if (URammsCameraProviderComponent* Comp = It->FindComponentByClass<URammsCameraProviderComponent>())
+		{
+			Candidates.Add(Comp);
+		}
+
+		for (IRammsCameraProvider* Candidate : Candidates)
+		{
+			FRammsCameraStreamInfo Info;
+			if (Candidate && Candidate->GetStreamInfo(StreamID, Info))
+			{
+				CachedProvider = Cast<UObject>(Candidate->_getUObject());
+				return Candidate;
+			}
+		}
+	}
+	return nullptr;
+}
+
+FVector2D URammsDetectionPOILayer::ResolvePixelDivisor()
+{
+	const FVector2D Fallback(
+		FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+
+	// Key on the stream THIS LAYER covers, never on the object's "source". They are not the same
+	// thing: source is a detection alias, and the shipped scene set accepts "" and "scene" for a
+	// stream registered as "camera/scene/color" (RammsCameraStreamSettings.cpp). Asking a provider
+	// for a stream called "scene" never matches, which is how an earlier version of this silently
+	// used the fallback every time while claiming to use the camera's own size.
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		if (!bWarnedAboutCustomStreamSet)
+		{
+			bWarnedAboutCustomStreamSet = true;
+			UE_LOG(LogRammsDetectionPOI, Warning,
+				TEXT("[%s] has pixel coordinates to place but Stream Set is Custom, so there is no camera to ")
+					TEXT("ask for a frame size: falling back to %s. Set Stream Set to the camera this layer covers."),
+				*GetName(), *Fallback.ToString());
+		}
+		return Fallback;
+	}
+
+	const FString		  StreamID = URammsCameraStreamSettings::GetStreamSet(StreamSet).ColorStreamID;
+	IRammsCameraProvider* Provider = FindStreamProvider(StreamID);
+	if (!Provider)
+	{
+		// Not remembered: the stream registers on its first frame, and this layer can be built
+		// before that, so the next pixel object should try again rather than keep the fallback.
+		return Fallback;
+	}
+
+	// The live surface, which is what URammsCameraWidget::GetImageSize reads. The registered
+	// Width/Height is only captured when the stream id changes, so a producer that switches
+	// resolution under one id would leave this layer and the camera widget disagreeing forever.
+	if (const UTexture* Texture = Provider->GetStreamTexture(StreamID))
+	{
+		const FVector2D Live(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
+		if (Live.X > 0.0 && Live.Y > 0.0)
+		{
+			return Live;
+		}
+	}
+
+	FRammsCameraStreamInfo Info;
+	if (Provider->GetStreamInfo(StreamID, Info) && Info.Width > 0 && Info.Height > 0)
+	{
+		return FVector2D(Info.Width, Info.Height);
+	}
+	return Fallback;
 }
 
 bool URammsDetectionPOILayer::IsAcceptedSource(const FString& Source) const
@@ -260,6 +312,12 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	// looks fine -- which reads as a POI bug rather than a coordinate one.
 	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
 
+	// Resolved at most once per push, and only if a pixel object actually turns up: while no
+	// provider is serving the stream yet the lookup sweeps the world, and doing that per object
+	// put a full actor scan into the inner loop.
+	bool	  bDivisorResolved = false;
+	FVector2D Divisor = FVector2D::ZeroVector;
+
 	TSet<FName>						Seen;
 	TArray<TObjectPtr<UUserWidget>> KeptUnkeyed;
 	int32							NextUnkeyed = 0;
@@ -286,7 +344,11 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 				|| (IsUnit(Object.Box.X) && IsUnit(Object.Box.Y) && IsUnit(Object.Box.Z) && IsUnit(Object.Box.W)));
 		if (!bNormalized)
 		{
-			const FVector2D Divisor = ResolvePixelDivisor();
+			if (!bDivisorResolved)
+			{
+				bDivisorResolved = true;
+				Divisor = ResolvePixelDivisor();
+			}
 			Placed.Centroid = FVector2D(Object.Centroid.X / Divisor.X, Object.Centroid.Y / Divisor.Y);
 			// URammsBridgeSubsystem fills Box whether or not bHasBox, so scaling it only when the
 			// flag is set hands Blueprint a struct with a normalized centroid and a pixel box.

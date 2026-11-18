@@ -23,6 +23,7 @@
 #include "RammsDetectionPOILayer.generated.h"
 
 class UCanvasPanel;
+class IRammsCameraProvider;
 
 UCLASS(meta = (DisplayName = "Ramms Detection POI Layer"))
 class RAMMSUI_API URammsDetectionPOILayer : public URammsBaseWidget
@@ -69,13 +70,16 @@ public:
 	TArray<FString> AcceptedSources;
 
 	/**
-	 * Frame size that pixel coordinates are divided by when the camera that produced them cannot
-	 * be found in the level -- the same fallback, and the same default, as
-	 * URammsCameraWidget::FallbackDetectionImageSize.
+	 * Frame size that pixel coordinates are divided by when this layer's camera cannot be found --
+	 * the same fallback, and the same default, as URammsCameraWidget::FallbackDetectionImageSize.
 	 *
 	 * A detection whose values are all within 0-1 is taken as normalized and is not divided at
-	 * all, so this only matters for a producer sending pixels. When the object's `source` names a
-	 * camera that is present, that camera's own frame size wins over this.
+	 * all, so this only matters for a producer sending pixels.
+	 *
+	 * The camera is this layer's StreamSet, NOT the object's `source`: source is a detection alias
+	 * ("", "scene") for a stream registered under another name ("camera/scene/color"), so looking a
+	 * provider up by it never matches. A layer left on Custom has no stream to ask about and always
+	 * uses this value; it says so once, at Warning, the first time it has to.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	FVector2D FallbackDetectionImageSize = FVector2D(640.0, 480.0);
@@ -120,8 +124,11 @@ private:
 	 * The frame size that pixel coordinates are divided by: this layer's own camera, found once
 	 * and remembered, else FallbackDetectionImageSize.
 	 */
-	FVector2D	 ResolvePixelDivisor();
-	UUserWidget* CreatePOI();
+	FVector2D ResolvePixelDivisor();
+
+	/** This layer's camera, found once and remembered so the sweep is not repeated per push. */
+	IRammsCameraProvider* FindStreamProvider(const FString& StreamID);
+	UUserWidget*		  CreatePOI();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> POICanvas;
@@ -146,8 +153,16 @@ private:
 	/** The divisor last reported, so a change is said rather than swallowed by a one-shot flag. */
 	FVector2D LastReportedDivisor = FVector2D::ZeroVector;
 
-	/** A frame size found from a provider. Zero until one is found, so a late provider still is. */
-	FVector2D ResolvedImageSize = FVector2D::ZeroVector;
+	/**
+	 * The provider serving this layer's stream, not its size: the size is read live from the
+	 * stream's texture each time, the way URammsCameraWidget::GetImageSize does, so a producer
+	 * that changes resolution does not leave the two surfaces disagreeing.
+	 */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UObject> CachedProvider;
+
+	/** So a Custom layer says once why it is on the fallback, rather than silently being wrong. */
+	bool bWarnedAboutCustomStreamSet = false;
 
 	/** The last payload, re-applied when the layer's size changes (see NativeTick). */
 	UPROPERTY(Transient)
