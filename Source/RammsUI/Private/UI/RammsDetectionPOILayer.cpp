@@ -5,6 +5,10 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Engine/Engine.h"
+#include "Interfaces/IRammsCameraProvider.h"
+#include "Engine/Texture.h"
+#include "EngineUtils.h"
+#include "RammsCameraProviderComponent.h"
 #include "UI/RammsDetectionPOI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsDetectionPOI, Log, All);
@@ -49,6 +53,7 @@ void URammsDetectionPOILayer::ResetCachedWidgets()
 	POIsById.Reset();
 	UnkeyedPOIs.Reset();
 	POICanvas = nullptr;
+	CachedProvider = nullptr; // another world's provider is not ours
 }
 
 UWidget* URammsDetectionPOILayer::GetRootWidgetForValidation()
@@ -121,6 +126,102 @@ void URammsDetectionPOILayer::NativeTick(const FGeometry& MyGeometry, float InDe
 void URammsDetectionPOILayer::HandleDetectedObjects(const FRammsBridgeDetectedObjects& InObjects)
 {
 	SetDetectedObjects(InObjects);
+}
+
+IRammsCameraProvider* URammsDetectionPOILayer::FindStreamProvider(const FString& StreamID)
+{
+	if (UObject* Cached = CachedProvider.Get())
+	{
+		if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Cached))
+		{
+			return Provider;
+		}
+	}
+
+	UWorld* World = GetWorld();
+	if (!World || StreamID.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	// Both shapes, as URammsCameraWidget's auto-find does: ARammsCameraProviderBase is an AActor,
+	// so a component-only sweep misses every level built on the actor form, and an actor can carry
+	// a provider component as well as implementing the interface itself.
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		TArray<IRammsCameraProvider*, TInlineAllocator<2>> Candidates;
+		if (It->GetClass()->ImplementsInterface(URammsCameraProvider::StaticClass()))
+		{
+			Candidates.Add(Cast<IRammsCameraProvider>(*It));
+		}
+		if (URammsCameraProviderComponent* Comp = It->FindComponentByClass<URammsCameraProviderComponent>())
+		{
+			Candidates.Add(Comp);
+		}
+
+		for (IRammsCameraProvider* Candidate : Candidates)
+		{
+			FRammsCameraStreamInfo Info;
+			if (Candidate && Candidate->GetStreamInfo(StreamID, Info))
+			{
+				CachedProvider = Cast<UObject>(Candidate->_getUObject());
+				return Candidate;
+			}
+		}
+	}
+	return nullptr;
+}
+
+FVector2D URammsDetectionPOILayer::ResolvePixelDivisor()
+{
+	const FVector2D Fallback(
+		FMath::Max(FallbackDetectionImageSize.X, 1.0), FMath::Max(FallbackDetectionImageSize.Y, 1.0));
+
+	// Key on the stream THIS LAYER covers, never on the object's "source". They are not the same
+	// thing: source is a detection alias, and the shipped scene set accepts "" and "scene" for a
+	// stream registered as "camera/scene/color" (RammsCameraStreamSettings.cpp). Asking a provider
+	// for a stream called "scene" never matches, which is how an earlier version of this silently
+	// used the fallback every time while claiming to use the camera's own size.
+	if (StreamSet == ERammsCameraStreamSet::Custom)
+	{
+		if (!bWarnedAboutCustomStreamSet)
+		{
+			bWarnedAboutCustomStreamSet = true;
+			UE_LOG(LogRammsDetectionPOI, Warning,
+				TEXT("[%s] has pixel coordinates to place but Stream Set is Custom, so there is no camera to ")
+					TEXT("ask for a frame size: falling back to %s. Set Stream Set to the camera this layer covers."),
+				*GetName(), *Fallback.ToString());
+		}
+		return Fallback;
+	}
+
+	const FString		  StreamID = URammsCameraStreamSettings::GetStreamSet(StreamSet).ColorStreamID;
+	IRammsCameraProvider* Provider = FindStreamProvider(StreamID);
+	if (!Provider)
+	{
+		// Not remembered: the stream registers on its first frame, and this layer can be built
+		// before that, so the next pixel object should try again rather than keep the fallback.
+		return Fallback;
+	}
+
+	// The live surface, which is what URammsCameraWidget::GetImageSize reads. The registered
+	// Width/Height is only captured when the stream id changes, so a producer that switches
+	// resolution under one id would leave this layer and the camera widget disagreeing forever.
+	if (const UTexture* Texture = Provider->GetStreamTexture(StreamID))
+	{
+		const FVector2D Live(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
+		if (Live.X > 0.0 && Live.Y > 0.0)
+		{
+			return Live;
+		}
+	}
+
+	FRammsCameraStreamInfo Info;
+	if (Provider->GetStreamInfo(StreamID, Info) && Info.Width > 0 && Info.Height > 0)
+	{
+		return FVector2D(Info.Width, Info.Height);
+	}
+	return Fallback;
 }
 
 bool URammsDetectionPOILayer::IsAcceptedSource(const FString& Source) const
@@ -204,11 +305,18 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 		bWarnedAboutClass = false; // a new class deserves its own say about the interface
 	}
 
-	// The bridge struct documents its coordinates as "normalized 0-1, or pixels when any value is
-	// > 1", and URammsCameraWidget divides the pixel case by the frame size. Nothing here can: the
-	// layer has no frame. A POI multiplying pixels by its parent's size lands far off screen, and
-	// the boxes over the camera image stay correct, so it reads as a POI-widget bug. Say it once.
+	// FRammsBridgeDetectedObject documents its coordinates as "normalized 0-1, or pixels when any
+	// value is > 1", and the two can arrive in ONE push, so the choice is per object, exactly as
+	// URammsCameraWidget::GetDetectionCoordinateScale makes it. A POI multiplies by its parent's
+	// size, so a pixel centroid of 154.5 lands 154 screens away while a normalized one beside it
+	// looks fine -- which reads as a POI bug rather than a coordinate one.
 	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+
+	// Resolved at most once per push, and only if a pixel object actually turns up: while no
+	// provider is serving the stream yet the lookup sweeps the world, and doing that per object
+	// put a full actor scan into the inner loop.
+	bool	  bDivisorResolved = false;
+	FVector2D Divisor = FVector2D::ZeroVector;
 
 	TSet<FName>						Seen;
 	TArray<TObjectPtr<UUserWidget>> KeptUnkeyed;
@@ -227,17 +335,36 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			continue;
 		}
 
-		if (!bWarnedAboutPixels
-			&& (!IsUnit(Object.Centroid.X) || !IsUnit(Object.Centroid.Y)
-				|| (Object.bHasBox
-					&& (!IsUnit(Object.Box.X) || !IsUnit(Object.Box.Y) || !IsUnit(Object.Box.Z) || !IsUnit(Object.Box.W)))))
+		// Normalized when every component is within 0-1; otherwise pixels of the source's frame.
+		// The box decides with the centroid, and an object with no box is judged on the centroid
+		// alone -- the same test the camera widget applies to the same payload.
+		FRammsBridgeDetectedObject Placed = Object;
+		const bool				   bNormalized = IsUnit(Object.Centroid.X) && IsUnit(Object.Centroid.Y)
+			&& (!Object.bHasBox
+				|| (IsUnit(Object.Box.X) && IsUnit(Object.Box.Y) && IsUnit(Object.Box.Z) && IsUnit(Object.Box.W)));
+		if (!bNormalized)
 		{
-			bWarnedAboutPixels = true;
-			UE_LOG(LogRammsDetectionPOI, Warning,
-				TEXT("[%s] object '%s' on stream '%s' has coordinates outside 0-1 (centroid %s). This layer ")
-					TEXT("cannot scale pixels -- it has no frame size -- so its POI will be placed far off. Send ")
-						TEXT("normalized 0-1 coordinates."),
-				*GetName(), *Object.InstanceId, *Objects.StreamId, *Object.Centroid.ToString());
+			if (!bDivisorResolved)
+			{
+				bDivisorResolved = true;
+				Divisor = ResolvePixelDivisor();
+			}
+			Placed.Centroid = FVector2D(Object.Centroid.X / Divisor.X, Object.Centroid.Y / Divisor.Y);
+			// URammsBridgeSubsystem fills Box whether or not bHasBox, so scaling it only when the
+			// flag is set hands Blueprint a struct with a normalized centroid and a pixel box.
+			Placed.Box = FVector4(
+				Object.Box.X / Divisor.X, Object.Box.Y / Divisor.Y,
+				Object.Box.Z / Divisor.X, Object.Box.W / Divisor.Y);
+			// Said again whenever the divisor changes: a provider registering after the first push
+			// moves every pixel POI, and a line printed once per layer cannot show that.
+			if (!Divisor.Equals(LastReportedDivisor, 0.5))
+			{
+				LastReportedDivisor = Divisor;
+				UE_LOG(LogRammsDetectionPOI, Log,
+					TEXT("[%s] object '%s' (source '%s') is in pixels (centroid %s); dividing by %s. A wrong ")
+						TEXT("divisor puts every such POI in the wrong place, so check it against the real frame."),
+					*GetName(), *Object.InstanceId, *Object.Source, *Object.Centroid.ToString(), *Divisor.ToString());
+			}
 		}
 
 		const FName Id = Object.InstanceId.IsEmpty() ? NAME_None : FName(*Object.InstanceId);
@@ -305,7 +432,7 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			Seen.Add(Id);
 		}
 
-		IRammsDetectionPOI::Execute_SetDetectedObject(POI, Object);
+		IRammsDetectionPOI::Execute_SetDetectedObject(POI, Placed);
 	}
 
 	// An object this push leaves out is gone, so its POI goes with it: left on screen it is a ghost,

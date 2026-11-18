@@ -30,8 +30,14 @@ public:
 	 * moves keeps up, and called after the widget is in its slot, so the implementation can place
 	 * itself through Slot As Canvas Slot.
 	 *
-	 * Coordinates arrive exactly as the bridge sent them (normalized 0-1 in practice, pixels if it
-	 * sends pixels); the layer does not rescale them, so existing placement logic is unaffected.
+	 * Coordinates arrive NORMALIZED 0-1, whichever way the bridge sent them. A producer may send
+	 * pixels -- FRammsBridgeDetectedObject allows it -- and URammsDetectionPOILayer divides those
+	 * by the frame size before you see them, so an implementation multiplies by its own size and
+	 * nothing else. Do not divide again.
+	 *
+	 * (This used to say the layer passed coordinates through untouched. It did, and a push of
+	 * pixel coordinates put every POI hundreds of screens off while normalized ones beside them
+	 * looked fine.)
 	 *
 	 * UHT generates an empty default, so a widget that adds the interface and does not implement the
 	 * event simply shows nothing -- the layer still owns its lifetime, and never calls into nothing.
