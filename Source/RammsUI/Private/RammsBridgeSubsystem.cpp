@@ -46,6 +46,16 @@ bool URammsBridgeSubsystem::PanelJsonHasProgress(const FString& PanelJson)
 	return Root->TryGetObjectField(TEXT("progress"), Progress) && Progress && Progress->IsValid();
 }
 
+float URammsBridgeSubsystem::PanelProgressFraction(float Pct)
+{
+	if (!FMath::IsFinite(Pct) || Pct <= 0.0f)
+	{
+		return 0.0f;
+	}
+	const float Fraction = Pct > 1.0f ? Pct / 100.0f : Pct;
+	return FMath::Clamp(Fraction, 0.0f, 1.0f);
+}
+
 void URammsBridgeSubsystem::BroadcastPanelJson(const FString& PanelJson)
 {
 	OnPanelJson.Broadcast(PanelJson);
