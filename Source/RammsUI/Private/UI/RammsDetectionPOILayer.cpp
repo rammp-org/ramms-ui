@@ -231,6 +231,20 @@ void URammsDetectionPOILayer::ClearPOIs()
 	SetDetectedObjects(FRammsBridgeDetectedObjects());
 }
 
+void URammsDetectionPOILayer::PostObjectTapped(const FRammsBridgeDetectedObject& DetectedObject)
+{
+	if (DetectedObject.InstanceId.IsEmpty())
+	{
+		// The producer sent no id for this object, so there is nothing the bridge could act on.
+		UE_LOG(LogRammsDetectionPOI, Verbose, TEXT("Tap on an object with no instance_id; not reported"));
+		return;
+	}
+	if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
+	{
+		Bridge->PostObjectTapped(DetectedObject.InstanceId, DetectedObject.Source);
+	}
+}
+
 int32 URammsDetectionPOILayer::GetPOICount() const
 {
 	return POIsById.Num() + UnkeyedPOIs.Num();
