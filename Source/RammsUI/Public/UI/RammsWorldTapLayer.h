@@ -62,23 +62,21 @@ public:
 	float TapTraceDistance = 100000.0f;
 
 	/**
-	 * Let a tap reach a tappable that solid geometry hides.
+	 * Refuse a tap on a tappable that solid geometry hides.
 	 *
-	 * On, because a detection marker is drawn AT the object it stands for, so the object's own mesh
-	 * is between the camera and the marker's centre: a trace that stops at the first blocker would
-	 * never reach the box around a fridge, only the fridge. Each blocking non-tappable in the way
-	 * is dropped and the trace repeated, up to MaxOccludersToSearch times.
+	 * OFF, because in this project "blocks the Visibility channel" is not a usable stand-in for
+	 * "the operator can see it". BP_CameraProjectionActor's procedural mesh has its rendering
+	 * visibility toggled off while its collision stays, so it is an invisible wall across the view
+	 * that would hide most markers behind it -- measured: with occlusion respected, three of four
+	 * staged markers became untappable and nothing on screen said why.
 	 *
-	 * Off makes a tap stop at the first solid thing, which is what you want if these ever become
-	 * props the operator is meant to reach rather than an overlay on what the robot sees.
+	 * The honest version of this test needs a notion of visible occluders that the engine's
+	 * collision channels do not give us here. Until there is one, a tap reaches the nearest
+	 * tappable on the ray whatever is in front of it. Turn this on in a project where the
+	 * Visibility channel does mean visibility.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Interaction")
-	bool bTapThroughOccluders = true;
-
-	/** How many blocking non-tappables a tap will look past. Bounds the work; not a depth in metres. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Interaction",
-		meta = (ClampMin = "1", ClampMax = "32", EditCondition = "bTapThroughOccluders"))
-	int32 MaxOccludersToSearch = 8;
+	bool bRejectOccludedTaps = false;
 
 	/**
 	 * Trace the view at a VIEWPORT PIXEL position and tap the nearest tappable on that ray.

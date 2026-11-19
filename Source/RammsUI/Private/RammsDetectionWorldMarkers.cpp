@@ -194,17 +194,45 @@ ARammsDetectionWorldMarker::ARammsDetectionWorldMarker()
 	Bounds = CreateDefaultSubobject<UBoxComponent>(TEXT("Bounds"));
 	SetRootComponent(Bounds);
 
-	// A click trace runs on the visibility channel, so that is the one the box has to block. It
-	// blocks nothing else: a marker is a target to aim at, not an obstacle -- it must not push the
-	// robot around, stop a door, or occlude anything.
+	// Query only, and see TapChannel for why the response is Overlap rather than Block: a marker
+	// is a target to aim at, not an obstacle, and on this project's channels "obstacle" would mean
+	// an invisible one in front of the sonar. Overlap events stay off -- the layer queries the box
+	// when it needs it; nothing wants a begin/end overlap every time the robot drives past.
 	Bounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Bounds->SetCollisionResponseToAllChannels(ECR_Ignore);
-	Bounds->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Bounds->SetGenerateOverlapEvents(false);
 	Bounds->SetBoxExtent(DefaultExtent);
+	ApplyCollisionResponse();
 
 	Bounds->OnClicked.AddDynamic(this, &ARammsDetectionWorldMarker::HandleClicked);
 	Bounds->OnInputTouchBegin.AddDynamic(this, &ARammsDetectionWorldMarker::HandleTouchBegin);
+}
+
+void ARammsDetectionWorldMarker::ApplyCollisionResponse()
+{
+	if (!Bounds)
+	{
+		return;
+	}
+	Bounds->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Bounds->SetCollisionResponseToChannel(TapChannel, bBlockTapChannel ? ECR_Block : ECR_Overlap);
+}
+
+void ARammsDetectionWorldMarker::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// A Blueprint subclass's TapChannel is not applied until after the constructor has run.
+	ApplyCollisionResponse();
+
+#if !ENABLE_DRAW_DEBUG
+	// Everything this marker shows is a debug draw, and those compile out of Shipping and Test.
+	// Say so once rather than ship a build whose markers can be tapped and cannot be seen -- the
+	// state the class comment calls not a marker at all.
+	UE_LOG(LogRammsDetectionMarkers, Warning,
+		TEXT("%s: debug drawing is compiled out of this build, so world markers are invisible. "
+			 "Give MarkerClass a Blueprint subclass with a mesh, or ship Development."),
+		*GetName());
+#endif
 }
 
 void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& Point)
@@ -213,8 +241,15 @@ void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& P
 	SetActorLocationAndRotation(Point.WorldLocation, Point.WorldRotation.Quaternion());
 	if (Bounds)
 	{
-		// Half of the full size the producer sent, or a default worth aiming at.
-		Bounds->SetBoxExtent(Point.bHasSize ? Point.WorldSize * 0.5 : DefaultExtent);
+		// Half of the full size the producer sent, or a default worth aiming at -- but never
+		// thinner than that default on any one axis. A flat detection (a floor sign, a mat, a
+		// tabletop sent with size_m.Z = 0) would otherwise get a zero-thickness box, and a line
+		// trace against a degenerate box is not reliable: the marker would draw and be untappable,
+		// which is the exact failure DefaultExtent exists to prevent. The drawn box takes the same
+		// floor, so what is seen stays what can be aimed at.
+		const FVector Half = Point.bHasSize ? Point.WorldSize * 0.5 : DefaultExtent;
+		Bounds->SetBoxExtent(FVector(FMath::Max(Half.X, DefaultExtent.X),
+			FMath::Max(Half.Y, DefaultExtent.Y), FMath::Max(Half.Z, DefaultExtent.Z)));
 	}
 }
 
@@ -295,16 +330,35 @@ void ARammsDetectionWorldMarker::OnRammsWorldTapped_Implementation(const FHitRes
 	ReportTapped();
 }
 
-// Both of the engine's own routes go through the interface rather than straight to ReportTapped, so
-// a Blueprint subclass that overrides On Ramms World Tapped overrides all three at once.
-void ARammsDetectionWorldMarker::HandleClicked(UPrimitiveComponent* /*TouchedComponent*/, FKey /*ButtonPressed*/)
+namespace RammsDetectionMarkers
 {
-	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, FHitResult());
+	/** What the engine's click and touch routes can honestly say about where the tap landed: which
+	 *  thing was touched, and nothing about a ray, because there was no trace behind these. */
+	static FHitResult TouchedHit(AActor* Actor, UPrimitiveComponent* Component)
+	{
+		FHitResult Hit;
+		Hit.HitObjectHandle = FActorInstanceHandle(Actor);
+		Hit.Component = Component;
+		if (Actor)
+		{
+			Hit.Location = Hit.ImpactPoint = Actor->GetActorLocation();
+		}
+		return Hit;
+	}
+} // namespace RammsDetectionMarkers
+
+// Both of the engine's own routes go through the interface rather than straight to ReportTapped, so
+// a Blueprint subclass that overrides On Ramms World Tapped overrides all three at once. They fire
+// only where APlayerController's click trace can see this marker, which with the default overlap
+// response it cannot -- see TapChannel.
+void ARammsDetectionWorldMarker::HandleClicked(UPrimitiveComponent* TouchedComponent, FKey /*ButtonPressed*/)
+{
+	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, RammsDetectionMarkers::TouchedHit(this, TouchedComponent));
 }
 
-void ARammsDetectionWorldMarker::HandleTouchBegin(ETouchIndex::Type /*FingerIndex*/, UPrimitiveComponent* /*TouchedComponent*/)
+void ARammsDetectionWorldMarker::HandleTouchBegin(ETouchIndex::Type /*FingerIndex*/, UPrimitiveComponent* TouchedComponent)
 {
-	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, FHitResult());
+	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, RammsDetectionMarkers::TouchedHit(this, TouchedComponent));
 }
 
 URammsDetectionWorldMarkers::URammsDetectionWorldMarkers()
@@ -569,6 +623,13 @@ void URammsDetectionWorldMarkers::EndPlay(const EEndPlayReason::Type EndPlayReas
 	ExtrinsicSubscriptions.Reset();
 	SubscribedProviders.Reset();
 
+	DestroyMarkers();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void URammsDetectionWorldMarkers::DestroyMarkers()
+{
 	for (const TPair<FName, TObjectPtr<AActor>>& Pair : Markers)
 	{
 		if (IsValid(Pair.Value))
@@ -577,8 +638,6 @@ void URammsDetectionWorldMarkers::EndPlay(const EEndPlayReason::Type EndPlayReas
 		}
 	}
 	Markers.Reset();
-
-	Super::EndPlay(EndPlayReason);
 }
 
 bool URammsDetectionWorldMarkers::IsAcceptedSource(const FString& Source) const
@@ -738,14 +797,25 @@ void URammsDetectionWorldMarkers::Reresolve()
 
 			// Size is the producer's alone: one depth sample says where a surface is, never how
 			// big the thing behind it is.
-			FVector SizeMetres;
+			const bool bCameraFrame = !Frame.Equals(TEXT("world"), ESearchCase::IgnoreCase);
+			FVector	   SizeMetres;
 			if (RammsDetectionMarkers::ReadPoint(**Object, TEXT("size_m"), SizeMetres)
 				&& !SizeMetres.IsNearlyZero())
 			{
-				Point.WorldSize = SizeMetres.GetAbs() * RammsDetectionMarkers::MetresToUU;
+				// Extents follow the SAME axis map as a point, or the box is built on the wrong
+				// axes. In the optical frame X is right, Y is down and Z is the range, so a fridge
+				// sent as 1.80 m "tall" in camera coordinates is 1.80 m DEEP in Unreal's unless
+				// this remap happens -- a box of the right dimensions in the wrong orientation,
+				// which looks like a detector error rather than a unit-frame one.
+				//
+				// The producer's world frame needs no remap: its axes are Unreal's up to the sign
+				// of Y, and an extent has no sign to flip, which is what the abs is for. That is
+				// also why this went unnoticed -- the only frame under test was the one that
+				// happens not to need it.
+				const FVector SizeUU = SizeMetres.GetAbs() * RammsDetectionMarkers::MetresToUU;
+				Point.WorldSize = bCameraFrame ? FVector(SizeUU.Z, SizeUU.X, SizeUU.Y) : SizeUU;
 				Point.bHasSize = true;
 
-				const bool bCameraFrame = !Frame.Equals(TEXT("world"), ESearchCase::IgnoreCase);
 				FTransform Extrinsic = FTransform::Identity;
 				if (bCameraFrame)
 				{
@@ -782,23 +852,16 @@ void URammsDetectionWorldMarkers::ApplyMarkers()
 {
 	if (!bSpawnMarkers || !MarkerClass)
 	{
-		return; // MarkerClass defaults to the tappable marker, so this is a deliberate opt-out.
+		// A deliberate opt-out (MarkerClass defaults to the tappable marker), but the ones already
+		// spawned have to go with it: left alone they freeze at their last positions until EndPlay,
+		// still answering tap traces for detections that may no longer exist.
+		DestroyMarkers();
+		return;
 	}
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return;
-	}
-
-	if (bEnableWorldTaps)
-	{
-		// Off by default in Unreal, and a marker's collision box is traced against nothing without
-		// them: the markers would simply not respond, with nothing on screen to say why.
-		if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
-		{
-			PC->bEnableClickEvents = true;
-			PC->bEnableTouchEvents = true;
-		}
 	}
 
 	// Every push is the full list, so anything absent from it is gone.

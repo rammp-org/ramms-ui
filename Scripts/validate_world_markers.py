@@ -146,6 +146,64 @@ def check_producer_path(world):
 	return failures
 
 
+def check_camera_frame_box(world):
+	"""A box sent in CAMERA coordinates: position, extents and rotation all follow the same basis.
+
+	Separate from check_producer_path because that one sends `frame: "world"`, whose axes are
+	Unreal's up to the sign of Y -- the one frame where an un-remapped extent happens to be right.
+	The optical frame is X right, Y down, Z range, so a 1.80 m "tall" fridge sent here must come
+	back 1.80 m along Unreal's X (forward), not its Z.
+	"""
+	host = _host_actor(world)
+	suffix = f"{int(time.time() * 1000) % 100000000}_camframe"
+	colour_id, group = f"synth/{suffix}/color", f"synth_{suffix}"
+
+	provider = unreal.new_object(unreal.RammsCameraProviderComponent, outer=host)
+	provider.register_stream(
+		_stream_info(colour_id, CW, CH, unreal.RammsStreamRole.COLOR, unreal.RammsDepthFormat.UNKNOWN, group, [FX, FY, CX, CY]), True)
+	# Translated and rotated, so an extrinsic applied on the wrong side cannot pass.
+	cam_rot = unreal.Rotator(0.0, 25.0, -10.0)   # (roll, pitch, yaw) in Python
+	camera = unreal.Transform(unreal.Vector(-150.0, 40.0, 110.0), cam_rot, unreal.Vector(1.0, 1.0, 1.0))
+	provider.update_stream_extrinsic(colour_id, camera)
+
+	px, py, pz = 0.30, -0.12, 2.40          # metres, optical: right, down, range
+	sx, sy, sz = 0.60, 1.80, 0.70           # metres, optical: width, height, depth
+	component = unreal.new_object(unreal.RammsDetectionWorldMarkers, outer=host)
+	component.set_editor_property("draw_debug_markers", False)
+	component.set_detected_objects_json(
+		'{"stream_id":"%s","objects":[{"instance_id":"fridge_cam","perception_class":"fridge",'
+		' "frame":"camera","position_m":{"X":%.4f,"Y":%.4f,"Z":%.4f},'
+		' "size_m":{"X":%.4f,"Y":%.4f,"Z":%.4f},'
+		' "orientation":{"X":0,"Y":0,"Z":0,"W":1}}]}' % (colour_id, px, py, pz, sx, sy, sz)
+	)
+
+	points = {str(p.instance_id): p for p in component.get_world_points()}
+	failures = []
+	point = points.get("fridge_cam")
+	if not point:
+		return ["fridge_cam was not resolved (no extrinsic for the synthetic camera?)"]
+
+	# Optical -> Unreal local is (Z, X, -Y), the same map CameraPointToWorld uses, then the pose.
+	expected_loc = camera.transform_location(unreal.Vector(pz * 100.0, px * 100.0, -py * 100.0))
+	if _distance(point.world_location, expected_loc) > 0.01:
+		failures.append(f"fridge_cam location {point.world_location}, expected {expected_loc}")
+
+	# The same map without the sign, because an extent has no sign: (Z, X, Y).
+	expected_size = unreal.Vector(sz * 100.0, sx * 100.0, sy * 100.0)
+	if _distance(point.world_size, expected_size) > 0.01:
+		failures.append(f"fridge_cam size {point.world_size}, expected {expected_size}")
+
+	# An identity rotation in the camera's frame is the camera's own orientation, nothing more.
+	delta = unreal.MathLibrary.normalized_delta_rotator(point.world_rotation, cam_rot)
+	if max(abs(delta.pitch), abs(delta.yaw), abs(delta.roll)) > 0.05:
+		failures.append(f"fridge_cam rotation {point.world_rotation}, expected the camera's {cam_rot}")
+
+	if not point.has_size or not point.has_rotation or not point.position_from_producer:
+		failures.append("fridge_cam sent position, size and orientation; all three must be flagged as the producer's")
+
+	return failures
+
+
 def check_derived_path(world, depth_format, format_name):
 	"""A synthetic camera, and probes whose true world positions are known by construction."""
 	host = _host_actor(world)
@@ -208,6 +266,10 @@ def main():
 
 	failures = check_producer_path(world)
 	print(f"producer path (position_m / size_m / orientation): {'PASS' if not failures else 'FAIL'}")
+	all_failures += failures
+
+	failures = check_camera_frame_box(world)
+	print(f"camera-frame box (position, extents and rotation through one basis): {'PASS' if not failures else 'FAIL'}")
 	all_failures += failures
 
 	for depth_format, name in ((unreal.RammsDepthFormat.FLOAT32CM, "Float32CM"), (unreal.RammsDepthFormat.UINT16MM, "Uint16MM")):

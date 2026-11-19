@@ -52,6 +52,16 @@ TSharedRef<SWidget> URammsWorldTapLayer::RebuildWidget()
 
 bool URammsWorldTapLayer::ScreenPositionFromPointer(const FPointerEvent& PointerEvent, FVector2D& OutViewportPixels) const
 {
+	// AbsoluteToViewport silently writes (0,0) when there is no game viewport to convert against,
+	// and (0,0) is a perfectly valid pixel: a press anywhere would then trace through the top-left
+	// corner and could report a tap on whatever happens to be there. Check its own precondition
+	// first and say no instead.
+	const UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld() || !World->GetGameViewport())
+	{
+		return false;
+	}
+
 	// Slate hands out absolute desktop coordinates; deprojection wants viewport pixels. The two
 	// differ by the viewport's position on the desktop AND by DPI scale, so this conversion is not
 	// optional -- skipping it puts the ray through a different part of the scene on every monitor.
@@ -109,40 +119,56 @@ UObject* URammsWorldTapLayer::FindTappableAtScreenPosition(FVector2D ScreenPosit
 		Params.AddIgnoredActor(Pawn);
 	}
 
-	const int32 MaxPasses = bTapThroughOccluders ? FMath::Max(1, MaxOccludersToSearch) : 1;
-	for (int32 Pass = 0; Pass < MaxPasses; ++Pass)
+	// bIgnoreBlocks: collect TOUCHES along the whole ray and never stop at a blocker.
+	//
+	// This is the difference between the feature working and not. A detection marker overlaps the
+	// tap channel rather than blocking it (ARammsDetectionWorldMarker::TapChannel says why it must
+	// not block), so it is a touch -- and an ordinary multi-trace ends at the first blocking hit,
+	// which discards every touch beyond it. The markers sit AT the objects they stand for, behind
+	// those objects' meshes and, in this project, behind the camera projection actor's hidden
+	// procedural mesh. Measured without this flag: one marker of four was reachable.
+	//
+	// Ignoring blocks is also why nothing here has to "look past" an occluder a few at a time: a
+	// rule that drops blockers to keep searching has to decide how many to drop, and any answer to
+	// that is arbitrary. Occlusion, if it is wanted at all, is one explicit test below.
+	Params.bIgnoreBlocks = true;
+
+	TArray<FHitResult> Hits;
+	World->LineTraceMultiByChannel(Hits, Origin, End, TapChannel, Params);
+
+	const FHitResult* Nearest = nullptr;
+	UObject*		  Tappable = nullptr;
+	for (const FHitResult& Hit : Hits) // sorted near to far
 	{
-		TArray<FHitResult> Hits;
-		World->LineTraceMultiByChannel(Hits, Origin, End, TapChannel, Params);
-		if (Hits.Num() == 0)
+		if (UObject* Candidate = ResolveTappable(Hit))
 		{
-			return nullptr;
+			Nearest = &Hit;
+			Tappable = Candidate;
+			break;
 		}
-
-		// Sorted near to far, so the first tappable on the ray is the one the operator aimed at.
-		for (const FHitResult& Hit : Hits)
-		{
-			if (UObject* Tappable = ResolveTappable(Hit))
-			{
-				OutHit = Hit;
-				return Tappable;
-			}
-		}
-
-		// Nothing tappable this side of whatever stopped the trace. A multi-trace ends at its first
-		// blocker, so looking further means asking again without that actor: a marker drawn at an
-		// object sits INSIDE that object's mesh, and stopping at the mesh would make the markers
-		// that matter most -- the ones on real furniture -- the ones that cannot be tapped.
-		const FHitResult& Blocker = Hits.Last();
-		AActor*			  BlockingActor = Blocker.GetActor();
-		if (!Blocker.bBlockingHit || !BlockingActor)
-		{
-			// The ray ran out rather than hitting anything; there is nothing further to look past.
-			return nullptr;
-		}
-		Params.AddIgnoredActor(BlockingActor);
 	}
-	return nullptr;
+	if (!Tappable)
+	{
+		return nullptr;
+	}
+
+	if (bRejectOccludedTaps)
+	{
+		FCollisionQueryParams OcclusionParams(FName(TEXT("RammsWorldTapOcclusion")), /*bTraceComplex=*/false);
+		if (const APawn* Pawn = Controller->GetPawn())
+		{
+			OcclusionParams.AddIgnoredActor(Pawn);
+		}
+		FHitResult Blocker;
+		if (World->LineTraceSingleByChannel(Blocker, Origin, End, TapChannel, OcclusionParams)
+			&& Blocker.Distance < Nearest->Distance)
+		{
+			return nullptr;
+		}
+	}
+
+	OutHit = *Nearest;
+	return Tappable;
 }
 
 bool URammsWorldTapLayer::TapAtScreenPosition(FVector2D ScreenPosition)
@@ -159,8 +185,8 @@ bool URammsWorldTapLayer::TapAtScreenPosition(FVector2D ScreenPosition)
 		return false;
 	}
 
-	// The one way in. A marker's OnClicked and OnInputTouchBegin call the same event, and a
-	// Blueprint that overrides it changes every route at once.
+	// The one way in. A marker's OnClicked and OnInputTouchBegin call this same event where they
+	// fire at all, so a Blueprint override of it covers every route rather than just this one.
 	IRammsWorldTappable::Execute_OnRammsWorldTapped(Tappable, Hit);
 	return true;
 }

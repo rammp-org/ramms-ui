@@ -157,6 +157,29 @@ public:
 	TObjectPtr<class UBoxComponent> Bounds;
 
 	/**
+	 * The channel this marker answers queries on, and the only one it answers at all. It must be
+	 * the channel URammsWorldTapLayer traces, or taps find nothing.
+	 *
+	 * It OVERLAPS that channel rather than blocking it, which is the important part. Visibility is
+	 * not just the click channel in this project: RammsCore's ToF and sonar components line-trace
+	 * on it (their TraceChannel defaults to ECC_Visibility) whenever the GPU path is off or
+	 * unavailable, and the curb controllers ground-probe on it. A marker is bHiddenInGame, so a
+	 * blocking one would be an INVISIBLE wall that shortens a sonar range or raises a measured
+	 * curb -- a sensor fault with no visible cause, arriving only when a detection happens to land
+	 * in front of the robot. An overlap response never stops a single-trace, so the sensors cannot
+	 * see it, while the layer's multi-trace still collects it.
+	 *
+	 * The cost is that APlayerController's click trace is a single-trace and so cannot see it
+	 * either: the engine's OnClicked route is dormant unless a project changes this to block.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RAMMS|Detection")
+	TEnumAsByte<ECollisionChannel> TapChannel = ECC_Visibility;
+
+	/** Block that channel instead of overlapping it. Read the warning on TapChannel first. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RAMMS|Detection")
+	bool bBlockTapChannel = false;
+
+	/**
 	 * Half-extent used when the producer sent no size. Big enough to be worth aiming at: a point
 	 * detection still has to be tappable, and a cup's centroid is not a target a finger can hit.
 	 */
@@ -226,8 +249,13 @@ public:
 	virtual void OnRammsWorldTapped_Implementation(const FHitResult& Hit) override;
 
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void BeginPlay() override;
 
 protected:
+	/** Put TapChannel / bBlockTapChannel on the box. Here rather than in the constructor because a
+	 *  Blueprint subclass's defaults are not applied until after it. */
+	void ApplyCollisionResponse();
+
 	UFUNCTION()
 	void HandleClicked(UPrimitiveComponent* TouchedComponent, FKey ButtonPressed);
 
@@ -260,15 +288,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	TSubclassOf<AActor> MarkerClass;
 
-	/**
-	 * Turn on click and touch events for the local player controller, so a marker can be tapped.
-	 *
-	 * They are off by default in Unreal, and without them a marker's collision box is traced
-	 * against nothing: the markers simply would not respond, with nothing to say why. Turn this off
-	 * if the game enables them itself or deliberately does not want them.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
-	bool bEnableWorldTaps = true;
+	// Taps are URammsWorldTapLayer's job, not this component's: it traces the view from Slate and
+	// calls IRammsWorldTappable. This used to switch on APlayerController's click and touch events
+	// on every push -- global state changed as a side effect of data arriving, never restored, and
+	// pointless now that markers overlap the click channel rather than block it.
 
 	/**
 	 * Keep an actor at each position. Leave this off to drive your own visuals from
@@ -390,6 +413,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Destroy every pooled marker and forget them. */
+	void DestroyMarkers();
 
 private:
 	UFUNCTION()
