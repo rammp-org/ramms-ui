@@ -215,6 +215,90 @@ def check_camera_frame_box(world):
 	return failures
 
 
+def _quat_rotate(q, v):
+	"""Rotate v by quaternion q = (x, y, z, w). Written out here so the check below does not lean
+	on the same maths it is checking."""
+	qx, qy, qz, qw = q
+	# t = 2 * (q_vec x v); v' = v + qw*t + q_vec x t
+	tx = 2.0 * (qy * v[2] - qz * v[1])
+	ty = 2.0 * (qz * v[0] - qx * v[2])
+	tz = 2.0 * (qx * v[1] - qy * v[0])
+	return (v[0] + qw * tx + (qy * tz - qz * ty),
+			v[1] + qw * ty + (qz * tx - qx * tz),
+			v[2] + qw * tz + (qx * ty - qy * tx))
+
+
+def _optical_to_ue(v):
+	"""The point map CameraPointToWorld uses: UE_X = Cam_Z, UE_Y = Cam_X, UE_Z = -Cam_Y."""
+	return (v[2], v[0], -v[1])
+
+
+def check_camera_frame_rotation(world):
+	"""A NON-IDENTITY orientation in the camera frame, checked by what the conversion has to mean.
+
+	The other checks cannot catch a conjugation done the wrong way round. check_producer_path
+	sends frame "world", whose basis is diagonal and therefore symmetric -- B*R*B and B^T*R*B are
+	the same matrix there -- and check_camera_frame_box sends an identity orientation, which
+	conjugates to identity under any order. The camera basis is the asymmetric one, and this is
+	the case the comment on ProducerRotationToWorld warns silently fails.
+
+	Tested as the property the conversion exists to satisfy, on vectors, rather than by
+	re-deriving the formula: rotating in the producer's frame and then converting must land in the
+	same place as converting and then rotating in Unreal's.
+	"""
+	host = _host_actor(world)
+	suffix = f"{int(time.time() * 1000) % 100000000}_camrot"
+	colour_id, group = f"synth/{suffix}/color", f"synth_{suffix}"
+
+	provider = unreal.new_object(unreal.RammsCameraProviderComponent, outer=host)
+	provider.register_stream(
+		_stream_info(colour_id, CW, CH, unreal.RammsStreamRole.COLOR, unreal.RammsDepthFormat.UNKNOWN, group, [FX, FY, CX, CY]), True)
+	# Translation only: with the camera unrotated, WorldRotation IS the converted rotation, so a
+	# failure here cannot be the extrinsic composition wearing the blame for the basis.
+	camera = unreal.Transform(unreal.Vector(-150.0, 40.0, 110.0), unreal.Rotator(0.0, 0.0, 0.0), unreal.Vector(1.0, 1.0, 1.0))
+	provider.update_stream_extrinsic(colour_id, camera)
+
+	# 40 degrees about the optical X axis (right), which the basis sends to Unreal's Y.
+	half = math.radians(40.0) * 0.5
+	q = (math.sin(half), 0.0, 0.0, math.cos(half))
+
+	component = unreal.new_object(unreal.RammsDetectionWorldMarkers, outer=host)
+	component.set_editor_property("draw_debug_markers", False)
+	component.set_detected_objects_json(
+		'{"stream_id":"%s","objects":[{"instance_id":"tilted","perception_class":"box",'
+		' "frame":"camera","position_m":{"X":0.2,"Y":-0.1,"Z":2.0},'
+		' "size_m":{"X":0.5,"Y":0.4,"Z":0.3},'
+		' "orientation":{"X":%.9f,"Y":%.9f,"Z":%.9f,"W":%.9f}}]}' % (colour_id, q[0], q[1], q[2], q[3])
+	)
+
+	points = {str(p.instance_id): p for p in component.get_world_points()}
+	point = points.get("tilted")
+	if not point:
+		return ["tilted was not resolved (no extrinsic for the synthetic camera?)"]
+	if not point.has_rotation:
+		return ["tilted sent an orientation, so it must be flagged as having one"]
+
+	failures = []
+	probes = [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (0.3, -0.5, 0.8)]
+	worst = 0.0
+	for v in probes:
+		expected = _optical_to_ue(_quat_rotate(q, v))
+		ue_quat = unreal.MathLibrary.conv_rotator_to_quaternion(point.world_rotation)
+		got = unreal.MathLibrary.quat_rotate_vector(ue_quat, unreal.Vector(*_optical_to_ue(v)))
+		error = _distance(unreal.Vector(*expected), got)
+		worst = max(worst, error)
+		if error > 0.001:
+			failures.append(f"tilted: probe {v} -> {got}, expected {expected} (off by {error:.4f})")
+
+	# The check is only worth running if the wrong conjugation would have failed it. Rotating
+	# about the axis the OTHER order would have produced must land somewhere else.
+	mirrored = _optical_to_ue(_quat_rotate((q[1], q[0], q[2], q[3]), probes[3]))
+	if _distance(unreal.Vector(*mirrored), unreal.Vector(*_optical_to_ue(_quat_rotate(q, probes[3])))) < 0.01:
+		failures.append("the probe cannot tell the two conjugation orders apart; pick a different axis")
+
+	return failures
+
+
 def check_derived_path(world, depth_format, format_name):
 	"""A synthetic camera, and probes whose true world positions are known by construction."""
 	host = _host_actor(world)
@@ -281,6 +365,10 @@ def main():
 
 	failures = check_camera_frame_box(world)
 	print(f"camera-frame box (position, extents and rotation through one basis): {'PASS' if not failures else 'FAIL'}")
+	all_failures += failures
+
+	failures = check_camera_frame_rotation(world)
+	print(f"camera-frame rotation, non-identity, by the property it must satisfy: {'PASS' if not failures else 'FAIL'}")
 	all_failures += failures
 
 	for depth_format, name in ((unreal.RammsDepthFormat.FLOAT32CM, "Float32CM"), (unreal.RammsDepthFormat.UINT16MM, "Uint16MM")):

@@ -373,6 +373,17 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/**
+	 * Every marker currently in play, in any world. Filter by GetWorld() at the call site.
+	 *
+	 * A registry rather than TActorIterator: URammsDetectionWorldLabels needs this list in
+	 * NativePaint, which can run more than once a frame, and an actor iteration walks every actor
+	 * in every loaded level -- tens of thousands of them on a generated street map, to find the
+	 * handful of markers. Entries can be stale; the weak pointers say which.
+	 */
+	static const TArray<TWeakObjectPtr<ARammsDetectionWorldMarker>>& GetLiveMarkers() { return LiveMarkers; }
 
 protected:
 	/** Put TapChannel / bBlockTapChannel on the box. Here rather than in the constructor because a
@@ -389,6 +400,8 @@ protected:
 	FColor GetBaseColour() const;
 
 private:
+	static TArray<TWeakObjectPtr<ARammsDetectionWorldMarker>> LiveMarkers;
+
 	FRammsDetectionWorldPoint Detection;
 
 	/** World time the current Detection arrived, so its age can keep running between pushes. */
@@ -545,6 +558,38 @@ protected:
 
 	/** Destroy every pooled marker and forget them. */
 	void DestroyMarkers();
+
+	/**
+	 * Visit every camera provider in this world until Visit returns false.
+	 *
+	 * BOTH kinds: ARammsCameraProviderBase is an actor implementing IRammsCameraProvider and is a
+	 * shipped extension point (RemoteControl, Socket.IO, ROS 2 implementations are named in the
+	 * interface's own documentation), while URammsCameraProviderComponent is a component.
+	 * URammsCameraProjectionManager::DiscoverProviders deliberately does both passes; a sweep of
+	 * components alone leaves a project whose camera is an actor with no world markers at all and
+	 * nothing but "no extrinsic for stream" in the log to say why.
+	 */
+	void ForEachCameraProvider(TFunctionRef<bool(UObject*, IRammsCameraProvider*)> Visit) const;
+
+	/**
+	 * The provider that owns a stream, remembered between lookups.
+	 *
+	 * Without it every object of every push walks the whole object table twice, and the extrinsic
+	 * subscription below fires on every frame that carries camera metadata -- three streams at
+	 * 30 fps with fifteen detections is thousands of full scans a second, on the game thread.
+	 */
+	UObject* FindProviderForStream(const FString& StreamID) const;
+
+	mutable TMap<FString, TWeakObjectPtr<UObject>> ProviderByStream;
+
+	/** Sources the last resolve actually used, so an unrelated camera moving costs nothing. */
+	TSet<FString> UsedSources;
+
+	/** A camera moved: re-resolve once on the next tick rather than once per broadcast. */
+	bool bReresolvePending = false;
+
+	/** Streams already complained about, so a camera with no pose does not fill the log. */
+	mutable TSet<FString> WarnedStreams;
 
 private:
 	UFUNCTION()

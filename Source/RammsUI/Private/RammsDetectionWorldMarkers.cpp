@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IRammsCameraProvider.h"
 #include "RammsBridgeSubsystem.h"
@@ -82,7 +83,15 @@ namespace RammsDetectionMarkers
 		const FVector2D& NormalizedPoint, int32 Radius, float& OutUU)
 	{
 		const int32 Stride = BytesPerDepthPixel(Format);
-		if (Stride == 0 || Width <= 0 || Height <= 0 || Data.Num() < Width * Height * Stride)
+		if (Stride == 0 || Width <= 0 || Height <= 0)
+		{
+			return false;
+		}
+		// EXACTLY the registered size, not merely big enough. Indexing uses the registered Width
+		// as the row stride, so a frame that is larger than its registration -- a stream declared
+		// 320x240 that later sends 640x480, which nothing re-registers -- would be sampled from
+		// the wrong rows and place markers at plausible but wrong positions, reporting nothing.
+		if (Data.Num() != Width * Height * Stride)
 		{
 			return false;
 		}
@@ -217,22 +226,38 @@ void ARammsDetectionWorldMarker::ApplyCollisionResponse()
 	Bounds->SetCollisionResponseToChannel(TapChannel, bBlockTapChannel ? ECR_Block : ECR_Overlap);
 }
 
+TArray<TWeakObjectPtr<ARammsDetectionWorldMarker>> ARammsDetectionWorldMarker::LiveMarkers;
+
 void ARammsDetectionWorldMarker::BeginPlay()
 {
 	Super::BeginPlay();
+
+	LiveMarkers.AddUnique(this);
 
 	// A Blueprint subclass's TapChannel is not applied until after the constructor has run.
 	ApplyCollisionResponse();
 
 #if !ENABLE_DRAW_DEBUG
 	// Everything this marker shows is a debug draw, and those compile out of Shipping and Test.
-	// Say so once rather than ship a build whose markers can be tapped and cannot be seen -- the
-	// state the class comment calls not a marker at all.
-	UE_LOG(LogRammsDetectionMarkers, Warning,
-		TEXT("%s: debug drawing is compiled out of this build, so world markers are invisible. "
-			 "Give MarkerClass a Blueprint subclass with a mesh, or ship Development."),
-		*GetName());
+	// Once per run, not once per marker: markers are spawned as objects come and go, so a
+	// per-instance log would be the same complaint for the life of the build.
+	static bool bWarnedNoDebugDraw = false;
+	if (!bWarnedNoDebugDraw)
+	{
+		bWarnedNoDebugDraw = true;
+		UE_LOG(LogRammsDetectionMarkers, Warning,
+			TEXT("Debug drawing is compiled out of this build, so world markers are invisible. "
+				 "Give MarkerClass a Blueprint subclass with a mesh, or ship Development."));
+	}
 #endif
+}
+
+void ARammsDetectionWorldMarker::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	LiveMarkers.RemoveAllSwap([this](const TWeakObjectPtr<ARammsDetectionWorldMarker>& Entry) {
+		return !Entry.IsValid() || Entry.Get() == this;
+	});
+	Super::EndPlay(EndPlayReason);
 }
 
 void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& Point)
@@ -252,8 +277,15 @@ void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& P
 		// which is the exact failure DefaultExtent exists to prevent. The drawn box takes the same
 		// floor, so what is seen stays what can be aimed at.
 		const FVector Half = Point.bHasSize ? Point.WorldSize * 0.5 : DefaultExtent;
-		Bounds->SetBoxExtent(FVector(FMath::Max(Half.X, DefaultExtent.X),
-			FMath::Max(Half.Y, DefaultExtent.Y), FMath::Max(Half.Z, DefaultExtent.Z)));
+		const FVector Extent(FMath::Max(Half.X, DefaultExtent.X), FMath::Max(Half.Y, DefaultExtent.Y),
+			FMath::Max(Half.Z, DefaultExtent.Z));
+		// Only when it changed: SetBoxExtent destroys and recreates the physics state every time
+		// it is called, and SetDetection runs for every tracked object on every push -- so a
+		// stationary fridge of unchanging size would churn its Chaos body at the push rate.
+		if (!Extent.Equals(Bounds->GetUnscaledBoxExtent()))
+		{
+			Bounds->SetBoxExtent(Extent);
+		}
 	}
 }
 
@@ -287,8 +319,11 @@ float ARammsDetectionWorldMarker::GetSecondsSinceDetection() const
 
 float ARammsDetectionWorldMarker::GetStaleness() const
 {
+	// Not gated on bDimWhenStale: how old this is and whether the box fades for it are separate
+	// questions, and the two properties read as independent in the editor. Gating here made
+	// turning dimming off also delete the age from the label.
 	const float Age = GetSecondsSinceDetection();
-	if (!bDimWhenStale || Age < 0.0f)
+	if (Age < 0.0f)
 	{
 		return 0.0f;
 	}
@@ -350,7 +385,7 @@ void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 	// How far from live this marker is, 0 to 1. Both the colour and the fill fade with it, so a
 	// memory recedes while a live detection stays forward; what it must NOT do is disappear, or
 	// the operator loses the only handle they have for asking about the object.
-	const float Staleness = GetStaleness();
+	const float Staleness = bDimWhenStale ? GetStaleness() : 0.0f;
 	const float StaleScale = FMath::Lerp(1.0f, FMath::Clamp(StaleBrightness, 0.0f, 1.0f), Staleness);
 
 	const float	 Brightness = (bSelected ? 1.0f : UnselectedBrightness) * StaleScale;
@@ -498,42 +533,109 @@ FVector URammsDetectionWorldMarkers::UnprojectToCameraLocal(
 	return FVector(DepthUU, CamX, -CamY);
 }
 
+void URammsDetectionWorldMarkers::ForEachCameraProvider(
+	TFunctionRef<bool(UObject*, IRammsCameraProvider*)> Visit) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Actors first, then components, which is the order and the pair of passes
+	// URammsCameraProjectionManager::DiscoverProviders uses.
+	TArray<AActor*> ProviderActors;
+	UGameplayStatics::GetAllActorsWithInterface(World, URammsCameraProvider::StaticClass(), ProviderActors);
+	for (AActor* Actor : ProviderActors)
+	{
+		if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Actor))
+		{
+			if (!Visit(Actor, Provider))
+			{
+				return;
+			}
+		}
+	}
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		for (UActorComponent* Component : (*It)->GetComponents())
+		{
+			if (!IsValid(Component))
+			{
+				continue;
+			}
+			if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Component))
+			{
+				if (!Visit(Component, Provider))
+				{
+					return;
+				}
+			}
+		}
+	}
+}
+
+UObject* URammsDetectionWorldMarkers::FindProviderForStream(const FString& StreamID) const
+{
+	if (StreamID.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (const TWeakObjectPtr<UObject>* Cached = ProviderByStream.Find(StreamID))
+	{
+		UObject* Object = Cached->Get();
+		// Still alive AND still owning that stream: a provider can drop a stream without dying.
+		if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Object))
+		{
+			FRammsCameraStreamInfo Info;
+			if (Provider->GetStreamInfo(StreamID, Info))
+			{
+				return Object;
+			}
+		}
+		ProviderByStream.Remove(StreamID);
+	}
+
+	UObject* Found = nullptr;
+	ForEachCameraProvider([&StreamID, &Found](UObject* Object, IRammsCameraProvider* Provider) {
+		FRammsCameraStreamInfo Info;
+		if (Provider->GetStreamInfo(StreamID, Info))
+		{
+			Found = Object;
+			return false;
+		}
+		return true;
+	});
+	if (Found)
+	{
+		ProviderByStream.Add(StreamID, Found);
+	}
+	return Found;
+}
+
 bool URammsDetectionWorldMarkers::FindDepthSibling(
 	const FString& ColourStreamID, FString& OutDepthStreamID, TScriptInterface<IRammsCameraProvider>& OutProvider) const
 {
-	const UWorld* World = GetWorld();
-	if (!World || ColourStreamID.IsEmpty())
+	UObject*			   Object = FindProviderForStream(ColourStreamID);
+	IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(Object);
+	FRammsCameraStreamInfo Colour;
+	if (Provider && Provider->GetStreamInfo(ColourStreamID, Colour))
 	{
-		return false;
-	}
-
-	for (TObjectIterator<UActorComponent> It; It; ++It)
-	{
-		UActorComponent* Component = *It;
-		if (!IsValid(Component) || Component->GetWorld() != World)
-		{
-			continue;
-		}
-		IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(Component);
-		FRammsCameraStreamInfo Colour;
-		if (!Provider || !Provider->GetStreamInfo(ColourStreamID, Colour))
-		{
-			continue;
-		}
 		// Streams sharing a GroupID are the same physical camera, which is the pairing the
 		// projection manager already relies on to drive PGM.
-		if (Colour.GroupID.IsEmpty())
+		if (!Colour.GroupID.IsEmpty())
 		{
-			continue;
-		}
-		for (const FRammsCameraStreamInfo& Candidate : Provider->GetAvailableStreams())
-		{
-			if (Candidate.GroupID == Colour.GroupID
-				&& (Candidate.StreamRole == ERammsStreamRole::Depth || Candidate.bIsDepth))
+			for (const FRammsCameraStreamInfo& Candidate : Provider->GetAvailableStreams())
 			{
-				OutDepthStreamID = Candidate.StreamID;
-				OutProvider = TScriptInterface<IRammsCameraProvider>(Component);
-				return true;
+				if (Candidate.GroupID == Colour.GroupID
+					&& (Candidate.StreamRole == ERammsStreamRole::Depth || Candidate.bIsDepth))
+				{
+					OutDepthStreamID = Candidate.StreamID;
+					OutProvider = TScriptInterface<IRammsCameraProvider>(Object);
+					return true;
+				}
 			}
 		}
 	}
@@ -588,6 +690,19 @@ bool URammsDetectionWorldMarkers::DeriveWorldLocation(
 	}
 
 	float DepthUU = 0.0f;
+	// A size that disagrees with the registration is not a dropout, it is a misconfiguration, and
+	// it would otherwise look exactly like one. Once per stream, as above.
+	const int32 ExpectedBytes =
+		Depth.Width * Depth.Height * RammsDetectionMarkers::BytesPerDepthPixel(DepthFormat);
+	if (ExpectedBytes > 0 && Raw->Num() != ExpectedBytes && !WarnedStreams.Contains(DepthStreamID))
+	{
+		WarnedStreams.Add(DepthStreamID);
+		UE_LOG(LogRammsDetectionMarkers, Warning,
+			TEXT("Depth stream '%s' sent %d bytes but is registered %dx%d (%d bytes). No positions "
+				 "will be derived from it until the two agree."),
+			*DepthStreamID, Raw->Num(), Depth.Width, Depth.Height, ExpectedBytes);
+	}
+
 	if (!RammsDetectionMarkers::SampleDepthUU(
 			*Raw, DepthFormat, Depth.Width, Depth.Height, NormalizedPoint, DepthSampleRadius, DepthUU))
 	{
@@ -614,29 +729,37 @@ void URammsDetectionWorldMarkers::BeginPlay()
 	// A camera that moves invalidates every camera-frame position it reported, and detections are
 	// pushed on their own cadence -- without this a marker would sit at the old pose until the
 	// producer happened to send again.
-	if (const UWorld* World = GetWorld())
-	{
-		for (TObjectIterator<UActorComponent> It; It; ++It)
-		{
-			UActorComponent* Component = *It;
-			if (!IsValid(Component) || Component->GetWorld() != World)
-			{
-				continue;
-			}
-			if (IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Component))
-			{
-				ExtrinsicSubscriptions.Add(Provider->OnCameraExtrinsicUpdated().AddLambda(
-					[this](const FString&, const FTransform&) { Reresolve(); }));
-				SubscribedProviders.Add(Component);
-			}
-		}
-	}
+	ForEachCameraProvider([this](UObject* Object, IRammsCameraProvider* Provider) {
+		ExtrinsicSubscriptions.Add(
+			Provider->OnCameraExtrinsicUpdated().AddLambda([this](const FString& StreamID, const FTransform&) {
+				// RammsStreamCameraBridge pushes an extrinsic for EVERY frame that carries camera
+				// metadata, so this fires at frame rate per stream. Re-resolving there would
+				// re-parse the whole payload each time; instead note it and do the work once, on
+				// the next tick, and only when the camera that moved is one the current points
+				// were actually placed against.
+				if (UsedSources.IsEmpty() || UsedSources.Contains(StreamID))
+				{
+					bReresolvePending = true;
+				}
+			}));
+		SubscribedProviders.Add(Object);
+		return true;
+	});
 }
 
 void URammsDetectionWorldMarkers::TickComponent(
 	float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// At most one re-resolve a frame, however many cameras moved. Ahead of the debug-draw
+	// early-out below, because markers have to follow a moving camera whether or not anything is
+	// drawing boxes for them.
+	if (bReresolvePending)
+	{
+		bReresolvePending = false;
+		Reresolve();
+	}
 
 	if (!bDrawDebugMarkers || WorldPoints.IsEmpty())
 	{
@@ -721,31 +844,13 @@ bool URammsDetectionWorldMarkers::IsAcceptedSource(const FString& Source) const
 
 bool URammsDetectionWorldMarkers::ResolveCameraExtrinsic(const FString& Source, FTransform& OutExtrinsic) const
 {
-	const UWorld* World = GetWorld();
-	if (!World || Source.IsEmpty())
+	// `source` is the stream the object was detected on, so it names the camera directly.
+	IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(Source));
+	FRammsCameraStreamInfo Info;
+	if (Provider && Provider->GetStreamInfo(Source, Info) && Info.bHasExtrinsic)
 	{
-		return false;
-	}
-
-	for (TObjectIterator<UActorComponent> It; It; ++It)
-	{
-		UActorComponent* Component = *It;
-		if (!IsValid(Component) || Component->GetWorld() != World)
-		{
-			continue;
-		}
-		IRammsCameraProvider* Provider = Cast<IRammsCameraProvider>(Component);
-		if (!Provider)
-		{
-			continue;
-		}
-		FRammsCameraStreamInfo Info;
-		// `source` is the stream the object was detected on, so it names the camera directly.
-		if (Provider->GetStreamInfo(Source, Info) && Info.bHasExtrinsic)
-		{
-			OutExtrinsic = Info.Extrinsic;
-			return true;
-		}
+		OutExtrinsic = Info.Extrinsic;
+		return true;
 	}
 	return false;
 }
@@ -796,6 +901,11 @@ void URammsDetectionWorldMarkers::Reresolve()
 				continue;
 			}
 
+			// Parsed up here so the warnings below can name the object without GetStringField,
+			// which logs a LogJson warning AND an error of its own when the field is absent.
+			FString InstanceId;
+			(*Object)->TryGetStringField(TEXT("instance_id"), InstanceId);
+
 			FString Source;
 			if (!(*Object)->TryGetStringField(TEXT("source"), Source) || Source.IsEmpty())
 			{
@@ -843,9 +953,17 @@ void URammsDetectionWorldMarkers::Reresolve()
 				{
 					// Without the camera's pose a camera-frame point cannot be placed at all.
 					// Say so: silently dropping it looks identical to the producer not sending it.
-					UE_LOG(LogRammsDetectionMarkers, Warning,
-						TEXT("No extrinsic for stream '%s'; cannot place camera-frame position for '%s'"),
-						*Source, *(*Object)->GetStringField(TEXT("instance_id")));
+					// Once per stream, though -- this sits in a per-object loop inside a push that
+					// arrives at frame rate, and a camera that never sends a pose would otherwise
+					// put hundreds of identical lines a second into the robot's log.
+					if (!WarnedStreams.Contains(Source))
+					{
+						WarnedStreams.Add(Source);
+						UE_LOG(LogRammsDetectionMarkers, Warning,
+							TEXT("No extrinsic for stream '%s'; cannot place camera-frame positions "
+								 "for it (first was '%s'). Further objects on this stream are silent."),
+							*Source, *InstanceId);
+					}
 					continue;
 				}
 				Point.WorldLocation = CameraPointToWorld(PointMetres, Extrinsic);
@@ -853,13 +971,17 @@ void URammsDetectionWorldMarkers::Reresolve()
 			}
 			else
 			{
-				UE_LOG(LogRammsDetectionMarkers, Warning,
-					TEXT("Unknown frame '%s' (expected 'camera' or 'world')"), *Frame);
+				// Keyed by the frame rather than the stream: a producer sending one bad spelling
+				// sends it for every object, every push.
+				if (!WarnedStreams.Contains(Frame))
+				{
+					WarnedStreams.Add(Frame);
+					UE_LOG(LogRammsDetectionMarkers, Warning,
+						TEXT("Unknown frame '%s' (expected 'camera' or 'world')"), *Frame);
+				}
 				continue;
 			}
 
-			FString InstanceId;
-			(*Object)->TryGetStringField(TEXT("instance_id"), InstanceId);
 			(*Object)->TryGetStringField(TEXT("perception_class"), Point.PerceptionClass);
 			Point.InstanceId = InstanceId.IsEmpty() ? NAME_None : FName(*InstanceId);
 			Point.bPositionFromProducer = bSentPosition;
@@ -885,7 +1007,14 @@ void URammsDetectionWorldMarkers::Reresolve()
 				const FVector SizeUU = SizeMetres.GetAbs() * RammsDetectionMarkers::MetresToUU;
 				Point.WorldSize = bCameraFrame ? FVector(SizeUU.Z, SizeUU.X, SizeUU.Y) : SizeUU;
 				Point.bHasSize = true;
+			}
 
+			// Orientation is read whether or not a size came with it. It used to be nested inside
+			// the size block, so a detector that sent position_m and orientation but no size_m had
+			// its pose silently dropped -- bHasRotation false, WorldRotation identity -- while
+			// those two struct members are advertised independently of bHasSize, and a Blueprint
+			// marker with a mesh or an approach vector reads them on their own.
+			{
 				FTransform Extrinsic = FTransform::Identity;
 				if (bCameraFrame)
 				{
@@ -901,9 +1030,12 @@ void URammsDetectionWorldMarkers::Reresolve()
 				}
 				else if ((*Object)->TryGetNumberField(TEXT("yaw_deg"), Yaw))
 				{
-					// A heading about the producer's +Z, through the same conversion as a full
-					// rotation so the two cannot disagree.
-					const FQuat YawOnly(FVector::ZAxisVector, FMath::DegreesToRadians(Yaw));
+					// A heading turns about UP, and up is not the same axis in the two frames: it
+					// is +Z in the producer's world frame but -Y in the optical one, where +Z is
+					// the way the camera is looking. Taking +Z in both would have rolled a
+					// camera-frame box about the view direction and called it a heading.
+					const FVector Up = bCameraFrame ? -FVector::YAxisVector : FVector::ZAxisVector;
+					const FQuat	  YawOnly(Up, FMath::DegreesToRadians(Yaw));
 					Point.WorldRotation = ProducerRotationToWorld(YawOnly, bCameraFrame, Extrinsic);
 					Point.bHasRotation = true;
 				}

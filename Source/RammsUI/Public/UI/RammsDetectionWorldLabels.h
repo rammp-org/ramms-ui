@@ -33,6 +33,7 @@
 
 #include "CoreMinimal.h"
 #include "UI/RammsBaseWidget.h"
+#include "UI/RammsUIStyle.h"
 #include "RammsDetectionWorldLabels.generated.h"
 
 UCLASS(meta = (DisplayName = "Ramms Detection World Labels"))
@@ -101,8 +102,9 @@ private:
 	/** Style font when the asset has one, otherwise the engine's at LabelFontSize. */
 	void EnsureLabelFont() const;
 
-	mutable FSlateFontInfo CachedLabelFont;
-	mutable int32		   CachedFontSize = -1;
+	mutable FSlateFontInfo				  CachedLabelFont;
+	mutable int32						  CachedFontSize = -1;
+	mutable TWeakObjectPtr<URammsUIStyle> CachedStyle;
 
 	/** Rounded to a capsule by the brush itself, so the radius follows the text's height. */
 	FSlateBrush PlateBrush;

@@ -3,7 +3,6 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
-#include "EngineUtils.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
@@ -58,10 +57,14 @@ TSharedRef<SWidget> URammsDetectionWorldLabels::RebuildWidget()
 
 void URammsDetectionWorldLabels::EnsureLabelFont() const
 {
-	if (CachedFontSize == LabelFontSize)
+	// Keyed on the style as well as the size. URammsBaseWidget resolves Style from the theme in
+	// NativeConstruct and SetStyle can replace it later, so a first paint with no style would
+	// otherwise pin the engine fallback typeface for good and ignore every theme change after it.
+	if (CachedFontSize == LabelFontSize && CachedStyle == Style)
 	{
 		return;
 	}
+	CachedStyle = Style;
 
 	// The theme's typeface at THIS widget's size. Taking the style's font whole, as the camera
 	// overlay does, would also take its size -- and a size chosen for labels drawn inside a camera
@@ -115,14 +118,14 @@ int32 URammsDetectionWorldLabels::NativePaint(const FPaintArgs& Args, const FGeo
 
 	TArray<RammsDetectionWorldLabels::FPendingLabel> Pending;
 
-	// Every marker in the world, every frame. It is a class-filtered actor iteration, which costs
-	// a pass over the level's actor list -- tens of microseconds on the maps this runs on. If a
-	// level ever makes that matter, the fix is a registry the markers add themselves to, not a
-	// cached list that goes stale the first time one is pooled away.
-	for (TActorIterator<ARammsDetectionWorldMarker> It(World); It; ++It)
+	// The markers' own registry, not an actor iteration: this runs in NativePaint, which can run
+	// more than once a frame, and iterating actors would walk every actor in every loaded level --
+	// tens of thousands on a generated street map -- to find a handful of markers.
+	for (const TWeakObjectPtr<ARammsDetectionWorldMarker>& Entry : ARammsDetectionWorldMarker::GetLiveMarkers())
 	{
-		const ARammsDetectionWorldMarker* Marker = *It;
-		if (!IsValid(Marker))
+		const ARammsDetectionWorldMarker* Marker = Entry.Get();
+		// The registry spans worlds: an editor world's markers must not be labelled over PIE's.
+		if (!IsValid(Marker) || Marker->GetWorld() != World)
 		{
 			continue;
 		}
