@@ -26,11 +26,14 @@
 //   "yaw_deg": 90.0                                       // shorthand, ignored if orientation is sent
 //   "time_since_detection_s": 12.5                        // 0 = being seen now; absent = unknown
 //
-// time_since_detection_s is how long since the robot last saw the object DIRECTLY. A tracked
-// object keeps being reported after it leaves the frame or goes behind something, and without this
-// field a marker drawn from a forty-second-old memory is indistinguishable from one the robot is
-// looking at -- the operator is shown a claim with no way to judge how much to trust it. Markers
-// dim as it grows, and say the number once they do.
+// time_since_detection_s is how long since the robot last saw the object DIRECTLY -- agreed with
+// the bridge owner, not inferred here. A tracker carrying the object forward does NOT reset it: a
+// prediction is not a sighting, and if it counted as one the field would measure how long the
+// tracker has been running rather than how stale its answer is, which is the opposite of what it
+// is for. A tracked object keeps being reported after it leaves the frame or goes behind
+// something, and without this field a marker drawn from a forty-second-old memory is
+// indistinguishable from one the robot is looking at -- the operator is shown a claim with no way
+// to judge how much to trust it. Markers dim as it grows, and say the number once they do.
 //
 // position_m is the CENTRE of the object, not a corner of its box: the marker is placed there and
 // the box drawn around it runs position_m +/- size_m / 2. A corner would put the whole box off by

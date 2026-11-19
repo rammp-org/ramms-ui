@@ -53,7 +53,8 @@ struct RAMMSUI_API FRammsBridgeDetectedObject
 	 *
 	 * A tracked object is still reported after it leaves the frame or is occluded, and until this
 	 * field existed there was nothing to tell a live detection from a memory. Zero means it is
-	 * being seen now.
+	 * being seen now. A tracker carrying the object forward does not reset it -- a prediction is
+	 * not a sighting.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms Bridge|Detected Object")
 	float SecondsSinceDetection = 0.0f;
