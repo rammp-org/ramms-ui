@@ -285,6 +285,51 @@ float ARammsDetectionWorldMarker::GetSecondsSinceDetection() const
 	return Detection.SecondsSinceDetection + static_cast<float>(SincePush);
 }
 
+float ARammsDetectionWorldMarker::GetStaleness() const
+{
+	const float Age = GetSecondsSinceDetection();
+	if (!bDimWhenStale || Age < 0.0f)
+	{
+		return 0.0f;
+	}
+	const float FullyStaleAt = FMath::Max(FullyStaleAfterSeconds, StaleAfterSeconds + KINDA_SMALL_NUMBER);
+	return FMath::Clamp(FMath::GetRangePct(StaleAfterSeconds, FullyStaleAt, Age), 0.0f, 1.0f);
+}
+
+FColor ARammsDetectionWorldMarker::GetBaseColour() const
+{
+	return Detection.bSelected
+		? SelectedColour
+		: (Detection.bPositionFromProducer ? SentColour : DerivedColour);
+}
+
+FLinearColor ARammsDetectionWorldMarker::GetLabelColour() const
+{
+	return FLinearColor(GetBaseColour());
+}
+
+FString ARammsDetectionWorldMarker::GetLabelText() const
+{
+	return Detection.PerceptionClass.IsEmpty() ? Detection.InstanceId.ToString() : Detection.PerceptionClass;
+}
+
+FString ARammsDetectionWorldMarker::GetAgeText() const
+{
+	if (!bShowAgeWhenStale || GetStaleness() <= 0.0f)
+	{
+		return FString();
+	}
+	// A number, because "dimmer than the others" is a comparison and there may be nothing to
+	// compare against -- one stale marker alone looks like a marker.
+	return FString::Printf(TEXT("%.0fs"), GetSecondsSinceDetection());
+}
+
+FVector ARammsDetectionWorldMarker::GetLabelAnchorLocation() const
+{
+	const double Top = Bounds ? Bounds->GetUnscaledBoxExtent().Z : 0.0;
+	return GetActorLocation() + FVector(0, 0, Top + 10.0);
+}
+
 void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -299,22 +344,13 @@ void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 		return;
 	}
 
-	const FColor Base = Detection.bSelected
-		? SelectedColour
-		: (Detection.bPositionFromProducer ? SentColour : DerivedColour);
-
-	const bool bSelected = Detection.bSelected;
+	const FColor Base = GetBaseColour();
+	const bool	 bSelected = Detection.bSelected;
 
 	// How far from live this marker is, 0 to 1. Both the colour and the fill fade with it, so a
 	// memory recedes while a live detection stays forward; what it must NOT do is disappear, or
 	// the operator loses the only handle they have for asking about the object.
-	const float Age = GetSecondsSinceDetection();
-	float		Staleness = 0.0f;
-	if (bDimWhenStale && Age >= 0.0f)
-	{
-		const float FullyStaleAt = FMath::Max(FullyStaleAfterSeconds, StaleAfterSeconds + KINDA_SMALL_NUMBER);
-		Staleness = FMath::Clamp(FMath::GetRangePct(StaleAfterSeconds, FullyStaleAt, Age), 0.0f, 1.0f);
-	}
+	const float Staleness = GetStaleness();
 	const float StaleScale = FMath::Lerp(1.0f, FMath::Clamp(StaleBrightness, 0.0f, 1.0f), Staleness);
 
 	const float	 Brightness = (bSelected ? 1.0f : UnselectedBrightness) * StaleScale;
@@ -334,17 +370,15 @@ void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 	DrawDebugBox(World, Centre, Extent, Rotation, LineColour, false, -1.0f, 0,
 		bSelected ? SelectedLineThickness : LineThickness);
 
-	FString Label = Detection.PerceptionClass.IsEmpty()
-		? Detection.InstanceId.ToString()
-		: Detection.PerceptionClass;
-	if (bShowAgeWhenStale && Staleness > 0.0f)
+	if (bDrawDebugLabel)
 	{
-		// A number, because "dimmer than the others" is a comparison and there may be nothing to
-		// compare against -- one stale marker alone looks like a marker.
-		Label += FString::Printf(TEXT("  %.0fs"), Age);
+		// Bare text with no plate behind it: legible over a pale wall, invisible over a bright
+		// one. URammsDetectionWorldLabels is the version meant to be read.
+		FString		  Age = GetAgeText();
+		const FString Label = Age.IsEmpty() ? GetLabelText() : GetLabelText() + TEXT("  ") + Age;
+		DrawDebugString(World, GetLabelAnchorLocation(), Label, nullptr, LineColour, 0.0f, true,
+			bSelected ? 1.25f : 1.0f);
 	}
-	DrawDebugString(World, Centre + FVector(0, 0, Extent.Z + 10.0), Label, nullptr, LineColour, 0.0f, true,
-		bSelected ? 1.25f : 1.0f);
 }
 
 void ARammsDetectionWorldMarker::ReportTapped() const

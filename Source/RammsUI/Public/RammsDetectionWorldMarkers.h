@@ -316,6 +316,17 @@ public:
 	bool bShowAgeWhenStale = true;
 
 	/**
+	 * Draw the label as plain debug text beside the box.
+	 *
+	 * OFF, because URammsDetectionWorldLabels draws it properly: same plate and font as the camera
+	 * overlay's labels, in screen space, where it stays legible over whatever is behind it. This
+	 * is the fallback for a world with no RammsUI HUD in it, and it is the old unreadable version
+	 * -- bare text whose colour happens to be the colour of the scene behind it often enough.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	bool bDrawDebugLabel = false;
+
+	/**
 	 * Seconds since the robot last saw this object, or a negative number when the producer never
 	 * said. It is the age the producer sent PLUS the time since that push arrived, so a marker
 	 * goes on ageing when the pushes stop -- which is the honest reading, since losing the
@@ -323,6 +334,39 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
 	float GetSecondsSinceDetection() const;
+
+	/**
+	 * The name that belongs beside this marker: its perception class, or its id when it has no
+	 * class.
+	 *
+	 * On the marker rather than in the widget that draws it, because the marker owns the detection
+	 * -- two places deciding what a label says is two places to change when it changes. Kept apart
+	 * from GetAgeText so a caller can upper-case the name without turning "120s" into "120S".
+	 */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	FString GetLabelText() const;
+
+	/** The age to show beside the name, or empty while this marker is still fresh. */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	FString GetAgeText() const;
+
+	/**
+	 * The colour its label is drawn in: the marker's own colour, NOT dimmed by staleness.
+	 *
+	 * The box fades and the label states the age in words; dimming the text as well would make the
+	 * oldest markers -- the ones whose age you most want to read -- the hardest to read, which is
+	 * the whole reason the label needed a plate behind it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	FLinearColor GetLabelColour() const;
+
+	/** Where its label belongs, in world space: just above the box. */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	FVector GetLabelAnchorLocation() const;
+
+	/** 0 fresh, 1 fully stale. Zero when the producer sends no age or dimming is off. */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	float GetStaleness() const;
 
 	/** IRammsWorldTappable: the operator tapped this marker in the 3D view. */
 	virtual void OnRammsWorldTapped_Implementation(const FHitResult& Hit) override;
@@ -340,6 +384,9 @@ protected:
 
 	UFUNCTION()
 	void HandleTouchBegin(ETouchIndex::Type FingerIndex, UPrimitiveComponent* TouchedComponent);
+
+	/** Colour before any dimming: selected, or by where the position came from. */
+	FColor GetBaseColour() const;
 
 private:
 	FRammsDetectionWorldPoint Detection;
