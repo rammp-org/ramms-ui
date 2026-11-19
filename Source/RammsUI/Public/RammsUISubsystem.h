@@ -99,6 +99,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Ramms|Controllers")
 	int32 GetRobotControllerCount();
 
+	/**
+	 * The robot's component of a given class -- for a widget that needs something ON the robot
+	 * (its joint motion monitor, its pose component) without knowing what the robot is.
+	 *
+	 * Registered robot controllers are asked first, in registration order: when the scene says
+	 * which actor is the robot, that is the one the UI is about. If none of them has one -- or
+	 * nothing has registered yet, which is the normal state while widgets are constructing,
+	 * because a robot registers in its own BeginPlay -- every actor in the world is searched.
+	 *
+	 * This exists so plugin widgets stop naming a project's Blueprint to find the robot.
+	 * RAMMS_StatusBar used GetActorOfClass(BP_RAMMP_RemoteDIsplay), a RammpUI asset: in any other
+	 * project, or with any variant that was not a subclass of that one Blueprint, it read
+	 * JointMotionMonitor off None three times on every construct.
+	 *
+	 * The output pin takes the type of ComponentClass, so no cast is needed in Blueprint.
+	 * Returns None when no actor in the world has one -- check before binding to it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Controllers",
+		meta = (WorldContext = "WorldContextObject", DeterminesOutputType = "ComponentClass"))
+	static UActorComponent* FindRobotComponent(const UObject* WorldContextObject, TSubclassOf<UActorComponent> ComponentClass);
+
 	// ── Controller Registry Delegates ─────────────────────────────
 
 	/** Broadcast when a controller is registered or unregistered */

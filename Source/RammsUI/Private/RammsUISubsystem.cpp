@@ -3,6 +3,12 @@
 #include "RammsUISubsystem.h"
 #include "UI/RammsBaseWidget.h"
 
+#include "Components/ActorComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
+
 void URammsUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -78,6 +84,45 @@ AActor* URammsUISubsystem::FindRobotController()
 		if (AActor* Actor = Weak.Get())
 		{
 			return Actor;
+		}
+	}
+	return nullptr;
+}
+
+UActorComponent* URammsUISubsystem::FindRobotComponent(
+	const UObject* WorldContextObject, TSubclassOf<UActorComponent> ComponentClass)
+{
+	if (!ComponentClass || !GEngine)
+	{
+		return nullptr;
+	}
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	// The registered robot first: when the scene names its robot, that is the one the UI is about.
+	if (URammsUISubsystem* Subsystem = World->GetSubsystem<URammsUISubsystem>())
+	{
+		for (AActor* Actor : Subsystem->GetAllRobotControllers())
+		{
+			if (UActorComponent* Component = Actor ? Actor->FindComponentByClass(ComponentClass) : nullptr)
+			{
+				return Component;
+			}
+		}
+	}
+
+	// Then whatever actor carries one. Widgets usually construct before the robot's BeginPlay has
+	// registered it, so without this the registry alone would come up empty at exactly the moment
+	// a widget asks -- the old GetActorOfClass lookup did not depend on BeginPlay, and neither may
+	// its replacement.
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (UActorComponent* Component = It->FindComponentByClass(ComponentClass))
+		{
+			return Component;
 		}
 	}
 	return nullptr;
