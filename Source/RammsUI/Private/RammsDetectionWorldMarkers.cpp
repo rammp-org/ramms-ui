@@ -2,8 +2,11 @@
 
 #include "RammsDetectionWorldMarkers.h"
 
+#include "Components/BoxComponent.h"
 #include "Dom/JsonObject.h"
 #include "DrawDebugHelpers.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IRammsCameraProvider.h"
@@ -183,10 +186,132 @@ namespace RammsDetectionMarkers
 	}
 } // namespace RammsDetectionMarkers
 
+ARammsDetectionWorldMarker::ARammsDetectionWorldMarker()
+{
+	// Ticks to draw its own outline; it has no mesh, so nothing else would show it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	Bounds = CreateDefaultSubobject<UBoxComponent>(TEXT("Bounds"));
+	SetRootComponent(Bounds);
+
+	// A click trace runs on the visibility channel, so that is the one the box has to block. It
+	// blocks nothing else: a marker is a target to aim at, not an obstacle -- it must not push the
+	// robot around, stop a door, or occlude anything.
+	Bounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Bounds->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Bounds->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	Bounds->SetGenerateOverlapEvents(false);
+	Bounds->SetBoxExtent(DefaultExtent);
+
+	Bounds->OnClicked.AddDynamic(this, &ARammsDetectionWorldMarker::HandleClicked);
+	Bounds->OnInputTouchBegin.AddDynamic(this, &ARammsDetectionWorldMarker::HandleTouchBegin);
+}
+
+void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& Point)
+{
+	Detection = Point;
+	SetActorLocationAndRotation(Point.WorldLocation, Point.WorldRotation.Quaternion());
+	if (Bounds)
+	{
+		// Half of the full size the producer sent, or a default worth aiming at.
+		Bounds->SetBoxExtent(Point.bHasSize ? Point.WorldSize * 0.5 : DefaultExtent);
+	}
+}
+
+namespace RammsDetectionMarkers
+{
+	/** The same colour at a given brightness and opacity. Both, because they do different work:
+	 *  opacity decides how much of the scene shows through the fill, brightness how much the
+	 *  marker recedes against it. */
+	static FColor Shade(const FColor Base, const float Brightness, const float Opacity)
+	{
+		const float B = FMath::Clamp(Brightness, 0.0f, 1.0f);
+		FColor		Out = Base;
+		Out.R = static_cast<uint8>(FMath::RoundToInt(Base.R * B));
+		Out.G = static_cast<uint8>(FMath::RoundToInt(Base.G * B));
+		Out.B = static_cast<uint8>(FMath::RoundToInt(Base.B * B));
+		Out.A = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(FMath::Clamp(Opacity, 0.0f, 1.0f) * 255.0f), 0, 255));
+		return Out;
+	}
+} // namespace RammsDetectionMarkers
+
+void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!bDrawMarker || !Bounds)
+	{
+		return;
+	}
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FColor Base = Detection.bSelected
+		? SelectedColour
+		: (Detection.bPositionFromProducer ? SentColour : DerivedColour);
+
+	const bool	 bSelected = Detection.bSelected;
+	const float	 Brightness = bSelected ? 1.0f : UnselectedBrightness;
+	const FColor FillColour = RammsDetectionMarkers::Shade(Base, Brightness, bSelected ? SelectedFillOpacity : FillOpacity);
+	const FColor LineColour = RammsDetectionMarkers::Shade(Base, Brightness, 1.0f);
+
+	// The box the tap actually hits, so what is drawn is what can be aimed at. Drawing a different
+	// shape from the collision is how a marker comes to look like it missed a tap it never had.
+	const FVector Centre = GetActorLocation();
+	const FVector Extent = Bounds->GetUnscaledBoxExtent();
+	const FQuat	  Rotation = GetActorQuat();
+
+	// Fill first, outline over it: the outline is what gives the box its edges once several of them
+	// overlap, and a fill drawn afterwards would wash the near ones out.
+	DrawDebugSolidBox(World, Centre, Extent, Rotation, FillColour, false, -1.0f, 0);
+	DrawDebugBox(World, Centre, Extent, Rotation, LineColour, false, -1.0f, 0,
+		bSelected ? SelectedLineThickness : LineThickness);
+
+	const FString Label = Detection.PerceptionClass.IsEmpty()
+		? Detection.InstanceId.ToString()
+		: Detection.PerceptionClass;
+	DrawDebugString(World, Centre + FVector(0, 0, Extent.Z + 10.0), Label, nullptr, LineColour, 0.0f, true,
+		bSelected ? 1.25f : 1.0f);
+}
+
+void ARammsDetectionWorldMarker::ReportTapped() const
+{
+	if (Detection.InstanceId.IsNone())
+	{
+		// Nothing for the orchestrator to match on, the rule PostObjectTapped's own callers follow.
+		return;
+	}
+	if (URammsBridgeSubsystem* Bridge = GEngine ? GEngine->GetEngineSubsystem<URammsBridgeSubsystem>() : nullptr)
+	{
+		Bridge->PostObjectTapped(Detection.InstanceId.ToString(), Detection.Source);
+	}
+}
+
+void ARammsDetectionWorldMarker::OnRammsWorldTapped_Implementation(const FHitResult& /*Hit*/)
+{
+	ReportTapped();
+}
+
+// Both of the engine's own routes go through the interface rather than straight to ReportTapped, so
+// a Blueprint subclass that overrides On Ramms World Tapped overrides all three at once.
+void ARammsDetectionWorldMarker::HandleClicked(UPrimitiveComponent* /*TouchedComponent*/, FKey /*ButtonPressed*/)
+{
+	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, FHitResult());
+}
+
+void ARammsDetectionWorldMarker::HandleTouchBegin(ETouchIndex::Type /*FingerIndex*/, UPrimitiveComponent* /*TouchedComponent*/)
+{
+	IRammsWorldTappable::Execute_OnRammsWorldTapped(this, FHitResult());
+}
+
 URammsDetectionWorldMarkers::URammsDetectionWorldMarkers()
 {
 	// Ticks only to draw the debug markers; the resolving itself is driven by the bridge push.
 	PrimaryComponentTick.bCanEverTick = true;
+	MarkerClass = ARammsDetectionWorldMarker::StaticClass();
 }
 
 FVector URammsDetectionWorldMarkers::CameraPointToWorld(
@@ -657,12 +782,23 @@ void URammsDetectionWorldMarkers::ApplyMarkers()
 {
 	if (!bSpawnMarkers || !MarkerClass)
 	{
-		return;
+		return; // MarkerClass defaults to the tappable marker, so this is a deliberate opt-out.
 	}
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return;
+	}
+
+	if (bEnableWorldTaps)
+	{
+		// Off by default in Unreal, and a marker's collision box is traced against nothing without
+		// them: the markers would simply not respond, with nothing on screen to say why.
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+		{
+			PC->bEnableClickEvents = true;
+			PC->bEnableTouchEvents = true;
+		}
 	}
 
 	// Every push is the full list, so anything absent from it is gone.
@@ -675,18 +811,31 @@ void URammsDetectionWorldMarkers::ApplyMarkers()
 		}
 		Seen.Add(Point.InstanceId);
 
+		// Pooled by instance id: the same object keeps the same actor across pushes, so a marker
+		// being looked at or tapped does not blink out from under the operator every frame.
 		TObjectPtr<AActor>* Existing = Markers.Find(Point.InstanceId);
-		if (Existing && IsValid(*Existing))
+		AActor*				Marker = (Existing && IsValid(*Existing)) ? Existing->Get() : nullptr;
+		if (!Marker)
 		{
-			(*Existing)->SetActorLocation(Point.WorldLocation);
-			continue;
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Marker = World->SpawnActor<AActor>(MarkerClass, Point.WorldLocation, Point.WorldRotation, Params);
+			if (!Marker)
+			{
+				continue;
+			}
+			Markers.Add(Point.InstanceId, Marker);
 		}
 
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		if (AActor* Marker = World->SpawnActor<AActor>(MarkerClass, Point.WorldLocation, FRotator::ZeroRotator, Params))
+		// Size, orientation and selection all move between pushes, not just position. A marker
+		// told only where to stand would keep the extent of whatever it was first seen as.
+		if (ARammsDetectionWorldMarker* Typed = Cast<ARammsDetectionWorldMarker>(Marker))
 		{
-			Markers.Add(Point.InstanceId, Marker);
+			Typed->SetDetection(Point);
+		}
+		else
+		{
+			Marker->SetActorLocationAndRotation(Point.WorldLocation, Point.WorldRotation.Quaternion());
 		}
 	}
 

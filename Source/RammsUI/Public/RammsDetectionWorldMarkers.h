@@ -57,6 +57,8 @@
 
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "RammsWorldTappable.h"
 #include "RammsDetectionWorldMarkers.generated.h"
 
 class URammsBridgeSubsystem;
@@ -115,6 +117,128 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnRammsDetectionWorldPoints, const TArray<FRammsDetectionWorldPoint>&, Points);
 
 /**
+ * One detection, standing in the world where it was resolved, and tappable there.
+ *
+ * Tappable is the whole reason this is an actor with a collision box rather than a debug box. A
+ * drawn box is a picture: it has no hit testing and can never take a tap, which is exactly how the
+ * camera overlay's rectangles turned out to be untappable. An operator pointing at the object in
+ * the scene has to be pointing at something the engine can trace against.
+ *
+ * It reports a tap the same way URammsDetectionMarker does -- instance_id with the stream it came
+ * from -- so the orchestrator cannot tell which surface the operator used, and should not have to.
+ *
+ * Taps arrive through IRammsWorldTappable, which URammsWorldTapLayer calls after tracing the view.
+ * The engine's own OnClicked and OnInputTouchBegin are bound too and call the same event, but they
+ * depend on APlayerController seeing the mouse button, and a full-screen hit-testable widget over
+ * the view stops that -- which is exactly what the HUD's background button does. The tap layer is
+ * the route that works; those two are a bonus where input is routed normally.
+ */
+UCLASS(ClassGroup = (RAMMS))
+class RAMMSUI_API ARammsDetectionWorldMarker : public AActor, public IRammsWorldTappable
+{
+	GENERATED_BODY()
+
+public:
+	ARammsDetectionWorldMarker();
+
+	/** Place and size this marker, and remember what it stands for. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
+	void SetDetection(const FRammsDetectionWorldPoint& Point);
+
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	const FRammsDetectionWorldPoint& GetDetection() const { return Detection; }
+
+	/** Tell the robot this object was tapped. Public so a Blueprint marker can report the same way. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
+	void ReportTapped() const;
+
+	/** The box a tap has to hit. Sized from the detection, or DefaultExtent when no size was sent. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RAMMS|Detection")
+	TObjectPtr<class UBoxComponent> Bounds;
+
+	/**
+	 * Half-extent used when the producer sent no size. Big enough to be worth aiming at: a point
+	 * detection still has to be tappable, and a cup's centroid is not a target a finger can hit.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "RAMMS|Detection")
+	FVector DefaultExtent = FVector(6.0, 6.0, 6.0);
+
+	/**
+	 * Draw this marker: a translucent filled box with its outline over the top, coloured by where
+	 * its position came from.
+	 *
+	 * On by default because the collision box renders nothing: a marker that can be tapped and not
+	 * seen is not a marker, and an operator cannot aim at it. Turn it off in a Blueprint subclass
+	 * that brings its own mesh, which is what should eventually replace this.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
+	bool bDrawMarker = true;
+
+	/** The producer stated this object's position. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	FColor SentColour = FColor(72, 220, 120);
+
+	/** The position was derived here from the depth stream. Distinct from sent on purpose: which of
+	 * the two a marker came from is the interesting thing while they are being brought to agree. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	FColor DerivedColour = FColor(72, 200, 235);
+
+	/** The push named this one as selected_instance_id. Overrides both colours above. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	FColor SelectedColour = FColor(255, 206, 64);
+
+	/**
+	 * Fill opacity of the selected marker, and of every other one.
+	 *
+	 * Filled rather than wireframe because a wireframe box over a busy scene reads as a few stray
+	 * lines, not as an object with a front and a back. Low for the rest, because a room's worth of
+	 * solid boxes hides the room; the gap between the two is what makes the selection findable at a
+	 * glance without hunting for a thicker line.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SelectedFillOpacity = 0.32f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float FillOpacity = 0.18f;
+
+	/** Outline thickness, selected and not. Zero takes the renderer's thinnest line. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0"))
+	float SelectedLineThickness = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0"))
+	float LineThickness = 1.5f;
+
+	/**
+	 * How much of its colour an unselected marker keeps, 0-1. Dims the colour as well as the fill:
+	 * opacity decides how much of the scene shows through a box, not how loud it is, and a
+	 * saturated green still shouts at 0.18 against a pale room. Dimming is what makes the
+	 * unselected ones recede far enough for the selected one to be findable without looking.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float UnselectedBrightness = 0.72f;
+
+	/** IRammsWorldTappable: the operator tapped this marker in the 3D view. */
+	virtual void OnRammsWorldTapped_Implementation(const FHitResult& Hit) override;
+
+	virtual void Tick(float DeltaSeconds) override;
+
+protected:
+	UFUNCTION()
+	void HandleClicked(UPrimitiveComponent* TouchedComponent, FKey ButtonPressed);
+
+	UFUNCTION()
+	void HandleTouchBegin(ETouchIndex::Type FingerIndex, UPrimitiveComponent* TouchedComponent);
+
+private:
+	FRammsDetectionWorldPoint Detection;
+};
+
+/**
  * Resolves the 3D positions in a detections push and, optionally, keeps an actor at each one.
  *
  * Place on any actor in the level. Objects with no `position_m` are ignored entirely -- they are
@@ -128,9 +252,23 @@ class RAMMSUI_API URammsDetectionWorldMarkers : public UActorComponent
 public:
 	URammsDetectionWorldMarkers();
 
-	/** Spawned once per object with a 3D position, and destroyed when it stops being reported. */
+	/**
+	 * Spawned once per object with a 3D position, and destroyed when it stops being reported.
+	 * Defaults to ARammsDetectionWorldMarker, which is tappable; a Blueprint subclass of it keeps
+	 * that and can look like anything.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	TSubclassOf<AActor> MarkerClass;
+
+	/**
+	 * Turn on click and touch events for the local player controller, so a marker can be tapped.
+	 *
+	 * They are off by default in Unreal, and without them a marker's collision box is traced
+	 * against nothing: the markers simply would not respond, with nothing to say why. Turn this off
+	 * if the game enables them itself or deliberately does not want them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
+	bool bEnableWorldTaps = true;
 
 	/**
 	 * Keep an actor at each position. Leave this off to drive your own visuals from
@@ -164,9 +302,13 @@ public:
 	 * sources are brought into agreement -- green for a position the producer sent, cyan for one
 	 * derived here from depth, yellow for the selected object. A derived marker sitting somewhere a
 	 * sent one does not is the case worth seeing, and nothing else distinguishes them on screen.
+	 *
+	 * Off by default because a spawned ARammsDetectionWorldMarker draws itself the same way, and
+	 * both at once double every line. This is for running with bSpawnMarkers off, where the
+	 * positions are resolved for something else to use and there is no actor to do the drawing.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
-	bool bDrawDebugMarkers = true;
+	bool bDrawDebugMarkers = false;
 
 	/**
 	 * Only accept objects whose `source` is listed; empty accepts every camera. Mirrors
