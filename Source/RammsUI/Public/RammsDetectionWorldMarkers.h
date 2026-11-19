@@ -19,16 +19,29 @@
 // A sent position wins over a derived one. An object with neither is ignored: it is the 2D-only
 // case and belongs to the camera widget.
 //
-//   "position_m": {"X": 0.12, "Y": -0.04, "Z": 1.83},   // METRES, not Unreal units
+//   "position_m": {"X": 0.12, "Y": -0.04, "Z": 1.83},   // the object's CENTRE, METRES
 //   "frame": "camera",                                    // or "world"; defaults to "camera"
 //   "size_m": {"X": 0.60, "Y": 0.70, "Z": 1.80},          // FULL dimensions, not half-extents
 //   "orientation": {"X": 0, "Y": 0, "Z": 0.707, "W": 0.707},   // optional; absent = axis-aligned
 //   "yaw_deg": 90.0                                       // shorthand, ignored if orientation is sent
 //
+// position_m is the CENTRE of the object, not a corner of its box: the marker is placed there and
+// the box drawn around it runs position_m +/- size_m / 2. A corner would put the whole box off by
+// half its size on every axis -- which looks like a calibration error, not a convention one, and
+// so is the kind of disagreement that gets chased in the wrong place for a week. Centre-vs-corner
+// is the same silent ambiguity as half-vs-full on size_m, and gets the same explicit answer.
+//
 // size_m is what makes a fridge, a microwave or a table readable as the object it is rather than a
 // dot floating at its centre, and it is the producer's own understanding of the object's size and
 // pose -- which is the thing worth seeing when the two disagree. FULL dimensions because half-vs-
 // full is the silent factor-of-two every such field eventually suffers; the key says which.
+//
+// NOT YET RECONCILED: a DERIVED position is not a centre. It is the object's centroid PIXEL
+// unprojected at the depth sampled there, which lands on the surface facing the camera -- half an
+// object nearer than its centre. The two agree today only because a derived position comes with no
+// size, so it draws a small cube where the difference does not show; but size_m is read whether or
+// not position_m was sent, so a producer sending a size WITHOUT a position would get a box centred
+// on the front face and sunk half its depth toward the camera. Nothing sends that combination yet.
 //
 // A QUATERNION rather than roll/pitch/yaw because detectors that give oriented 3D boxes (BOXER and
 // its like) give a full rotation, and almost nothing in a kitchen is axis-aligned anyway -- a
@@ -77,6 +90,11 @@ struct RAMMSUI_API FRammsDetectionWorldPoint
 	UPROPERTY(BlueprintReadOnly, Category = "RAMMS|Detection")
 	FString PerceptionClass;
 
+	/**
+	 * Where the object is, in Unreal units. The CENTRE of it when the producer sent position_m --
+	 * the marker's box is centred here and runs +/- WorldSize / 2. A derived position is instead a
+	 * point on the surface facing the camera; see the note at the top of this file.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "RAMMS|Detection")
 	FVector WorldLocation = FVector::ZeroVector;
 
