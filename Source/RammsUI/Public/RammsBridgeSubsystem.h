@@ -145,10 +145,17 @@ public:
 	 * Whether two panel payloads are the SAME panel, differing only in what a running action
 	 * updates.
 	 *
-	 * Identity is the title, the buttons (their ids, labels and styles, in order) and the panel
-	 * style. The message and the progress are what a step changes as it runs, so they are not part
-	 * of it -- an engine pushing "opening door, 30%" then "opening door, 65%" is one panel twice,
-	 * not two panels. A style change is a new panel: an error panel should announce itself.
+	 * Identity is the title and the panel style. Everything else -- the message, the progress and
+	 * the BUTTONS -- is what one panel changes while it is up, so none of it counts: an engine
+	 * pushing "opening door, 30%" then "opening door, 65%", and then swapping Pause for Resume
+	 * when the operator pauses it, is one panel throughout. A style change is a new panel: an
+	 * error panel should announce itself rather than slide in under the one it replaces.
+	 *
+	 * Buttons were part of this and are not any more. Treating a changed button set as a new panel
+	 * made the demo's progress -> paused transition replay the entrance animation, which is the
+	 * same panel offering a different control, not a different panel. The cost is that two
+	 * genuinely different panels sharing a title and style now read as one; for the shipped set
+	 * that is only the idle and empty panels, which are both blank.
 	 *
 	 * Keep the previous payload yourself and pass it here: that way what the answer depends on is
 	 * visible in the graph, and it is the same answer wherever it is asked. Use it to play a

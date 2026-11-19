@@ -124,27 +124,9 @@ namespace RammsPanelIdentity
 		Identity += Value + TEXT("\x1f");
 		Identity += Style(Root) + TEXT("\x1f");
 
-		// Buttons in order: a panel whose actions changed is a different panel, even if it kept
-		// its title. Their labels and styles count too, since a relabelled button is a new offer.
-		const TArray<TSharedPtr<FJsonValue>>* Buttons = nullptr;
-		if (Root->TryGetArrayField(TEXT("buttons"), Buttons))
-		{
-			for (const TSharedPtr<FJsonValue>& Entry : *Buttons)
-			{
-				const TSharedPtr<FJsonObject>* Button = nullptr;
-				if (!Entry.IsValid() || !Entry->TryGetObject(Button))
-				{
-					continue;
-				}
-				for (const TCHAR* Field : { TEXT("button_id"), TEXT("label") })
-				{
-					FString ButtonValue;
-					(*Button)->TryGetStringField(Field, ButtonValue);
-					Identity += ButtonValue + TEXT("\x1e");
-				}
-				Identity += Style(*Button) + TEXT("\x1e");
-			}
-		}
+		// Buttons are deliberately NOT part of this. A panel swaps its own controls as it runs --
+		// Pause becomes Resume when the operator pauses an action -- and that is the same panel,
+		// not a new one. They still decide whether a payload is a panel at all, above.
 		return Identity;
 	}
 } // namespace RammsPanelIdentity
