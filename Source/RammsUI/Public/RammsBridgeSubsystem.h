@@ -205,14 +205,13 @@ public:
 
 	// ── Outbound (UE -> bridge) ───────────────────────────────────────
 
-	/** Call from a panel button's OnClicked with that button's button_id. */
 	/**
-	 * Report that a panel button was pressed, by the id the panel gave it.
+	 * Call from a panel button's OnClicked with that button's button_id.
 	 *
-	 * An EMPTY id is not reported: there is nothing for the orchestrator to match on, so a button
-	 * with no id is a control belonging to this UI -- a camera toggle, a view switch -- rather
-	 * than an offer a panel made. RAMMS_Button reports every press, so leaving its id blank is how
-	 * such a button stays local.
+	 * An EMPTY id is dropped with a warning. button_id is required of a panel button, so a blank
+	 * one is a bug here rather than a message worth sending, and the press could not be matched to
+	 * anything anyway. A control belonging to this UI -- a camera toggle, a view switch -- should
+	 * not call this at all; it calls its own OnClicked instead.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
 	void PostButtonPress(const FString& ButtonId);

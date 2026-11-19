@@ -83,7 +83,11 @@ public:
 	 *
 	 * The widget's own visibility is remembered and put back when the camera goes away again.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera")
+	/**
+	 * Set through SetHideWhileShown, not here: a widget in the owning screen's tree is not an
+	 * asset, so the Details panel has nothing to offer for it.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scene Camera")
 	TObjectPtr<UWidget> HideWhileShown;
 
 	/** Set HideWhileShown and apply it at once; the property alone waits for the next change. */
@@ -139,6 +143,9 @@ private:
 	void ApplyShown();
 
 	/** What HideWhileShown looked like before it was suppressed, and whether it is suppressed. */
+	/** Puts HideWhileShown back if this view is suppressing it, and clears the suppression. */
+	void RestoreHideWhileShown();
+
 	ESlateVisibility HideWhileShownRestore = ESlateVisibility::SelfHitTestInvisible;
 	bool			 bHideWhileShownSuppressed = false;
 

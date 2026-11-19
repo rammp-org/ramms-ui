@@ -11,6 +11,8 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRammsBridge, Log, All);
+
 namespace
 {
 	FString ToCondensedJson(const TSharedRef<FJsonObject>& Object)
@@ -293,12 +295,13 @@ void URammsBridgeSubsystem::PostButtonPress(const FString& ButtonId)
 {
 	if (ButtonId.IsEmpty())
 	{
-		// A button with no id has nothing the orchestrator could match on, so it is a control that
-		// belongs to this UI -- a camera toggle, a view switch -- not an offer made by a panel.
-		// RAMMS_Button reports every press, so leaving the id blank is how such a button says it
-		// is local. The same rule PostObjectTapped already applies to an object with no
-		// instance_id.
-		UE_LOG(LogTemp, Verbose, TEXT("[Bridge] button press with no id; local control, not reported"));
+		// button_id is required of a panel button (USER_INPUT_JSON_SCHEMA.md 6.3), so an empty one
+		// is a bug on this side -- a lost ExposeOnSpawn pin, a panel built without ids -- and the
+		// press cannot be matched to anything. Dropping it keeps meaningless traffic off the
+		// outbound path; the warning is so it does not become a button that silently does nothing.
+		// A control belonging to this UI should not reach here at all: a local button calls its
+		// own OnClicked and skips this.
+		UE_LOG(LogRammsBridge, Warning, TEXT("[Bridge] button press with an empty button_id, dropped; a panel button needs an id, and a local control should not report at all"));
 		return;
 	}
 

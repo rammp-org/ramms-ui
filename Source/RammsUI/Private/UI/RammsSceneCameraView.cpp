@@ -117,6 +117,10 @@ void URammsSceneCameraView::NativeConstruct()
 
 void URammsSceneCameraView::NativeDestruct()
 {
+	// This view can be torn down while the widget it suppressed lives on in the screen above it,
+	// and nothing else holds a reason to restore it. Put it back on the way out.
+	RestoreHideWhileShown();
+
 	if (ToggleButton)
 	{
 		ToggleButton->OnClicked.RemoveDynamic(this, &URammsSceneCameraView::HandleToggleClicked);
@@ -185,32 +189,41 @@ void URammsSceneCameraView::ApplyShown()
 		const bool bCameraOnScreen = bAvailable && bSceneCameraShown;
 		if (bCameraOnScreen && !bHideWhileShownSuppressed)
 		{
-			HideWhileShownRestore = HideWhileShown->GetVisibility();
+			// Never remember a hidden state as the thing to go back to. Anything else may have
+			// collapsed the widget while the camera was off -- a layout switch, a transition, a
+			// "no detections" path -- and snapshotting that would write Collapsed back on every
+			// later cycle, leaving it invisible for good with the toggle unable to recover it.
+			const ESlateVisibility Current = HideWhileShown->GetVisibility();
+			HideWhileShownRestore = (Current == ESlateVisibility::Collapsed || Current == ESlateVisibility::Hidden)
+				? ESlateVisibility::SelfHitTestInvisible
+				: Current;
 			bHideWhileShownSuppressed = true;
 			HideWhileShown->SetVisibility(ESlateVisibility::Collapsed);
 		}
 		else if (!bCameraOnScreen && bHideWhileShownSuppressed)
 		{
-			bHideWhileShownSuppressed = false;
-			HideWhileShown->SetVisibility(HideWhileShownRestore);
+			RestoreHideWhileShown();
 		}
 	}
 }
 
-void URammsSceneCameraView::SetHideWhileShown(UWidget* Widget)
+void URammsSceneCameraView::RestoreHideWhileShown()
 {
-	if (HideWhileShown == Widget)
-	{
-		return;
-	}
-
-	// Put the old one back before letting go of it, or it stays collapsed with nothing left
-	// holding a reason to restore it.
 	if (HideWhileShown && bHideWhileShownSuppressed)
 	{
 		HideWhileShown->SetVisibility(HideWhileShownRestore);
 	}
 	bHideWhileShownSuppressed = false;
-	HideWhileShown = Widget;
+}
+
+void URammsSceneCameraView::SetHideWhileShown(UWidget* Widget)
+{
+	if (HideWhileShown != Widget)
+	{
+		// Put the old one back before letting go of it, or it stays collapsed with nothing left
+		// holding a reason to restore it.
+		RestoreHideWhileShown();
+		HideWhileShown = Widget;
+	}
 	ApplyShown();
 }
