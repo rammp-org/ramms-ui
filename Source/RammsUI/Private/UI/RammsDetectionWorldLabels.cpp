@@ -13,6 +13,20 @@
 #include "Styling/CoreStyle.h"
 #include "UI/RammsUIStyle.h"
 
+namespace RammsDetectionWorldLabels
+{
+	/** One label worked out but not yet drawn, so the set can be ordered first. */
+	struct FPendingLabel
+	{
+		FString		 Text;
+		FVector2D	 PlatePosition = FVector2D::ZeroVector;
+		FVector2D	 PlateSize = FVector2D::ZeroVector;
+		FVector2D	 TextSize = FVector2D::ZeroVector;
+		FLinearColor PlateColour = FLinearColor::White;
+		double		 DistanceSquared = 0.0;
+	};
+} // namespace RammsDetectionWorldLabels
+
 URammsDetectionWorldLabels::URammsDetectionWorldLabels()
 {
 	// SelfHitTestInvisible: labels are something to read, never something to press, and this layer
@@ -99,7 +113,7 @@ int32 URammsDetectionWorldLabels::NativePaint(const FPaintArgs& Args, const FGeo
 		CameraLocation = Camera->GetCameraLocation();
 	}
 
-	int32 Layer = LayerId;
+	TArray<RammsDetectionWorldLabels::FPendingLabel> Pending;
 
 	// Every marker in the world, every frame. It is a class-filtered actor iteration, which costs
 	// a pass over the level's actor list -- tens of microseconds on the maps this runs on. If a
@@ -114,7 +128,8 @@ int32 URammsDetectionWorldLabels::NativePaint(const FPaintArgs& Args, const FGeo
 		}
 
 		const FVector Anchor = Marker->GetLabelAnchorLocation();
-		if (MaxLabelDistance > 0.0f && FVector::Dist(Anchor, CameraLocation) > MaxLabelDistance)
+		const double  DistanceSquared = FVector::DistSquared(Anchor, CameraLocation);
+		if (MaxLabelDistance > 0.0f && DistanceSquared > static_cast<double>(MaxLabelDistance) * MaxLabelDistance)
 		{
 			continue;
 		}
@@ -153,9 +168,9 @@ int32 URammsDetectionWorldLabels::NativePaint(const FPaintArgs& Args, const FGeo
 		const FVector2D TextSize = FontMeasure->Measure(Text, CachedLabelFont);
 		const FVector2D PlateSize(TextSize.X + LabelPadding.X * 2.0f, TextSize.Y + LabelPadding.Y * 2.0f);
 
-		// Centred on the marker and sitting above it. The camera overlay anchors its plate to the
-		// left edge of a 2D box; a 3D box projects to an irregular shape with no left edge, so the
-		// centre of the top is the honest equivalent.
+		// Centred on the marker and sitting above it. A 2D POI anchors to the left edge of its
+		// box; a 3D box projects to an irregular shape with no left edge, so the centre of the top
+		// is the honest equivalent.
 		const FVector2D PlatePosition(LocalPosition.X - PlateSize.X * 0.5f, LocalPosition.Y - PlateSize.Y);
 
 		// Cull off-screen labels rather than hand Slate elements it will clip anyway. Only when
@@ -173,17 +188,38 @@ int32 URammsDetectionWorldLabels::NativePaint(const FPaintArgs& Args, const FGeo
 		FLinearColor PlateColour = Marker->GetLabelColour();
 		PlateColour.A = FMath::Lerp(1.0f, FMath::Clamp(StaleLabelOpacity, 0.0f, 1.0f), Marker->GetStaleness());
 
+		RammsDetectionWorldLabels::FPendingLabel& Label = Pending.AddDefaulted_GetRef();
+		Label.Text = MoveTemp(Text);
+		Label.PlatePosition = PlatePosition;
+		Label.PlateSize = PlateSize;
+		Label.TextSize = TextSize;
+		Label.PlateColour = PlateColour;
+		Label.DistanceSquared = DistanceSquared;
+	}
+
+	// Furthest first, so the nearest label is drawn last and lands on top of the ones behind it.
+	// Slate has no depth here -- paint order is the only ordering there is -- and TActorIterator
+	// hands actors over in whatever order the level holds them, which is why a far object's name
+	// could cover a near one's and look like a bug in the projection rather than in the sequence.
+	Pending.Sort([](const RammsDetectionWorldLabels::FPendingLabel&	 A,
+					 const RammsDetectionWorldLabels::FPendingLabel& B) {
+		return A.DistanceSquared > B.DistanceSquared;
+	});
+
+	int32 Layer = LayerId;
+	for (const RammsDetectionWorldLabels::FPendingLabel& Label : Pending)
+	{
 		FSlateDrawElement::MakeBox(OutDrawElements, Layer,
-			AllottedGeometry.ToPaintGeometry(PlateSize, FSlateLayoutTransform(PlatePosition)), &PlateBrush,
-			ESlateDrawEffect::None, PlateColour);
+			AllottedGeometry.ToPaintGeometry(Label.PlateSize, FSlateLayoutTransform(Label.PlatePosition)),
+			&PlateBrush, ESlateDrawEffect::None, Label.PlateColour);
 
 		FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
 			AllottedGeometry.ToPaintGeometry(
-				TextSize, FSlateLayoutTransform(PlatePosition + LabelPadding)),
-			Text, CachedLabelFont, ESlateDrawEffect::None, LabelTextColour);
+				Label.TextSize, FSlateLayoutTransform(Label.PlatePosition + LabelPadding)),
+			Label.Text, CachedLabelFont, ESlateDrawEffect::None, LabelTextColour);
 
-		// Each label gets its own pair of layers, so a nearer plate covers a further label's text
-		// rather than interleaving with it.
+		// A pair of layers each, so a nearer pill covers the text of the one behind it rather
+		// than interleaving with it.
 		Layer += 2;
 	}
 
