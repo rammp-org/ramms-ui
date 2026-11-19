@@ -205,7 +205,14 @@ public:
 
 	// ── Outbound (UE -> bridge) ───────────────────────────────────────
 
-	/** Call from a panel button's OnClicked with that button's button_id. */
+	/**
+	 * Call from a panel button's OnClicked with that button's button_id.
+	 *
+	 * An EMPTY id is dropped with a warning. button_id is required of a panel button, so a blank
+	 * one is a bug here rather than a message worth sending, and the press could not be matched to
+	 * anything anyway. A control belonging to this UI -- a camera toggle, a view switch -- should
+	 * not call this at all; it calls its own OnClicked instead.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
 	void PostButtonPress(const FString& ButtonId);
 

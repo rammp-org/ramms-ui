@@ -2,6 +2,10 @@
 
 #include "UI/RammsSceneCameraView.h"
 
+#include "Components/Widget.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogRammsSceneCameraView, Log, All);
+
 #include "Blueprint/WidgetTree.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
@@ -113,6 +117,10 @@ void URammsSceneCameraView::NativeConstruct()
 
 void URammsSceneCameraView::NativeDestruct()
 {
+	// This view can be torn down while the widget it suppressed lives on in the screen above it,
+	// and nothing else holds a reason to restore it. Put it back on the way out.
+	RestoreHideWhileShown();
+
 	if (ToggleButton)
 	{
 		ToggleButton->OnClicked.RemoveDynamic(this, &URammsSceneCameraView::HandleToggleClicked);
@@ -144,6 +152,15 @@ void URammsSceneCameraView::SetSceneCameraShown(bool bShown)
 	}
 	bSceneCameraShown = bShown;
 	ApplyShown();
+
+	// Says the request arrived and what came of it. Without this, a button that never fires, a
+	// camera still waiting for its first frame, and a working toggle all look identical on screen.
+	UE_LOG(LogRammsSceneCameraView, Log,
+		TEXT("[%s] scene camera asked to %s; had a frame=%s, camera is now %s"),
+		*GetName(), bShown ? TEXT("show") : TEXT("hide"), bHadFrame ? TEXT("yes") : TEXT("NO"),
+		Camera ? (Camera->GetVisibility() == ESlateVisibility::Collapsed ? TEXT("collapsed") : TEXT("visible"))
+			   : TEXT("absent"));
+
 	OnSceneCameraShownChanged.Broadcast(bSceneCameraShown);
 }
 
@@ -164,4 +181,49 @@ void URammsSceneCameraView::ApplyShown()
 		ToggleButton->SetVisibility(bAvailable && bShowToggleButton ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 		ToggleButton->SetText(bSceneCameraShown ? HideCameraText : ShowCameraText);
 	}
+
+	// Follows the camera's REAL visibility, not the user's choice: until the first frame arrives
+	// the camera is collapsed, and hiding the other surface then would leave nothing on screen.
+	if (HideWhileShown)
+	{
+		const bool bCameraOnScreen = bAvailable && bSceneCameraShown;
+		if (bCameraOnScreen && !bHideWhileShownSuppressed)
+		{
+			// Never remember a hidden state as the thing to go back to. Anything else may have
+			// collapsed the widget while the camera was off -- a layout switch, a transition, a
+			// "no detections" path -- and snapshotting that would write Collapsed back on every
+			// later cycle, leaving it invisible for good with the toggle unable to recover it.
+			const ESlateVisibility Current = HideWhileShown->GetVisibility();
+			HideWhileShownRestore = (Current == ESlateVisibility::Collapsed || Current == ESlateVisibility::Hidden)
+				? ESlateVisibility::SelfHitTestInvisible
+				: Current;
+			bHideWhileShownSuppressed = true;
+			HideWhileShown->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (!bCameraOnScreen && bHideWhileShownSuppressed)
+		{
+			RestoreHideWhileShown();
+		}
+	}
+}
+
+void URammsSceneCameraView::RestoreHideWhileShown()
+{
+	if (HideWhileShown && bHideWhileShownSuppressed)
+	{
+		HideWhileShown->SetVisibility(HideWhileShownRestore);
+	}
+	bHideWhileShownSuppressed = false;
+}
+
+void URammsSceneCameraView::SetHideWhileShown(UWidget* Widget)
+{
+	if (HideWhileShown != Widget)
+	{
+		// Put the old one back before letting go of it, or it stays collapsed with nothing left
+		// holding a reason to restore it.
+		RestoreHideWhileShown();
+		HideWhileShown = Widget;
+	}
+	ApplyShown();
 }

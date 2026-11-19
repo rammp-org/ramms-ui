@@ -67,6 +67,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Camera|Button")
 	FText ShowCameraText = NSLOCTEXT("RammsSceneCameraView", "ShowCamera", "Show camera");
 
+	/**
+	 * A widget hidden while the scene camera is actually on screen, for a surface that would
+	 * otherwise show the same detections twice.
+	 *
+	 * The scene camera carries its own detections (ConfigureCamera sets bReceiveBridgeDetections),
+	 * and a full-screen URammsDetectionPOILayer on the Scene stream shows the same objects again,
+	 * at different positions and separately tappable. Point this at that layer and only one of
+	 * them is ever up.
+	 *
+	 * "Actually on screen" is the part worth having in C++: the camera stays collapsed until its
+	 * first frame arrives (bWaitForFirstFrame), so a Blueprint binding on
+	 * OnSceneCameraShownChanged would hide the POIs the moment the button is pressed and leave
+	 * nothing visible until a frame turned up. This follows the camera's real visibility instead.
+	 *
+	 * The widget's own visibility is remembered and put back when the camera goes away again.
+	 */
+	/**
+	 * Set through SetHideWhileShown, not here: a widget in the owning screen's tree is not an
+	 * asset, so the Details panel has nothing to offer for it.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Scene Camera")
+	TObjectPtr<UWidget> HideWhileShown;
+
+	/** Set HideWhileShown and apply it at once; the property alone waits for the next change. */
+	UFUNCTION(BlueprintCallable, Category = "Scene Camera")
+	void SetHideWhileShown(UWidget* Widget);
+
 	/** Fired when the scene camera is hidden or shown (by the button or SetSceneCameraShown). */
 	UPROPERTY(BlueprintAssignable, Category = "Scene Camera")
 	FOnRammsSceneCameraShownChanged OnSceneCameraShownChanged;
@@ -89,13 +116,13 @@ public:
 	URammsCameraWidget* GetCameraWidget() const { return Camera; }
 
 protected:
-	virtual void BuildWidgetTree() override;
-	virtual void ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual void	 ResetCachedWidgets() override;
 	virtual UWidget* GetRootWidgetForValidation() override;
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-	virtual void SynchronizeProperties() override;
+	virtual void	 NativeConstruct() override;
+	virtual void	 NativeDestruct() override;
+	virtual void	 NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void	 SynchronizeProperties() override;
 
 private:
 	UPROPERTY(Transient)
@@ -114,6 +141,13 @@ private:
 
 	/** The camera's and the button's visibility, and the button's text. */
 	void ApplyShown();
+
+	/** What HideWhileShown looked like before it was suppressed, and whether it is suppressed. */
+	/** Puts HideWhileShown back if this view is suppressing it, and clears the suppression. */
+	void RestoreHideWhileShown();
+
+	ESlateVisibility HideWhileShownRestore = ESlateVisibility::SelfHitTestInvisible;
+	bool			 bHideWhileShownSuppressed = false;
 
 	UFUNCTION()
 	void HandleToggleClicked();

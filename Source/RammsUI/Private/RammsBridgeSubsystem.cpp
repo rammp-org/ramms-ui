@@ -11,6 +11,8 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogRammsBridge, Log, All);
+
 namespace
 {
 	FString ToCondensedJson(const TSharedRef<FJsonObject>& Object)
@@ -291,6 +293,18 @@ void URammsBridgeSubsystem::SetCameraFeedOpen(bool bOpen)
 
 void URammsBridgeSubsystem::PostButtonPress(const FString& ButtonId)
 {
+	if (ButtonId.IsEmpty())
+	{
+		// button_id is required of a panel button (USER_INPUT_JSON_SCHEMA.md 6.3), so an empty one
+		// is a bug on this side -- a lost ExposeOnSpawn pin, a panel built without ids -- and the
+		// press cannot be matched to anything. Dropping it keeps meaningless traffic off the
+		// outbound path; the warning is so it does not become a button that silently does nothing.
+		// A control belonging to this UI should not reach here at all: a local button calls its
+		// own OnClicked and skips this.
+		UE_LOG(LogRammsBridge, Warning, TEXT("[Bridge] button press with an empty button_id, dropped; a panel button needs an id, and a local control should not report at all"));
+		return;
+	}
+
 	TSharedRef<FJsonObject> Event = MakeShared<FJsonObject>();
 	Event->SetStringField(TEXT("event_type"), TEXT("button_press"));
 	Event->SetStringField(TEXT("button_id"), ButtonId);
