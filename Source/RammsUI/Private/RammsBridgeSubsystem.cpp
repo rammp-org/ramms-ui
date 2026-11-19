@@ -291,6 +291,17 @@ void URammsBridgeSubsystem::SetCameraFeedOpen(bool bOpen)
 
 void URammsBridgeSubsystem::PostButtonPress(const FString& ButtonId)
 {
+	if (ButtonId.IsEmpty())
+	{
+		// A button with no id has nothing the orchestrator could match on, so it is a control that
+		// belongs to this UI -- a camera toggle, a view switch -- not an offer made by a panel.
+		// RAMMS_Button reports every press, so leaving the id blank is how such a button says it
+		// is local. The same rule PostObjectTapped already applies to an object with no
+		// instance_id.
+		UE_LOG(LogTemp, Verbose, TEXT("[Bridge] button press with no id; local control, not reported"));
+		return;
+	}
+
 	TSharedRef<FJsonObject> Event = MakeShared<FJsonObject>();
 	Event->SetStringField(TEXT("event_type"), TEXT("button_press"));
 	Event->SetStringField(TEXT("button_id"), ButtonId);
