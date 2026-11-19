@@ -318,10 +318,10 @@ public:
 	/**
 	 * Draw the label as plain debug text beside the box.
 	 *
-	 * OFF, because URammsDetectionWorldLabels draws it properly: same plate and font as the camera
-	 * overlay's labels, in screen space, where it stays legible over whatever is behind it. This
-	 * is the fallback for a world with no RammsUI HUD in it, and it is the old unreadable version
-	 * -- bare text whose colour happens to be the colour of the scene behind it often enough.
+	 * OFF, because URammsDetectionWorldLabels draws it properly: the 2D POIs' pill, in screen
+	 * space, at a size meant to be read. This is the fallback for a world with no RammsUI HUD in
+	 * it, and it is the old unreadable version -- bare text whose colour happens to be the colour
+	 * of the scene behind it often enough.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
 	bool bDrawDebugLabel = false;

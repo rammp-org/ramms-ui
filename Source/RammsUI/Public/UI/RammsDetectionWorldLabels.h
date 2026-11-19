@@ -1,16 +1,24 @@
 // RammsDetectionWorldLabels.h
 //
-// Draws the 3D detection markers' labels as UI, the way the camera overlay draws its own.
+// Draws the 3D detection markers' labels as UI, in the same visual language as the 2D POIs.
 //
-// A world marker used to label itself with DrawDebugString: bare text, no plate, tinted the
+// A world marker used to label itself with DrawDebugString: bare text, no background, tinted the
 // marker's colour. Over a pale wall it read; over a bright or busy part of the scene it did not,
-// and which one you got depended on where the object happened to be in frame. The camera overlay
-// solved this long ago -- URammsBoundingBoxOverlay puts a translucent black plate behind every
-// label and draws the text in the box's colour on top -- so this does the same thing, with the
-// same font, the same padding and the same plate, for the markers in the world.
+// and which one you got depended on where the object happened to be in frame.
+//
+// RAMMS_POI settled this for the camera's detections: an upper-case name on a filled capsule,
+// large enough to read across the view. This draws the same thing for the markers in the world --
+// same shape, same case, same size -- with one difference. The pill takes the MARKER's colour
+// rather than the POIs' blue, because these markers encode where a position came from and which
+// object is selected, and a label that threw that away would be consistent and less useful.
+//
+// Size is the part that actually matters, and the reason the first version of this was unreadable:
+// this HUD lays out at roughly twice the viewport's pixel size, so the 12-unit font the camera
+// overlay uses for its own labels renders about six pixels tall here. LabelFontSize is this
+// widget's own, and the style asset supplies only the typeface.
 //
 // It has to be a widget. Text drawn from the marker is a debug draw: no background, no font
-// control, and sized in pixels at a world position, so a plate drawn behind it in the world would
+// control, and sized in pixels at a world position, so a pill drawn behind it in the world would
 // scale with distance while the text did not. Labels belong in screen space with the rest of the
 // UI, which is where this draws them.
 //
