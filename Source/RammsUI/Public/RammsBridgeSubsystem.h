@@ -47,6 +47,21 @@ struct RAMMSUI_API FRammsBridgeDetectedObject
 	/** True when this object's instance_id is the payload's selected_instance_id. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms Bridge|Detected Object")
 	bool bSelected = false;
+
+	/**
+	 * "time_since_detection_s": how long since the robot last saw this object DIRECTLY.
+	 *
+	 * A tracked object is still reported after it leaves the frame or is occluded, and until this
+	 * field existed there was nothing to tell a live detection from a memory. Zero means it is
+	 * being seen now.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms Bridge|Detected Object")
+	float SecondsSinceDetection = 0.0f;
+
+	/** True when the producer sent time_since_detection_s. Absent is not the same as zero: one
+	 *  says nothing about when the object was seen, the other says it is being seen right now. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ramms Bridge|Detected Object")
+	bool bHasSecondsSinceDetection = false;
 };
 
 /** The whole {stream_id, selected_instance_id, objects} payload, parsed. */

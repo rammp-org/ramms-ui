@@ -108,9 +108,10 @@ def check_producer_path(world):
 		'{"stream_id":"test/color","selected_instance_id":"fridge_1","objects":['
 		'{"instance_id":"fridge_1","perception_class":"fridge","frame":"world",'
 		' "position_m":{"X":2.0,"Y":1.0,"Z":0.9},"size_m":{"X":0.60,"Y":0.70,"Z":1.80},'
-		' "orientation":{"X":0,"Y":0,"Z":0.3826834,"W":0.9238795}},'
+		' "orientation":{"X":0,"Y":0,"Z":0.3826834,"W":0.9238795},'
+		' "time_since_detection_s":12.5},'
 		'{"instance_id":"cup_7","perception_class":"cup","frame":"world",'
-		' "position_m":{"X":1.0,"Y":0.2,"Z":0.95}},'
+		' "position_m":{"X":1.0,"Y":0.2,"Z":0.95},"time_since_detection_s":-1},'
 		'{"instance_id":"only_2d","perception_class":"plate","box":[0.1,0.1,0.2,0.2]}]}'
 	)
 
@@ -133,12 +134,21 @@ def check_producer_path(world):
 			failures.append("fridge_1 was named selected_instance_id but is not marked selected")
 		if not fridge.position_from_producer:
 			failures.append("fridge_1 position should be marked as the producer's")
+		if not fridge.has_seconds_since_detection:
+			failures.append("fridge_1 sent time_since_detection_s, so it must be flagged as having one")
+		elif abs(fridge.seconds_since_detection - 12.5) > 0.001:
+			failures.append(f"fridge_1 age {fridge.seconds_since_detection}, expected 12.5")
 
 	cup = points.get("cup_7")
 	if not cup:
 		failures.append("cup_7 was not resolved")
-	elif cup.has_size:
-		failures.append("cup_7 sent no size_m, so it must not claim one")
+	else:
+		if cup.has_size:
+			failures.append("cup_7 sent no size_m, so it must not claim one")
+		# A negative age is a sentinel, not a time: it must read as "never said", because zero
+		# would claim the robot is looking at the object right now.
+		if cup.has_seconds_since_detection:
+			failures.append("cup_7 sent a negative time_since_detection_s, which must not count as an age")
 
 	if "only_2d" in points:
 		failures.append("only_2d carries no 3D information and no depth camera exists, so it must be ignored")

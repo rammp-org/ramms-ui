@@ -24,6 +24,13 @@
 //   "size_m": {"X": 0.60, "Y": 0.70, "Z": 1.80},          // FULL dimensions, not half-extents
 //   "orientation": {"X": 0, "Y": 0, "Z": 0.707, "W": 0.707},   // optional; absent = axis-aligned
 //   "yaw_deg": 90.0                                       // shorthand, ignored if orientation is sent
+//   "time_since_detection_s": 12.5                        // 0 = being seen now; absent = unknown
+//
+// time_since_detection_s is how long since the robot last saw the object DIRECTLY. A tracked
+// object keeps being reported after it leaves the frame or goes behind something, and without this
+// field a marker drawn from a forty-second-old memory is indistinguishable from one the robot is
+// looking at -- the operator is shown a claim with no way to judge how much to trust it. Markers
+// dim as it grows, and say the number once they do.
 //
 // position_m is the CENTRE of the object, not a corner of its box: the marker is placed there and
 // the box drawn around it runs position_m +/- size_m / 2. A corner would put the whole box off by
@@ -121,6 +128,15 @@ struct RAMMSUI_API FRammsDetectionWorldPoint
 	/** True when WorldRotation is the producer's rather than an assumed axis alignment. */
 	UPROPERTY(BlueprintReadOnly, Category = "RAMMS|Detection")
 	bool bHasRotation = false;
+
+	/** Seconds since the robot last saw this object directly. Zero means it is being seen now. */
+	UPROPERTY(BlueprintReadOnly, Category = "RAMMS|Detection")
+	float SecondsSinceDetection = 0.0f;
+
+	/** True when the producer sent time_since_detection_s. Absent is not zero: one says nothing
+	 *  about when the object was seen, the other says it is being seen right now. */
+	UPROPERTY(BlueprintReadOnly, Category = "RAMMS|Detection")
+	bool bHasSecondsSinceDetection = false;
 
 	/**
 	 * False when this position was derived here from the depth stream, true when the producer sent
@@ -263,6 +279,48 @@ public:
 		meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float UnselectedBrightness = 0.72f;
 
+	/**
+	 * Dim a marker as the time since the robot last saw the object grows.
+	 *
+	 * Inert unless the producer sends time_since_detection_s, so turning it on costs nothing until
+	 * there is something to show. The selected marker dims too -- an old selection is exactly the
+	 * one worth doubting -- but keeps its colour and thicker outline, so it stays findable.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	bool bDimWhenStale = true;
+
+	/** Age at which dimming starts. Below this a marker is drawn as a live detection. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", EditCondition = "bDimWhenStale"))
+	float StaleAfterSeconds = 3.0f;
+
+	/** Age at which dimming reaches StaleBrightness and stops. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", EditCondition = "bDimWhenStale"))
+	float FullyStaleAfterSeconds = 60.0f;
+
+	/**
+	 * What a fully stale marker keeps of its colour and fill, 0-1. Not zero: an object the robot
+	 * has not seen for a minute is still the best guess anyone has about where it is, and a marker
+	 * that fades to nothing is one the operator cannot tap to ask about.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance",
+		meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bDimWhenStale"))
+	float StaleBrightness = 0.35f;
+
+	/** Put the age on the label once a marker is stale, so "dim" reads as a number not a mood. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection|Appearance")
+	bool bShowAgeWhenStale = true;
+
+	/**
+	 * Seconds since the robot last saw this object, or a negative number when the producer never
+	 * said. It is the age the producer sent PLUS the time since that push arrived, so a marker
+	 * goes on ageing when the pushes stop -- which is the honest reading, since losing the
+	 * producer is also not seeing the object.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	float GetSecondsSinceDetection() const;
+
 	/** IRammsWorldTappable: the operator tapped this marker in the 3D view. */
 	virtual void OnRammsWorldTapped_Implementation(const FHitResult& Hit) override;
 
@@ -282,6 +340,9 @@ protected:
 
 private:
 	FRammsDetectionWorldPoint Detection;
+
+	/** World time the current Detection arrived, so its age can keep running between pushes. */
+	double DetectionReceivedTime = 0.0;
 };
 
 /**

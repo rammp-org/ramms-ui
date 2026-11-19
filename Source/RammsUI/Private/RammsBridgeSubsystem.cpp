@@ -260,6 +260,15 @@ bool URammsBridgeSubsystem::ParseDetectedObjectsJson(const FString& DetectedObje
 			Out.Centroid = FVector2D((BoxValues[0] + BoxValues[2]) * 0.5, (BoxValues[1] + BoxValues[3]) * 0.5);
 		}
 
+		// Negative is taken as "not sent": a producer with no answer should leave the field out,
+		// but a sentinel is the obvious way to get that wrong and it must not read as a time.
+		double Seconds = 0.0;
+		if ((*Object)->TryGetNumberField(TEXT("time_since_detection_s"), Seconds) && Seconds >= 0.0)
+		{
+			Out.SecondsSinceDetection = static_cast<float>(Seconds);
+			Out.bHasSecondsSinceDetection = true;
+		}
+
 		Out.bSelected = !Out.InstanceId.IsEmpty() && Out.InstanceId == OutObjects.SelectedInstanceId;
 	}
 	return true;

@@ -238,6 +238,10 @@ void ARammsDetectionWorldMarker::BeginPlay()
 void ARammsDetectionWorldMarker::SetDetection(const FRammsDetectionWorldPoint& Point)
 {
 	Detection = Point;
+	if (const UWorld* World = GetWorld())
+	{
+		DetectionReceivedTime = World->GetTimeSeconds();
+	}
 	SetActorLocationAndRotation(Point.WorldLocation, Point.WorldRotation.Quaternion());
 	if (Bounds)
 	{
@@ -270,6 +274,17 @@ namespace RammsDetectionMarkers
 	}
 } // namespace RammsDetectionMarkers
 
+float ARammsDetectionWorldMarker::GetSecondsSinceDetection() const
+{
+	if (!Detection.bHasSecondsSinceDetection)
+	{
+		return -1.0f;
+	}
+	const UWorld* World = GetWorld();
+	const double  SincePush = World ? FMath::Max(0.0, World->GetTimeSeconds() - DetectionReceivedTime) : 0.0;
+	return Detection.SecondsSinceDetection + static_cast<float>(SincePush);
+}
+
 void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -288,9 +303,23 @@ void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 		? SelectedColour
 		: (Detection.bPositionFromProducer ? SentColour : DerivedColour);
 
-	const bool	 bSelected = Detection.bSelected;
-	const float	 Brightness = bSelected ? 1.0f : UnselectedBrightness;
-	const FColor FillColour = RammsDetectionMarkers::Shade(Base, Brightness, bSelected ? SelectedFillOpacity : FillOpacity);
+	const bool bSelected = Detection.bSelected;
+
+	// How far from live this marker is, 0 to 1. Both the colour and the fill fade with it, so a
+	// memory recedes while a live detection stays forward; what it must NOT do is disappear, or
+	// the operator loses the only handle they have for asking about the object.
+	const float Age = GetSecondsSinceDetection();
+	float		Staleness = 0.0f;
+	if (bDimWhenStale && Age >= 0.0f)
+	{
+		const float FullyStaleAt = FMath::Max(FullyStaleAfterSeconds, StaleAfterSeconds + KINDA_SMALL_NUMBER);
+		Staleness = FMath::Clamp(FMath::GetRangePct(StaleAfterSeconds, FullyStaleAt, Age), 0.0f, 1.0f);
+	}
+	const float StaleScale = FMath::Lerp(1.0f, FMath::Clamp(StaleBrightness, 0.0f, 1.0f), Staleness);
+
+	const float	 Brightness = (bSelected ? 1.0f : UnselectedBrightness) * StaleScale;
+	const FColor FillColour = RammsDetectionMarkers::Shade(
+		Base, Brightness, (bSelected ? SelectedFillOpacity : FillOpacity) * StaleScale);
 	const FColor LineColour = RammsDetectionMarkers::Shade(Base, Brightness, 1.0f);
 
 	// The box the tap actually hits, so what is drawn is what can be aimed at. Drawing a different
@@ -305,9 +334,15 @@ void ARammsDetectionWorldMarker::Tick(float DeltaSeconds)
 	DrawDebugBox(World, Centre, Extent, Rotation, LineColour, false, -1.0f, 0,
 		bSelected ? SelectedLineThickness : LineThickness);
 
-	const FString Label = Detection.PerceptionClass.IsEmpty()
+	FString Label = Detection.PerceptionClass.IsEmpty()
 		? Detection.InstanceId.ToString()
 		: Detection.PerceptionClass;
+	if (bShowAgeWhenStale && Staleness > 0.0f)
+	{
+		// A number, because "dimmer than the others" is a comparison and there may be nothing to
+		// compare against -- one stale marker alone looks like a marker.
+		Label += FString::Printf(TEXT("  %.0fs"), Age);
+	}
 	DrawDebugString(World, Centre + FVector(0, 0, Extent.Z + 10.0), Label, nullptr, LineColour, 0.0f, true,
 		bSelected ? 1.25f : 1.0f);
 }
@@ -838,6 +873,16 @@ void URammsDetectionWorldMarkers::Reresolve()
 					Point.WorldRotation = ProducerRotationToWorld(YawOnly, bCameraFrame, Extrinsic);
 					Point.bHasRotation = true;
 				}
+			}
+
+			// Negative is taken as "not sent": a producer with no answer should leave the field
+			// out, but a sentinel is the obvious way to get that wrong and must not read as a time.
+			double SecondsSinceDetection = 0.0;
+			if ((*Object)->TryGetNumberField(TEXT("time_since_detection_s"), SecondsSinceDetection)
+				&& SecondsSinceDetection >= 0.0)
+			{
+				Point.SecondsSinceDetection = static_cast<float>(SecondsSinceDetection);
+				Point.bHasSecondsSinceDetection = true;
 			}
 
 			Point.bSelected = !Selected.IsEmpty() && Selected == InstanceId;
