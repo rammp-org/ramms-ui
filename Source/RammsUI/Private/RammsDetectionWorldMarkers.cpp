@@ -803,10 +803,11 @@ void URammsDetectionWorldMarkers::Reresolve()
 				&& !SizeMetres.IsNearlyZero())
 			{
 				// Extents follow the SAME axis map as a point, or the box is built on the wrong
-				// axes. In the optical frame X is right, Y is down and Z is the range, so a fridge
-				// sent as 1.80 m "tall" in camera coordinates is 1.80 m DEEP in Unreal's unless
-				// this remap happens -- a box of the right dimensions in the wrong orientation,
-				// which looks like a detector error rather than a unit-frame one.
+				// axes. In the optical frame X is right, Y is DOWN and Z is the range, while
+				// Unreal's are forward, right and up -- so without this remap a fridge sent as
+				// 1.80 m tall in camera coordinates comes back 1.80 m WIDE and 0.70 m tall: a box
+				// of the right dimensions in the wrong orientation, which reads as a detector
+				// error rather than a frame one.
 				//
 				// The producer's world frame needs no remap: its axes are Unreal's up to the sign
 				// of Y, and an extent has no sign to flip, which is what the abs is for. That is

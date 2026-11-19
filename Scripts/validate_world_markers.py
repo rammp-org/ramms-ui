@@ -151,8 +151,9 @@ def check_camera_frame_box(world):
 
 	Separate from check_producer_path because that one sends `frame: "world"`, whose axes are
 	Unreal's up to the sign of Y -- the one frame where an un-remapped extent happens to be right.
-	The optical frame is X right, Y down, Z range, so a 1.80 m "tall" fridge sent here must come
-	back 1.80 m along Unreal's X (forward), not its Z.
+	The optical frame is X right, Y DOWN, Z range against Unreal's forward, right, up, so the
+	1.80 m "tall" fridge sent here (its height on the optical Y) must come back 1.80 m along
+	Unreal's Z -- not along Y, where an un-remapped extent would leave it, making it wide instead.
 	"""
 	host = _host_actor(world)
 	suffix = f"{int(time.time() * 1000) % 100000000}_camframe"
