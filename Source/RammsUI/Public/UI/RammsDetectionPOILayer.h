@@ -128,6 +128,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	FName POISelectedDispatcherName = TEXT("OnSelected");
 
+	/**
+	 * Opacity of every POI except the last tapped one, while the last tapped object (by instance_id)
+	 * is on this layer. With nothing tapped, or the tapped object no longer listed, every POI is
+	 * fully opaque. Applied through the POI's Color And Opacity, which multiplies with the Render
+	 * Opacity the POI sets for its own edge fade, so the two do not overwrite each other. 1 turns
+	 * the dimming off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection", meta = (ClampMin = "0", ClampMax = "1"))
+	float UnselectedPOIOpacity = 0.4f;
+
 	/** A POI on this layer was tapped (its selection dispatcher fired). */
 	UPROPERTY(BlueprintAssignable, Category = "RAMMS|Detection")
 	FRammsDetectionPOITapped OnPOITapped;
@@ -198,6 +208,9 @@ private:
 
 	/** Take a POI out of the pool: unbind it, take it off the canvas, forget it as last tapped. */
 	void ReleasePOI(UUserWidget* POI);
+
+	/** Full opacity for the last tapped POI, UnselectedPOIOpacity for the rest, or full for all. */
+	void ApplySelectionOpacity();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> POICanvas;

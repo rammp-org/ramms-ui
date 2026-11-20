@@ -445,6 +445,7 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	}
 	UnkeyedPOIs = MoveTemp(KeptUnkeyed);
 	LastObjects = Objects;
+	ApplySelectionOpacity();
 
 	UE_LOG(LogRammsDetectionPOI, Verbose, TEXT("[%s] stream_id '%s': %d POI(s) from %d object(s)"),
 		*GetName(), *Objects.StreamId, GetPOICount(), Objects.Objects.Num());
@@ -533,6 +534,7 @@ void URammsDetectionPOILayer::NotifyPOITapped(UUserWidget* POI, const FRammsBrid
 
 	UE_LOG(LogRammsDetectionPOI, Log, TEXT("[%s] POI tapped: '%s' (%s, source '%s')"), *GetName(),
 		*Object.InstanceId, *Object.PerceptionClass, *Object.Source);
+	ApplySelectionOpacity();
 	OnPOITapped.Broadcast(POI, Object);
 }
 
@@ -550,6 +552,43 @@ void URammsDetectionPOILayer::ClearLastTapped()
 	LastTappedPOI = nullptr;
 	LastTappedObject = FRammsBridgeDetectedObject();
 	bHasLastTapped = false;
+	ApplySelectionOpacity();
+}
+
+void URammsDetectionPOILayer::ApplySelectionOpacity()
+{
+	// Matched by instance_id, not by widget: the id is what identifies the object, and a POI with no
+	// id cannot be told apart from the next one, so tapping it selects nothing. A tapped object that
+	// is no longer on this layer leaves nothing to highlight, so everything goes back to opaque rather
+	// than every POI sitting dimmed.
+	const FName SelectedId = bHasLastTapped && !LastTappedObject.InstanceId.IsEmpty()
+		? FName(*LastTappedObject.InstanceId)
+		: NAME_None;
+	const bool bAnySelected = !SelectedId.IsNone() && POIsById.Contains(SelectedId);
+
+	const auto SetAlpha = [](UUserWidget* POI, float Alpha)
+	{
+		if (!POI)
+		{
+			return;
+		}
+		FLinearColor Color = POI->GetColorAndOpacity();
+		if (!FMath::IsNearlyEqual(Color.A, Alpha))
+		{
+			Color.A = Alpha;
+			POI->SetColorAndOpacity(Color);
+		}
+	};
+
+	const float Dimmed = FMath::Clamp(UnselectedPOIOpacity, 0.0f, 1.0f);
+	for (const TPair<FName, TObjectPtr<UUserWidget>>& Pair : POIsById)
+	{
+		SetAlpha(Pair.Value, !bAnySelected || Pair.Key == SelectedId ? 1.0f : Dimmed);
+	}
+	for (const TObjectPtr<UUserWidget>& POI : UnkeyedPOIs)
+	{
+		SetAlpha(POI, bAnySelected ? Dimmed : 1.0f);
+	}
 }
 
 void URammsDetectionPOITapListener::HandleSelected()
