@@ -181,8 +181,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 	// Each object keeps its marker, by Detection.ID, however the detections are ordered, so a
 	// press on one marker always ends on the same object. Markers without an ID can't send a
 	// tap, and are reused in order.
-	TMap<FName, URammsDetectionMarker*>	   ByID;
-	TArray<URammsDetectionMarker*>		   Unkeyed;
+	TMap<FName, URammsDetectionMarker*> ByID;
+	TArray<URammsDetectionMarker*>		Unkeyed;
 	for (URammsDetectionMarker* Marker : Markers)
 	{
 		if (!Marker)
@@ -205,8 +205,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 	}
 
 	TArray<TObjectPtr<URammsDetectionMarker>> Placed;
-	const int32 Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
-	FVector2D	PaneOffset, PaneSize;
+	const int32								  Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
+	FVector2D								  PaneOffset, PaneSize;
 	GetPaneRect(MarkerPane, LocalSize, PaneOffset, PaneSize);
 
 	int32 NextUnkeyed = 0;
@@ -250,8 +250,7 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		{
 			continue;
 		}
-		const auto PlaceAtCentre = [&]()
-		{
+		const auto PlaceAtCentre = [&]() {
 			MarkerSlot->SetAutoSize(true);
 			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);

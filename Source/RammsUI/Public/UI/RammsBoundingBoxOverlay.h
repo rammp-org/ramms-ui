@@ -221,12 +221,12 @@ public:
 	void UnsubscribeFromSubsystem();
 
 protected:
-	virtual void BuildWidgetTree() override;
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-	virtual void ApplyStyle_Implementation() override;
-	virtual void ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual void	 NativeConstruct() override;
+	virtual void	 NativeDestruct() override;
+	virtual void	 NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void	 ApplyStyle_Implementation() override;
+	virtual void	 ResetCachedWidgets() override;
 	virtual UWidget* GetRootWidgetForValidation() override;
 
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -264,13 +264,13 @@ private:
 	/** What the markers were last placed for: when any of it changes, they are placed again */
 	struct FMarkerLayoutKey
 	{
-		FVector2D						Size = FVector2D::ZeroVector;
-		int32							PaneCount = 0;
-		float							PaneGap = 0.0f;
-		bool							bVerticalPanes = false;
-		int32							Pane = 0;
-		ERammsDetectionMarkerPlacement	Placement = ERammsDetectionMarkerPlacement::Box;
-		FObjectKey						MarkerClass;
+		FVector2D					   Size = FVector2D::ZeroVector;
+		int32						   PaneCount = 0;
+		float						   PaneGap = 0.0f;
+		bool						   bVerticalPanes = false;
+		int32						   Pane = 0;
+		ERammsDetectionMarkerPlacement Placement = ERammsDetectionMarkerPlacement::Box;
+		FObjectKey					   MarkerClass;
 
 		bool Matches(const FMarkerLayoutKey& Other) const
 		{
