@@ -22,6 +22,8 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsCameraWidget, Log, All);
 
@@ -1252,6 +1254,7 @@ void URammsCameraWidget::SetTexture(UTexture* Texture)
 
 void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 {
+	const bool bNewTexture = CurrentDataTexture != Texture;
 	CurrentDataTexture = Texture;
 	if (Texture)
 	{
@@ -1259,6 +1262,10 @@ void URammsCameraWidget::SetDataTexture(UTexture* Texture)
 		{
 			LastDataTextureTime = World->GetTimeSeconds();
 		}
+	}
+	if (bNewTexture)
+	{
+		UpdateDataMaterialParams(); // its format decides MaskScale
 	}
 	UpdateDisplayedImages();
 }
@@ -2413,6 +2420,9 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 	}
 	else if (InStreamID == DataStreamID)
 	{
+		// Another texture object (another stream, or one recreated for a new size or format) can need
+		// another MaskScale. A provider reuses its texture otherwise, so this is not every frame.
+		const bool bNewTexture = CurrentDataTexture != Texture;
 		CurrentDataTexture = Texture;
 		if (UWorld* World = GetWorld())
 		{
@@ -2421,7 +2431,7 @@ void URammsCameraWidget::OnCameraFrameReady(const FString& InStreamID, UTexture*
 
 		// Auto-detect depth format and refresh material params from provider
 		// using lightweight accessors (avoids full FRammsCameraStreamInfo copy).
-		bool bNeedParamUpdate = false;
+		bool bNeedParamUpdate = bNewTexture;
 		if (!DataStreamID.IsEmpty())
 		{
 			for (const auto& Sub : ProviderSubscriptions)
@@ -3460,6 +3470,43 @@ void URammsCameraWidget::EnsureDataMaterials()
 	}
 }
 
+namespace RammsCameraWidgetMasks
+{
+	/**
+	 * What turns a mask texture's sample back into the class id, which the mask materials colour
+	 * (MaskScale * DataTexture.R, then id / NumMaskIDs). An unsigned-normalized texture is sampled
+	 * as id / 255 (8-bit) or id / 65535 (16-bit); a float one holds the id itself.
+	 */
+	static float SampleScale(const UTexture* Texture)
+	{
+		EPixelFormat Format = PF_Unknown;
+		if (const UTexture2D* Texture2D = Cast<UTexture2D>(Texture))
+		{
+			Format = Texture2D->GetPixelFormat();
+		}
+		else if (const UTextureRenderTarget2D* Target = Cast<UTextureRenderTarget2D>(Texture))
+		{
+			Format = Target->GetFormat();
+		}
+		switch (Format)
+		{
+			case PF_G8:
+			case PF_R8:
+			case PF_L8:
+			case PF_A8:
+			case PF_B8G8R8A8:
+			case PF_R8G8B8A8:
+				return 255.0f;
+			case PF_G16:
+			case PF_G16R16:
+			case PF_R16G16B16A16_UNORM:
+				return 65535.0f;
+			default:
+				return 1.0f;
+		}
+	}
+} // namespace RammsCameraWidgetMasks
+
 void URammsCameraWidget::UpdateDataMaterialParams()
 {
 	// Compute depth format params from auto-detected format
@@ -3475,6 +3522,12 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 		*GetName(), static_cast<int32>(CachedDataDepthFormat), DepthUnnormalize, DepthScaleToCM,
 		CurrentDataTexture ? *CurrentDataTexture->GetName() : TEXT("null"),
 		CurrentTexture ? *CurrentTexture->GetName() : TEXT("null"));
+
+	// The mask materials need the class id, and the texture's format decides how it is sampled. Left at
+	// the materials' MaskScale of 1, an 8-bit mask -- what the sim and the UI bridge send -- put every
+	// class within a few hundredths of the colormap's start: one dark colour, and no masks to be seen.
+	// Only the mask materials have a MaskScale; the others ignore it.
+	const float MaskScale = RammsCameraWidgetMasks::SampleScale(CurrentDataTexture);
 
 	// Apply all scalar params from config, then depth format params, to both materials
 	auto ApplyParams = [&](UMaterialInstanceDynamic* MID) {
@@ -3515,6 +3568,9 @@ void URammsCameraWidget::UpdateDataMaterialParams()
 				}
 			}
 		}
+
+		// The texture's own MaskScale first, so the config's and a sender's still override it
+		MID->SetScalarParameterValue(FName("MaskScale"), MaskScale);
 
 		// Static config params (widget-level defaults)
 		for (const auto& Pair : DataStreamConfig.ScalarParams)
