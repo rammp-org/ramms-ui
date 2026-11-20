@@ -11,6 +11,7 @@
 #include "RammsBoundingBoxOverlay.generated.h"
 
 class UCanvasPanel;
+class URammsCameraWidget;
 
 /**
  * How to assign colors to boxes that don't have a custom color.
@@ -202,6 +203,31 @@ public:
 	/** One pane's offset and size within an overlay of FullSize (PaneCount, PaneGap, bVerticalPanes). */
 	void GetPaneRect(int32 Pane, const FVector2D& FullSize, FVector2D& OutOffset, FVector2D& OutSize) const;
 
+	/**
+	 * The pixel of the camera's current frame under a point on screen: the inverse of how detections
+	 * are placed (NormalizedToLocal), times the frame's size. ScreenPosition is in Slate's absolute
+	 * (desktop) space, as a pointer event's GetScreenSpacePosition gives it. The image fills the
+	 * pane stretched, with any letterbox bars outside the overlay, so the mapping is exact.
+	 *
+	 * OutPixel is clamped to the frame ([0, width] x [0, height]): a marker can hang over the image's
+	 * edge, and a tap there means the nearest edge. False, with nothing set, before the overlay has a
+	 * camera (SetSourceCamera) with a frame, or before it has been laid out.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Bounding Box")
+	bool ScreenToImagePixel(FVector2D ScreenPosition, int32 Pane, FVector2D& OutPixel, FIntPoint& OutImageSize) const;
+
+	/**
+	 * The first half of ScreenToImagePixel: a point on screen as normalized (0-1) coordinates of a
+	 * pane's image, unclamped, through the layout as it is now. False before the overlay is laid out.
+	 */
+	bool ScreenToPaneNormalized(FVector2D ScreenPosition, int32 Pane, FVector2D& OutNormalized) const;
+
+	/** The second half: a normalized image point, clamped to 0-1, in pixels of the camera's current frame. */
+	bool NormalizedToImagePixel(FVector2D Normalized, FVector2D& OutPixel, FIntPoint& OutImageSize) const;
+
+	/** The camera this overlay is drawn over, whose frame size ScreenToImagePixel uses (set by URammsCameraWidget). */
+	void SetSourceCamera(URammsCameraWidget* InCamera);
+
 	/** Called whenever the detections change: set, cleared, or expired. Implement in a Blueprint subclass. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Bounding Box")
 	void OnDetectionsChanged(const TArray<FRammsBoundingBox>& NewBoxes);
@@ -221,12 +247,12 @@ public:
 	void UnsubscribeFromSubsystem();
 
 protected:
-	virtual void BuildWidgetTree() override;
-	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-	virtual void ApplyStyle_Implementation() override;
-	virtual void ResetCachedWidgets() override;
+	virtual void	 BuildWidgetTree() override;
+	virtual void	 NativeConstruct() override;
+	virtual void	 NativeDestruct() override;
+	virtual void	 NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void	 ApplyStyle_Implementation() override;
+	virtual void	 ResetCachedWidgets() override;
 	virtual UWidget* GetRootWidgetForValidation() override;
 
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -258,19 +284,22 @@ private:
 	/** See SetMarkerStreamID */
 	FString MarkerStreamID;
 
+	/** See SetSourceCamera. Weak: the camera owns this overlay, not the other way round. */
+	TWeakObjectPtr<URammsCameraWidget> SourceCamera;
+
 	/** See SetSelectedDetectionID */
 	FName SelectedDetectionID;
 
 	/** What the markers were last placed for: when any of it changes, they are placed again */
 	struct FMarkerLayoutKey
 	{
-		FVector2D						Size = FVector2D::ZeroVector;
-		int32							PaneCount = 0;
-		float							PaneGap = 0.0f;
-		bool							bVerticalPanes = false;
-		int32							Pane = 0;
-		ERammsDetectionMarkerPlacement	Placement = ERammsDetectionMarkerPlacement::Box;
-		FObjectKey						MarkerClass;
+		FVector2D					   Size = FVector2D::ZeroVector;
+		int32						   PaneCount = 0;
+		float						   PaneGap = 0.0f;
+		bool						   bVerticalPanes = false;
+		int32						   Pane = 0;
+		ERammsDetectionMarkerPlacement Placement = ERammsDetectionMarkerPlacement::Box;
+		FObjectKey					   MarkerClass;
 
 		bool Matches(const FMarkerLayoutKey& Other) const
 		{

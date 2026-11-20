@@ -2,6 +2,7 @@
 
 #include "UI/RammsBoundingBoxOverlay.h"
 #include "RammsUISubsystem.h"
+#include "UI/RammsCameraWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
@@ -181,8 +182,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 	// Each object keeps its marker, by Detection.ID, however the detections are ordered, so a
 	// press on one marker always ends on the same object. Markers without an ID can't send a
 	// tap, and are reused in order.
-	TMap<FName, URammsDetectionMarker*>	   ByID;
-	TArray<URammsDetectionMarker*>		   Unkeyed;
+	TMap<FName, URammsDetectionMarker*> ByID;
+	TArray<URammsDetectionMarker*>		Unkeyed;
 	for (URammsDetectionMarker* Marker : Markers)
 	{
 		if (!Marker)
@@ -205,8 +206,8 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 	}
 
 	TArray<TObjectPtr<URammsDetectionMarker>> Placed;
-	const int32 Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
-	FVector2D	PaneOffset, PaneSize;
+	const int32								  Wanted = MarkerWidgetClass ? Boxes.Num() : 0;
+	FVector2D								  PaneOffset, PaneSize;
 	GetPaneRect(MarkerPane, LocalSize, PaneOffset, PaneSize);
 
 	int32 NextUnkeyed = 0;
@@ -241,6 +242,7 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		Placed.Add(Marker);
 
 		Marker->StreamID = MarkerStreamID;
+		Marker->SetOverlay(this);
 		Marker->bSelected = !Box.ID.IsNone() && Box.ID == SelectedDetectionID;
 		Marker->SetDetection(Box);
 		Marker->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
@@ -250,8 +252,7 @@ void URammsBoundingBoxOverlay::UpdateMarkers(const FVector2D& LocalSize)
 		{
 			continue;
 		}
-		const auto PlaceAtCentre = [&]()
-		{
+		const auto PlaceAtCentre = [&]() {
 			MarkerSlot->SetAutoSize(true);
 			MarkerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			MarkerSlot->SetPosition(PaneOffset + Box.GetCenter() * PaneSize);
@@ -399,6 +400,48 @@ FVector2D URammsBoundingBoxOverlay::NormalizedToLocal(FVector2D NormalizedPoint,
 	FVector2D Offset, Size;
 	GetPaneRect(Pane, GetCachedGeometry().GetLocalSize(), Offset, Size);
 	return Offset + NormalizedPoint * Size;
+}
+
+void URammsBoundingBoxOverlay::SetSourceCamera(URammsCameraWidget* InCamera)
+{
+	SourceCamera = InCamera;
+}
+
+bool URammsBoundingBoxOverlay::ScreenToImagePixel(FVector2D ScreenPosition, int32 Pane, FVector2D& OutPixel, FIntPoint& OutImageSize) const
+{
+	FVector2D Normalized;
+	return ScreenToPaneNormalized(ScreenPosition, Pane, Normalized) && NormalizedToImagePixel(Normalized, OutPixel, OutImageSize);
+}
+
+bool URammsBoundingBoxOverlay::ScreenToPaneNormalized(FVector2D ScreenPosition, int32 Pane, FVector2D& OutNormalized) const
+{
+	const FGeometry& Geometry = GetCachedGeometry();
+	FVector2D		 PaneOffset, PaneSize;
+	GetPaneRect(Pane, Geometry.GetLocalSize(), PaneOffset, PaneSize);
+	if (PaneSize.X <= 0.0 || PaneSize.Y <= 0.0)
+	{
+		return false;
+	}
+	// AbsoluteToLocal, not viewport pixels: it carries DPI scale and any render transform on the way.
+	OutNormalized = (Geometry.AbsoluteToLocal(ScreenPosition) - PaneOffset) / PaneSize;
+	return true;
+}
+
+bool URammsBoundingBoxOverlay::NormalizedToImagePixel(FVector2D Normalized, FVector2D& OutPixel, FIntPoint& OutImageSize) const
+{
+	const URammsCameraWidget* Camera = SourceCamera.Get();
+	// The frame the camera's detections were scaled by (ApplyBridgeDetections divides pixel boxes by
+	// it), so a tap comes back in the same pixel space as the boxes the bridge sent.
+	const FVector2D FrameSize = Camera ? Camera->GetImageSize() : FVector2D::ZeroVector;
+	if (FrameSize.X < 1.0 || FrameSize.Y < 1.0)
+	{
+		return false;
+	}
+	OutPixel = FVector2D(
+		FMath::Clamp(Normalized.X, 0.0, 1.0) * FrameSize.X,
+		FMath::Clamp(Normalized.Y, 0.0, 1.0) * FrameSize.Y);
+	OutImageSize = FIntPoint(FMath::RoundToInt(FrameSize.X), FMath::RoundToInt(FrameSize.Y));
+	return true;
 }
 
 // ── Subsystem ────────────────────────────────────────────────────

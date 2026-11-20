@@ -1820,7 +1820,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 {
 	if (!BBoxOverlay && ImageContainerOverlay)
 	{
-		APlayerController* PC = GetOwningPlayer();
+		APlayerController*							PC = GetOwningPlayer();
 		const TSubclassOf<URammsBoundingBoxOverlay> OverlayClass = BoundingBoxOverlayClass
 			? BoundingBoxOverlayClass
 			: TSubclassOf<URammsBoundingBoxOverlay>(URammsBoundingBoxOverlay::StaticClass());
@@ -1842,6 +1842,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			// Markers, and whether the overlay draws its own boxes under them
 			BBoxOverlay->MarkerWidgetClass = DetectionMarkerClass;
 			BBoxOverlay->SetMarkerStreamID(StreamID);
+			BBoxOverlay->SetSourceCamera(this);
 			BBoxOverlay->MarkerPlacement = DetectionMarkerPlacement;
 			BBoxOverlay->bDrawBoxes = bDrawDetectionBoxes;
 
@@ -2012,7 +2013,7 @@ namespace RammsCameraBridgeJson
 		}
 		return false;
 	}
-}
+} // namespace RammsCameraBridgeJson
 
 int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjectsJson)
 {
@@ -2032,8 +2033,8 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjects
 	FString Selected;
 	Root->TryGetStringField(TEXT("selected_instance_id"), Selected);
 
-	static const TCHAR* const BoxKeys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
-	TArray<FRammsBoundingBox>  Boxes;
+	static const TCHAR* const			  BoxKeys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
+	TArray<FRammsBoundingBox>			  Boxes;
 	const TArray<TSharedPtr<FJsonValue>>* Objects = nullptr;
 	if (Root->TryGetArrayField(TEXT("objects"), Objects))
 	{
@@ -2057,8 +2058,8 @@ int32 URammsCameraWidget::ApplyBridgeDetections(const FString& InDetectedObjects
 			// x_min, y_min, x_max, y_max; all zero means no box, then the centroid alone places it. A
 			// centroid of exactly (0, 0) with no box is skipped: the orchestrator sends that when it has
 			// no box for an object (its "centroid" is [0, 0] when "box" is unset), not an object at the corner
-			double BoxValues[4] = { 0.0, 0.0, 0.0, 0.0 };
-			double CentroidValues[2] = { 0.0, 0.0 };
+			double	   BoxValues[4] = { 0.0, 0.0, 0.0, 0.0 };
+			double	   CentroidValues[2] = { 0.0, 0.0 };
 			const bool bHasBox = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("box"), BoxKeys, 4, BoxValues)
 				&& (BoxValues[0] != BoxValues[2] || BoxValues[1] != BoxValues[3]);
 			bool bHasCentroid = RammsCameraBridgeJson::ReadNumbers(**Object, TEXT("centroid"), BoxKeys, 2, CentroidValues);
