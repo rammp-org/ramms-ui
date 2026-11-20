@@ -9,6 +9,7 @@
 #include "Engine/Texture.h"
 #include "EngineUtils.h"
 #include "RammsCameraProviderComponent.h"
+#include "RammsDetectionWorldMarkers.h"
 #include "UI/RammsDetectionPOI.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRammsDetectionPOI, Log, All);
@@ -113,8 +114,36 @@ void URammsDetectionPOILayer::NativeTick(const FGeometry& MyGeometry, float InDe
 		if (Size.X > 0.0 && Size.Y > 0.0 && LastObjects.Objects.Num() > 0)
 		{
 			SetDetectedObjects(LastObjects);
+			return;
 		}
 	}
+
+	// World markers come and go on their own schedule: the marker component resolves the same push in
+	// its own handler, in no fixed order with this one, and a depth-derived marker can appear a few
+	// frames later, once the depth it waited for arrives. So whether an object has a marker is looked at
+	// again every tick, not only when a push arrives.
+	if (bHideObjectsWithWorldMarkers && LastObjects.Objects.Num() > 0)
+	{
+		const TSet<FName> Marked = CollectWorldMarkedIds();
+		if (Marked.Num() != LastMarkedIds.Num() || !Marked.Includes(LastMarkedIds))
+		{
+			SetDetectedObjects(LastObjects);
+		}
+	}
+}
+
+TSet<FName> URammsDetectionPOILayer::CollectWorldMarkedIds() const
+{
+	TSet<FName>	  Ids;
+	const UWorld* World = GetWorld();
+	for (const TWeakObjectPtr<ARammsDetectionWorldMarker>& Marker : ARammsDetectionWorldMarker::GetLiveMarkers())
+	{
+		if (Marker.IsValid() && Marker->GetWorld() == World && !Marker->GetDetection().InstanceId.IsNone())
+		{
+			Ids.Add(Marker->GetDetection().InstanceId);
+		}
+	}
+	return Ids;
 }
 
 void URammsDetectionPOILayer::HandleDetectedObjects(const FRammsBridgeDetectedObjects& InObjects)
@@ -276,6 +305,9 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	// calls into Blueprint, which could push again and reallocate it underneath us.
 	const FRammsBridgeDetectedObjects Objects = InObjects;
 
+	// Objects shown in the world by a marker get no POI (bHideObjectsWithWorldMarkers).
+	LastMarkedIds = bHideObjectsWithWorldMarkers ? CollectWorldMarkedIds() : TSet<FName>();
+
 	// A different POI class: start the pool again rather than show the old class beside the new.
 	if (POIWidgetClass != PooledClass)
 	{
@@ -356,6 +388,10 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 		}
 
 		const FName Id = Object.InstanceId.IsEmpty() ? NAME_None : FName(*Object.InstanceId);
+		if (!Id.IsNone() && LastMarkedIds.Contains(Id))
+		{
+			continue; // its world marker shows it; left out of Seen, so a POI it had is released below
+		}
 		if (!Id.IsNone() && Seen.Contains(Id))
 		{
 			// Two objects with one id: keep the first rather than thrash one widget between them.
@@ -564,10 +600,9 @@ void URammsDetectionPOILayer::ApplySelectionOpacity()
 	const FName SelectedId = bHasLastTapped && !LastTappedObject.InstanceId.IsEmpty()
 		? FName(*LastTappedObject.InstanceId)
 		: NAME_None;
-	const bool bAnySelected = !SelectedId.IsNone() && POIsById.Contains(SelectedId);
+	const bool	bAnySelected = !SelectedId.IsNone() && POIsById.Contains(SelectedId);
 
-	const auto SetAlpha = [](UUserWidget* POI, float Alpha)
-	{
+	const auto SetAlpha = [](UUserWidget* POI, float Alpha) {
 		if (!POI)
 		{
 			return;
