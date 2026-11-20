@@ -10,6 +10,13 @@
 //   1. DERIVED. The object's centroid is unprojected through its camera's intrinsics and the range
 //      is read from that camera's depth stream. Needs nothing from the producer beyond the 2D
 //      fields it already sends, so it works today. Accurate to what the depth camera saw.
+//      Read exactly as URammsCameraWidget reads the same object: `centroid`/`box` as arrays or as
+//      the {"X": ..} objects the bridge sends, in pixels of the source's frame or normalized, and
+//      `source` as a stream id or one of the bridge's camera names ("scene", "overlay", ""), which
+//      URammsCameraStreamSettings maps to streams. The pose and intrinsics come from whichever of the
+//      camera's streams carries them (the UI bridge sends them on depth only), and the depth bytes are
+//      asked of the stream bridge (depth streams only) the first time they are needed. The depth must
+//      be registered to the colour image (aligned_depth_to_color): it is sampled at the colour's point.
 //
 //   2. SENT. The producer states the position itself, and optionally the object's size. Better,
 //      because perception knows what it measured and a size cannot be derived from one depth
@@ -506,6 +513,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
 	bool DeriveWorldLocation(const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation) const;
 
+	/** The stream a `source` names: a stream id as it is, a bridge camera name ("scene") through the settings. */
+	FString ResolveStreamID(const FString& Source) const;
+
 	/** The most recent resolved set, for anything that starts after a push. */
 	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
 	const TArray<FRammsDetectionWorldPoint>& GetWorldPoints() const { return WorldPoints; }
@@ -555,6 +565,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void BeginDestroy() override;
 
 	/** Destroy every pooled marker and forget them. */
 	void DestroyMarkers();
@@ -591,6 +602,12 @@ protected:
 	/** Streams already complained about, so a camera with no pose does not fill the log. */
 	mutable TSet<FString> WarnedStreams;
 
+	/** Stream bridges asked for depth bytes on this component's behalf, released in EndPlay. */
+	mutable TArray<TWeakObjectPtr<class URammsStreamCameraBridge>> DepthForwardingBridges;
+
+	/** Ticks left to keep re-resolving while depth that was just asked for starts arriving. */
+	mutable int32 DepthRetryTicks = 0;
+
 private:
 	UFUNCTION()
 	void HandleDetectedObjectsJson(const FString& DetectedObjectsJson);
@@ -599,6 +616,16 @@ private:
 	void Reresolve();
 
 	bool ResolveCameraExtrinsic(const FString& Source, FTransform& OutExtrinsic) const;
+
+	/** DeriveWorldLocation, saying whether it failed only for want of depth bytes not yet arrived. */
+	bool DeriveWorldLocationFor(const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet) const;
+
+	/** Note a camera's streams (colour and its depth sibling) in UsedSources. */
+	void AddCameraStreams(const FString& StreamID);
+
+	/** Ask the stream bridge behind this provider for depth bytes, once. True if this call asked. */
+	bool EnsureDepthForwarding(UObject* ProviderObject) const;
+	void ReleaseDepthForwarding();
 
 	/** The depth stream sharing a GroupID with this colour stream, and the numbers to read it. */
 	bool FindDepthSibling(const FString& ColourStreamID, FString& OutDepthStreamID, TScriptInterface<class IRammsCameraProvider>& OutProvider) const;

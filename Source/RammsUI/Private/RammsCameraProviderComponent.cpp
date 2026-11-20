@@ -50,6 +50,11 @@ void URammsCameraProviderComponent::BroadcastFrame(const FString& StreamID, UTex
 	}
 
 	State->Texture = Texture;
+	// A frame without raw bytes makes the last ones stale: they describe an image no longer on
+	// screen. Kept, they let a CPU consumer (depth-derived world markers) go on sampling depth that
+	// stopped arriving when raw forwarding was released, and say nothing about its age.
+	State->RawFrameData.Reset();
+	State->FramePixelFormat = PF_Unknown;
 	State->LastTimestamp = FDateTime::UtcNow().GetTicks();
 	State->FrameCount++;
 
