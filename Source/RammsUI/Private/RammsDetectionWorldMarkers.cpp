@@ -12,6 +12,8 @@
 #include "GameFramework/Actor.h"
 #include "Interfaces/IRammsCameraProvider.h"
 #include "RammsBridgeSubsystem.h"
+#include "RammsCameraStreamSettings.h"
+#include "RammsStreamCameraBridge.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -175,23 +177,84 @@ namespace RammsDetectionMarkers
 	 * that. Pixel coordinates are not accepted here -- the bridge normalizes before this component
 	 * sees them, and guessing from magnitude is how the overlay once placed pixels as fractions.
 	 */
-	static bool ReadCentroid(const FJsonObject& Object, FVector2D& Out)
+	/**
+	 * Read Count numbers from Field: an array, or an object with Keys ({"X": .., "Y": ..}).
+	 *
+	 * Both, as URammsCameraWidget reads them. The bridge sends the object form -- UE's JSON struct
+	 * converter takes no bare arrays into FVector2D/FVector4 -- so reading arrays alone placed no
+	 * derived marker for any object the real bridge sent.
+	 */
+	static bool ReadNumbers(const FJsonObject& Object, const TCHAR* Field, const TCHAR* const* Keys, int32 Count, double* Out)
 	{
-		const TArray<TSharedPtr<FJsonValue>>* Centroid = nullptr;
-		if (Object.TryGetArrayField(TEXT("centroid"), Centroid) && Centroid->Num() >= 2)
+		const TSharedPtr<FJsonValue> Value = Object.TryGetField(Field);
+		if (!Value.IsValid())
 		{
-			Out = FVector2D((*Centroid)[0]->AsNumber(), (*Centroid)[1]->AsNumber());
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		const TSharedPtr<FJsonObject>*		  Fields = nullptr;
+		if (Value->TryGetArray(Array))
+		{
+			if (Array->Num() < Count)
+			{
+				return false;
+			}
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Array)[i].IsValid() || !(*Array)[i]->TryGetNumber(Out[i]))
+				{
+					return false;
+				}
+			}
 			return true;
 		}
-		const TArray<TSharedPtr<FJsonValue>>* Box = nullptr;
-		if (Object.TryGetArrayField(TEXT("box"), Box) && Box->Num() >= 4)
+		if (Value->TryGetObject(Fields) && Fields && Fields->IsValid())
 		{
-			Out = FVector2D(
-				((*Box)[0]->AsNumber() + (*Box)[2]->AsNumber()) * 0.5,
-				((*Box)[1]->AsNumber() + (*Box)[3]->AsNumber()) * 0.5);
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (!(*Fields)->TryGetNumberField(Keys[i], Out[i]))
+				{
+					return false;
+				}
+			}
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * The object's point in its image -- the centroid, else the centre of the box -- and whether it is
+	 * in pixels of that image rather than normalized.
+	 *
+	 * The same reading URammsCameraWidget gives the same payload, so a marker in the world and the
+	 * box on the camera agree on what was sent:
+	 *  - an all-zero box (x_min == x_max, y_min == y_max) is no box, and a centroid of exactly (0, 0)
+	 *    with no box is no point -- the orchestrator sends those for an object it has no box for,
+	 *    not for an object in the corner;
+	 *  - normalized when every coordinate sent is within 0-1 (with slack for rounding), otherwise
+	 *    pixels: the bridge's own units (GetDetectionCoordinateScale).
+	 */
+	static bool ReadImagePoint(const FJsonObject& Object, FVector2D& OutPoint, bool& bOutPixels)
+	{
+		static const TCHAR* const Keys[] = { TEXT("X"), TEXT("Y"), TEXT("Z"), TEXT("W") };
+		double					  Box[4] = { 0.0, 0.0, 0.0, 0.0 };
+		double					  Centroid[2] = { 0.0, 0.0 };
+		const bool				  bHasBox = ReadNumbers(Object, TEXT("box"), Keys, 4, Box) && (Box[0] != Box[2] || Box[1] != Box[3]);
+		const bool				  bHasCentroid = ReadNumbers(Object, TEXT("centroid"), Keys, 2, Centroid);
+		if (!bHasBox && (!bHasCentroid || (Centroid[0] == 0.0 && Centroid[1] == 0.0)))
+		{
+			return false;
+		}
+		OutPoint = bHasCentroid ? FVector2D(Centroid[0], Centroid[1])
+								: FVector2D((Box[0] + Box[2]) * 0.5, (Box[1] + Box[3]) * 0.5);
+		const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+		bool	   bUnit = !bHasCentroid || (IsUnit(Centroid[0]) && IsUnit(Centroid[1]));
+		if (bHasBox)
+		{
+			bUnit = bUnit && IsUnit(Box[0]) && IsUnit(Box[1]) && IsUnit(Box[2]) && IsUnit(Box[3]);
+		}
+		bOutPixels = !bUnit;
+		return true;
 	}
 } // namespace RammsDetectionMarkers
 
@@ -642,12 +705,97 @@ bool URammsDetectionWorldMarkers::FindDepthSibling(
 	return false;
 }
 
+FString URammsDetectionWorldMarkers::ResolveStreamID(const FString& Source) const
+{
+	// The bridge tags an object with the camera it was found in as "scene" or "overlay" -- and the
+	// orchestrator's own objects with "" -- not with a stream id, so looking `source` up as one found
+	// nothing for any real object. The settings that tell each camera widget which objects are its own
+	// also say which stream each of those names means.
+	// A stream that is registered names itself, even when it is also on an alias list (the scene list
+	// carries "camera/scene/depth"): it may carry its own pose, as the bridge's depth stream does.
+	if (!Source.IsEmpty() && FindProviderForStream(Source))
+	{
+		return Source;
+	}
+	const URammsCameraStreamSettings* Settings = GetDefault<URammsCameraStreamSettings>();
+	const auto						  Lists = [&Source](const TArray<FString>& Names) {
+		   return Names.ContainsByPredicate([&Source](const FString& Name) { return Name.Equals(Source, ESearchCase::IgnoreCase); });
+	};
+	if (Settings && !Settings->SceneColorStreamID.IsEmpty() && Lists(Settings->SceneDetectionSources))
+	{
+		return Settings->SceneColorStreamID;
+	}
+	if (Settings && !Settings->OverlayColorStreamID.IsEmpty() && Lists(Settings->OverlayDetectionSources))
+	{
+		return Settings->OverlayColorStreamID;
+	}
+	return Source;
+}
+
+bool URammsDetectionWorldMarkers::EnsureDepthForwarding(UObject* ProviderObject) const
+{
+	// Depth bytes reach a provider only while a consumer asks the stream bridge for them. Only the
+	// projection manager did, and only for CPU projection, so with GPU projection -- the default --
+	// nothing was ever derived and nothing said why. Depth only: the colour streams' bytes are the
+	// expensive ones, and nothing here reads them.
+	AActor* Owner = Cast<AActor>(ProviderObject);
+	if (!Owner)
+	{
+		if (const UActorComponent* Component = Cast<UActorComponent>(ProviderObject))
+		{
+			Owner = Component->GetOwner();
+		}
+	}
+	URammsStreamCameraBridge* Bridge = Owner ? Owner->FindComponentByClass<URammsStreamCameraBridge>() : nullptr;
+	if (!Bridge
+		|| DepthForwardingBridges.ContainsByPredicate(
+			[Bridge](const TWeakObjectPtr<URammsStreamCameraBridge>& Held) { return Held.Get() == Bridge; }))
+	{
+		return false;
+	}
+	Bridge->RequestDepthRawDataForwarding();
+	DepthForwardingBridges.Add(Bridge);
+	return true;
+}
+
+void URammsDetectionWorldMarkers::ReleaseDepthForwarding()
+{
+	for (const TWeakObjectPtr<URammsStreamCameraBridge>& Bridge : DepthForwardingBridges)
+	{
+		if (Bridge.IsValid())
+		{
+			Bridge->ReleaseDepthRawDataForwarding();
+		}
+	}
+	DepthForwardingBridges.Reset();
+}
+
 bool URammsDetectionWorldMarkers::DeriveWorldLocation(
 	const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation) const
 {
+	bool bNoDepthYet = false;
+	return DeriveWorldLocationFor(Source, NormalizedPoint, OutWorldLocation, bNoDepthYet);
+}
+
+bool URammsDetectionWorldMarkers::DeriveWorldLocationFor(
+	const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet) const
+{
+	bOutNoDepthYet = false;
+
+	// A point outside the image has no depth of its own. Reading the clamped edge pixel and
+	// unprojecting anyway placed a pixel centroid taken for a normalized one hundreds of metres off,
+	// as a plausible marker; outside the image is nowhere.
+	const auto IsUnit = [](double Value) { return Value >= -0.001 && Value <= 1.001; };
+	if (!IsUnit(NormalizedPoint.X) || !IsUnit(NormalizedPoint.Y))
+	{
+		return false;
+	}
+	const FVector2D Point(FMath::Clamp(NormalizedPoint.X, 0.0, 1.0), FMath::Clamp(NormalizedPoint.Y, 0.0, 1.0));
+
+	const FString						   StreamID = ResolveStreamID(Source);
 	FString								   DepthStreamID;
 	TScriptInterface<IRammsCameraProvider> ProviderInterface;
-	if (!FindDepthSibling(Source, DepthStreamID, ProviderInterface))
+	if (!FindDepthSibling(StreamID, DepthStreamID, ProviderInterface))
 	{
 		return false;
 	}
@@ -658,28 +806,71 @@ bool URammsDetectionWorldMarkers::DeriveWorldLocation(
 	}
 
 	FRammsCameraStreamInfo Colour, Depth;
-	if (!Provider->GetStreamInfo(Source, Colour) || !Provider->GetStreamInfo(DepthStreamID, Depth))
+	if (!Provider->GetStreamInfo(StreamID, Colour) || !Provider->GetStreamInfo(DepthStreamID, Depth))
 	{
 		return false;
 	}
-	if (!Colour.bHasExtrinsic)
+	// The pose and intrinsics come from whichever of the camera's streams carries both. The UI bridge
+	// puts them on the depth frames only; another producer may put them on the colour. Colour first,
+	// being the image the object's coordinates are in. Requiring them on the colour placed nothing for
+	// the real bridge, and said so only at Verbose.
+	const auto					  Complete = [](const FRammsCameraStreamInfo& Info) { return Info.bHasExtrinsic && Info.Intrinsics.Num() >= 4; };
+	const FRammsCameraStreamInfo* Geometry = Complete(Colour) ? &Colour : (Complete(Depth) ? &Depth : nullptr);
+	if (!Geometry)
 	{
-		UE_LOG(LogRammsDetectionMarkers, Verbose,
-			TEXT("No extrinsic for '%s' yet; cannot place a derived position"), *Source);
+		// Once per stream: this is reached per object, per push, at the push rate.
+		const FString Key = TEXT("geometry:") + StreamID;
+		if (!WarnedStreams.Contains(Key))
+		{
+			WarnedStreams.Add(Key);
+			UE_LOG(LogRammsDetectionMarkers, Warning,
+				TEXT("Neither '%s' (%d intrinsics, %s) nor its depth stream '%s' (%d intrinsics, %s) carries both intrinsics and a pose, so its centroids cannot be unprojected. Send them in the frames' metadata, or send position_m."),
+				*StreamID, Colour.Intrinsics.Num(), Colour.bHasExtrinsic ? TEXT("a pose") : TEXT("no pose"),
+				*DepthStreamID, Depth.Intrinsics.Num(), Depth.bHasExtrinsic ? TEXT("a pose") : TEXT("no pose"));
+		}
 		return false;
 	}
-	if (Colour.Intrinsics.Num() < 4)
+
+	// The depth is sampled at the colour image's normalized point, which is only the same point of the
+	// scene when the depth image is registered to the colour one (aligned_depth_to_color). A raw depth
+	// image of another field of view puts every derived marker off by an amount that grows towards the
+	// edges -- plausible, and wrong. Say so once.
+	const FString AlignKey = TEXT("aligned:") + DepthStreamID;
+	if (!WarnedStreams.Contains(AlignKey) && Colour.Width > 0 && Colour.Height > 0 && Depth.Width > 0 && Depth.Height > 0)
 	{
-		UE_LOG(LogRammsDetectionMarkers, Warning,
-			TEXT("Stream '%s' reports no intrinsics, so a centroid cannot be unprojected; the producer must send position_m for this camera"),
-			*Source);
-		return false;
+		const double ColourAspect = double(Colour.Width) / Colour.Height, DepthAspect = double(Depth.Width) / Depth.Height;
+		bool		 bMisaligned = FMath::Abs(ColourAspect - DepthAspect) > 0.01 * ColourAspect;
+		if (!bMisaligned && Colour.Intrinsics.Num() >= 4 && Depth.Intrinsics.Num() >= 4)
+		{
+			// The same field of view means the same intrinsics once each is divided by its image size.
+			const double Scale[4] = { double(Colour.Width), double(Colour.Height), double(Colour.Width), double(Colour.Height) };
+			const double DepthScale[4] = { double(Depth.Width), double(Depth.Height), double(Depth.Width), double(Depth.Height) };
+			for (int32 i = 0; i < 4 && !bMisaligned; ++i)
+			{
+				const double C = Colour.Intrinsics[i] / Scale[i], D = Depth.Intrinsics[i] / DepthScale[i];
+				bMisaligned = FMath::Abs(C - D) > 0.02 * FMath::Max(FMath::Abs(C), 1e-6);
+			}
+		}
+		if (bMisaligned)
+		{
+			WarnedStreams.Add(AlignKey);
+			UE_LOG(LogRammsDetectionMarkers, Warning,
+				TEXT("Depth stream '%s' (%dx%d) does not look registered to colour '%s' (%dx%d): derived positions sample depth at the colour image's point and will be off. Send depth aligned to the colour image."),
+				*DepthStreamID, Depth.Width, Depth.Height, *StreamID, Colour.Width, Colour.Height);
+		}
 	}
 
 	const TArray<uint8>* Raw = nullptr;
 	EPixelFormat		 RawFormat = PF_Unknown;
 	if (!Provider->GetStreamRawData(DepthStreamID, Raw, RawFormat) || !Raw)
 	{
+		bOutNoDepthYet = true;
+		if (EnsureDepthForwarding(ProviderInterface.GetObject()))
+		{
+			// The bytes come with the next depth frame: retry for a moment rather than leave the
+			// objects that needed them unplaced until the next push.
+			DepthRetryTicks = 60;
+		}
 		return false;
 	}
 
@@ -704,16 +895,16 @@ bool URammsDetectionWorldMarkers::DeriveWorldLocation(
 	}
 
 	if (!RammsDetectionMarkers::SampleDepthUU(
-			*Raw, DepthFormat, Depth.Width, Depth.Height, NormalizedPoint, DepthSampleRadius, DepthUU))
+			*Raw, DepthFormat, Depth.Width, Depth.Height, Point, DepthSampleRadius, DepthUU))
 	{
 		// A dropout is ordinary -- a dark, shiny or distant surface returns nothing -- so this is
 		// not a warning. The object keeps its 2D marker and gains no world one.
 		return false;
 	}
 
-	const FVector4 Intrinsics(Colour.Intrinsics[0], Colour.Intrinsics[1], Colour.Intrinsics[2], Colour.Intrinsics[3]);
-	const FVector  Local = UnprojectToCameraLocal(NormalizedPoint, DepthUU, Intrinsics, FVector2D(Colour.Width, Colour.Height));
-	OutWorldLocation = Colour.Extrinsic.TransformPosition(Local);
+	const FVector4 Intrinsics(Geometry->Intrinsics[0], Geometry->Intrinsics[1], Geometry->Intrinsics[2], Geometry->Intrinsics[3]);
+	const FVector  Local = UnprojectToCameraLocal(Point, DepthUU, Intrinsics, FVector2D(Geometry->Width, Geometry->Height));
+	OutWorldLocation = Geometry->Extrinsic.TransformPosition(Local);
 	return true;
 }
 
@@ -736,8 +927,9 @@ void URammsDetectionWorldMarkers::BeginPlay()
 				// metadata, so this fires at frame rate per stream. Re-resolving there would
 				// re-parse the whole payload each time; instead note it and do the work once, on
 				// the next tick, and only when the camera that moved is one the current points
-				// were actually placed against.
-				if (UsedSources.IsEmpty() || UsedSources.Contains(StreamID))
+				// were actually placed against (or tried to be: a derived object waiting on this camera's
+				// depth or pose is in UsedSources too).
+				if (UsedSources.Contains(StreamID))
 				{
 					bReresolvePending = true;
 				}
@@ -751,6 +943,14 @@ void URammsDetectionWorldMarkers::TickComponent(
 	float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// Depth was asked for a moment ago and has not arrived yet: try again each tick until it does,
+	// for about a second, rather than leave the objects that need it unplaced until the next push.
+	if (DepthRetryTicks > 0)
+	{
+		--DepthRetryTicks;
+		bReresolvePending = true;
+	}
 
 	// At most one re-resolve a frame, however many cameras moved. Ahead of the debug-draw
 	// early-out below, because markers have to follow a moving camera whether or not anything is
@@ -816,8 +1016,16 @@ void URammsDetectionWorldMarkers::EndPlay(const EEndPlayReason::Type EndPlayReas
 	SubscribedProviders.Reset();
 
 	DestroyMarkers();
+	ReleaseDepthForwarding();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void URammsDetectionWorldMarkers::BeginDestroy()
+{
+	// A component that never began play (made at runtime and never registered) gets no EndPlay.
+	ReleaseDepthForwarding();
+	Super::BeginDestroy();
 }
 
 void URammsDetectionWorldMarkers::DestroyMarkers()
@@ -844,15 +1052,40 @@ bool URammsDetectionWorldMarkers::IsAcceptedSource(const FString& Source) const
 
 bool URammsDetectionWorldMarkers::ResolveCameraExtrinsic(const FString& Source, FTransform& OutExtrinsic) const
 {
-	// `source` is the stream the object was detected on, so it names the camera directly.
-	IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(Source));
+	// `source` names the camera the object was detected on: a stream id, or one of the bridge's names
+	// for a camera ("scene", "overlay").
+	const FString		   StreamID = ResolveStreamID(Source);
+	IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(StreamID));
 	FRammsCameraStreamInfo Info;
-	if (Provider && Provider->GetStreamInfo(Source, Info) && Info.bHasExtrinsic)
+	if (Provider && Provider->GetStreamInfo(StreamID, Info) && Info.bHasExtrinsic)
+	{
+		OutExtrinsic = Info.Extrinsic;
+		return true;
+	}
+	// The UI bridge sends a camera's pose on its depth frames only: the same camera, so the same pose
+	// (to within the colour/depth baseline, which an aligned depth image does not have).
+	FString								   DepthStreamID;
+	TScriptInterface<IRammsCameraProvider> DepthProvider;
+	if (FindDepthSibling(StreamID, DepthStreamID, DepthProvider) && DepthProvider.GetInterface()
+		&& DepthProvider.GetInterface()->GetStreamInfo(DepthStreamID, Info) && Info.bHasExtrinsic)
 	{
 		OutExtrinsic = Info.Extrinsic;
 		return true;
 	}
 	return false;
+}
+
+void URammsDetectionWorldMarkers::AddCameraStreams(const FString& StreamID)
+{
+	// The camera's colour stream and its depth sibling: the pose updates come from whichever carries
+	// the pose -- the depth, from the UI bridge -- and either moving invalidates the positions.
+	UsedSources.Add(StreamID);
+	FString								   DepthStreamID;
+	TScriptInterface<IRammsCameraProvider> Provider;
+	if (FindDepthSibling(StreamID, DepthStreamID, Provider))
+	{
+		UsedSources.Add(DepthStreamID);
+	}
 }
 
 void URammsDetectionWorldMarkers::SetDetectedObjectsJson(const FString& DetectedObjectsJson)
@@ -869,6 +1102,9 @@ void URammsDetectionWorldMarkers::HandleDetectedObjectsJson(const FString& Detec
 void URammsDetectionWorldMarkers::Reresolve()
 {
 	WorldPoints.Reset();
+	// Rebuilt from what this resolve leans on, so only those cameras moving brings it back.
+	UsedSources.Reset();
+	bool bMissingDepth = false;
 
 	TSharedPtr<FJsonObject>			Root;
 	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(LastPayload);
@@ -928,13 +1164,30 @@ void URammsDetectionWorldMarkers::Reresolve()
 			{
 				// Nothing sent, so unproject the object's own centroid through its depth stream.
 				// Falls back to the box centre, since a producer may send one without the other.
-				FVector2D Centroid;
-				if (!RammsDetectionMarkers::ReadCentroid(**Object, Centroid))
+				FVector2D ImagePoint;
+				bool	  bPixels = false;
+				if (!RammsDetectionMarkers::ReadImagePoint(**Object, ImagePoint, bPixels))
 				{
 					continue;
 				}
-				if (!DeriveWorldLocation(Source, Centroid, Point.WorldLocation))
+				const FString StreamID = ResolveStreamID(Source);
+				AddCameraStreams(StreamID);
+				if (bPixels)
 				{
+					// Pixels of the source's frame, as the bridge sends them, so normalized by that
+					// stream's size -- the same frame the depth is sampled against.
+					IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(StreamID));
+					FRammsCameraStreamInfo Info;
+					if (!Provider || !Provider->GetStreamInfo(StreamID, Info) || Info.Width <= 0 || Info.Height <= 0)
+					{
+						continue;
+					}
+					ImagePoint = FVector2D(ImagePoint.X / Info.Width, ImagePoint.Y / Info.Height);
+				}
+				bool bNoDepthYet = false;
+				if (!DeriveWorldLocationFor(Source, ImagePoint, Point.WorldLocation, bNoDepthYet))
+				{
+					bMissingDepth |= bNoDepthYet;
 					continue;
 				}
 				Point.Source = Source;
@@ -949,6 +1202,7 @@ void URammsDetectionWorldMarkers::Reresolve()
 			else if (Frame.Equals(TEXT("camera"), ESearchCase::IgnoreCase))
 			{
 				FTransform Extrinsic;
+				AddCameraStreams(ResolveStreamID(Source));
 				if (!ResolveCameraExtrinsic(Source, Extrinsic))
 				{
 					// Without the camera's pose a camera-frame point cannot be placed at all.
@@ -1056,6 +1310,10 @@ void URammsDetectionWorldMarkers::Reresolve()
 		}
 	}
 
+	if (!bMissingDepth)
+	{
+		DepthRetryTicks = 0;
+	}
 	ApplyMarkers();
 	OnDetectionWorldPoints.Broadcast(WorldPoints);
 }

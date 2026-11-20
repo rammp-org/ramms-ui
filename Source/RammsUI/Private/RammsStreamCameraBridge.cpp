@@ -61,6 +61,24 @@ void URammsStreamCameraBridge::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+namespace
+{
+	/** Read metadata intrinsics {fx, fy, cx, cy} into [fx, fy, cx, cy]; false (and Out untouched) if absent or partial. */
+	bool ReadIntrinsicsFromMeta(const TSharedPtr<FJsonObject>& Meta, TArray<float>& Out)
+	{
+		const TSharedPtr<FJsonObject>* IntrObj = nullptr;
+		double						   Fx, Fy, Cx, Cy;
+		if (!Meta.IsValid() || !Meta->TryGetObjectField(TEXT("intrinsics"), IntrObj) || !IntrObj->IsValid()
+			|| !(*IntrObj)->TryGetNumberField(TEXT("fx"), Fx) || !(*IntrObj)->TryGetNumberField(TEXT("fy"), Fy)
+			|| !(*IntrObj)->TryGetNumberField(TEXT("cx"), Cx) || !(*IntrObj)->TryGetNumberField(TEXT("cy"), Cy))
+		{
+			return false;
+		}
+		Out = { static_cast<float>(Fx), static_cast<float>(Fy), static_cast<float>(Cx), static_cast<float>(Cy) };
+		return true;
+	}
+} // namespace
+
 void URammsStreamCameraBridge::OnStreamFrameReceived(
 	int32 ChannelID, UTexture2D* Texture, const FString& MetadataJson, ERammsStreamMessageType MessageType)
 {
@@ -99,12 +117,30 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 
 	// Check if this channel needs (re-)registration.
 	// A stream_id override arriving after the first frame requires re-registration.
-	const bool bNeedsRegistration = !CachedStreamID || *CachedStreamID != StreamID;
+	const bool bNewStreamID = !CachedStreamID || *CachedStreamID != StreamID;
+
+	// So does a registration that no longer describes the stream. Intrinsics and size used to be read
+	// from the first frame only, so a stream first seen without intrinsics -- or at another resolution
+	// -- kept that registration for good, and everything that unprojects through it (depth-derived
+	// world markers) failed for the rest of the session while later frames carried the right values.
+	bool bStaleRegistration = false;
+	if (!bNewStreamID)
+	{
+		FRammsCameraStreamInfo Registered;
+		if (CameraProvider->GetStreamInfo(StreamID, Registered))
+		{
+			TArray<float> SentIntrinsics;
+			bStaleRegistration = Registered.Width != Texture->GetSizeX() || Registered.Height != Texture->GetSizeY()
+				|| (bHasMeta && ReadIntrinsicsFromMeta(Meta, SentIntrinsics) && SentIntrinsics != Registered.Intrinsics);
+		}
+	}
+	const bool bNeedsRegistration = bNewStreamID || bStaleRegistration;
 
 	if (bNeedsRegistration)
 	{
-		// Fully unregister the old stream so it doesn't linger in GetAvailableStreams()
-		if (CachedStreamID && !CachedStreamID->IsEmpty())
+		// Fully unregister the old stream so it doesn't linger in GetAvailableStreams(). Not when the
+		// id is unchanged: RegisterStream updates it in place, and keeps it active.
+		if (bNewStreamID && CachedStreamID && !CachedStreamID->IsEmpty())
 		{
 			CameraProvider->UnregisterStream(*CachedStreamID);
 		}
@@ -203,22 +239,7 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			}
 
 			// Extract intrinsics [fx, fy, cx, cy]
-			const TSharedPtr<FJsonObject>* IntrObj = nullptr;
-			if (Meta->TryGetObjectField(TEXT("intrinsics"), IntrObj) && IntrObj->IsValid())
-			{
-				double Fx, Fy, Cx, Cy;
-				if ((*IntrObj)->TryGetNumberField(TEXT("fx"), Fx)
-					&& (*IntrObj)->TryGetNumberField(TEXT("fy"), Fy)
-					&& (*IntrObj)->TryGetNumberField(TEXT("cx"), Cx)
-					&& (*IntrObj)->TryGetNumberField(TEXT("cy"), Cy))
-				{
-					Info.Intrinsics.SetNum(4);
-					Info.Intrinsics[0] = static_cast<float>(Fx);
-					Info.Intrinsics[1] = static_cast<float>(Fy);
-					Info.Intrinsics[2] = static_cast<float>(Cx);
-					Info.Intrinsics[3] = static_cast<float>(Cy);
-				}
-			}
+			ReadIntrinsicsFromMeta(Meta, Info.Intrinsics);
 
 			// Extract extrinsic transform
 			FTransform ExtractedTransform;
@@ -263,12 +284,18 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 			Info.GroupID = FString::Printf(TEXT("%s/%d"), *StreamPrefix, ChannelID);
 		}
 
-		CameraProvider->RegisterStream(Info);
-		CameraProvider->SetStreamActive(StreamID, true);
+		// A new stream starts active. An update in place keeps whatever state consumers left it in: a
+		// stream a widget stopped stays stopped, and its projector disabled.
+		CameraProvider->RegisterStream(Info, bNewStreamID);
+		if (bNewStreamID)
+		{
+			CameraProvider->SetStreamActive(StreamID, true);
+		}
 		ChannelStreamIDs.Add(ChannelID, StreamID);
 
 		UE_LOG(LogRammsStreamBridge, Log,
-			TEXT("Auto-registered stream '%s' (group='%s', role=%d, %dx%d, fmt=%s, intrinsics=%d)"),
+			TEXT("%s stream '%s' (group='%s', role=%d, %dx%d, fmt=%s, intrinsics=%d)"),
+			bNewStreamID ? TEXT("Auto-registered") : TEXT("Re-registered"),
 			*StreamID, *Info.GroupID, static_cast<int32>(Info.StreamRole),
 			Width, Height, *Info.PixelFormat, Info.Intrinsics.Num());
 	}
@@ -329,7 +356,15 @@ void URammsStreamCameraBridge::OnStreamFrameReceived(
 	// (only when at least one consumer has requested raw data forwarding).
 	TArray<uint8> SinkRaw;
 	EPixelFormat  PixelFormat = PF_Unknown;
-	if (RawDataRequestCount > 0)
+	bool		  bForwardRaw = RawDataRequestCount > 0;
+	if (!bForwardRaw && DepthRawDataRequestCount > 0)
+	{
+		FRammsCameraStreamInfo Registered;
+		bForwardRaw = MessageType == ERammsStreamMessageType::FrameDepth
+			|| (CameraProvider->GetStreamInfo(StreamID, Registered)
+				&& (Registered.StreamRole == ERammsStreamRole::Depth || Registered.bIsDepth));
+	}
+	if (bForwardRaw)
 	{
 		for (URammsStreamSinkComponent* Sink : BoundSinks)
 		{
@@ -406,4 +441,16 @@ void URammsStreamCameraBridge::ReleaseRawDataForwarding()
 {
 	RawDataRequestCount = FMath::Max(0, RawDataRequestCount - 1);
 	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: raw data released (count=%d)"), RawDataRequestCount);
+}
+
+void URammsStreamCameraBridge::RequestDepthRawDataForwarding()
+{
+	++DepthRawDataRequestCount;
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: depth raw data requested (count=%d)"), DepthRawDataRequestCount);
+}
+
+void URammsStreamCameraBridge::ReleaseDepthRawDataForwarding()
+{
+	DepthRawDataRequestCount = FMath::Max(0, DepthRawDataRequestCount - 1);
+	UE_LOG(LogRammsStreamBridge, Verbose, TEXT("StreamCameraBridge: depth raw data released (count=%d)"), DepthRawDataRequestCount);
 }

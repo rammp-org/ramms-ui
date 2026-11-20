@@ -59,8 +59,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RAMMS|Streaming")
 	void ReleaseRawDataForwarding();
 
-	/** True when at least one consumer has requested raw data forwarding. */
-	bool NeedsRawData() const { return RawDataRequestCount > 0; }
+	/** Raw bytes for DEPTH streams only: what a consumer that samples depth on the CPU needs,
+	 *  without the per-frame copy of every colour stream that RequestRawDataForwarding costs.
+	 *  Ref-counted separately; a depth frame is forwarded while either count is above zero. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Streaming")
+	void RequestDepthRawDataForwarding();
+
+	/** Release a previous RequestDepthRawDataForwarding. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Streaming")
+	void ReleaseDepthRawDataForwarding();
+
+	/** True when at least one consumer has requested raw data forwarding (of any kind). */
+	bool NeedsRawData() const { return RawDataRequestCount > 0 || DepthRawDataRequestCount > 0; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -69,6 +79,9 @@ protected:
 private:
 	/** Ref-count of consumers that need CPU-side raw data. */
 	int32 RawDataRequestCount = 0;
+
+	/** Ref-count of consumers that need CPU-side raw data for depth streams only. */
+	int32 DepthRawDataRequestCount = 0;
 	UPROPERTY()
 	URammsCameraProviderComponent* CameraProvider = nullptr;
 
