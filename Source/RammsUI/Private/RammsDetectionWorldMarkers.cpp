@@ -773,14 +773,15 @@ void URammsDetectionWorldMarkers::ReleaseDepthForwarding()
 bool URammsDetectionWorldMarkers::DeriveWorldLocation(
 	const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation) const
 {
-	bool bNoDepthYet = false;
-	return DeriveWorldLocationFor(Source, NormalizedPoint, OutWorldLocation, bNoDepthYet);
+	bool bNoDepthYet = false, bDepthDropout = false;
+	return DeriveWorldLocationFor(Source, NormalizedPoint, OutWorldLocation, bNoDepthYet, bDepthDropout);
 }
 
 bool URammsDetectionWorldMarkers::DeriveWorldLocationFor(
-	const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet) const
+	const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet, bool& bOutDepthDropout) const
 {
 	bOutNoDepthYet = false;
+	bOutDepthDropout = false;
 
 	// A point outside the image has no depth of its own. Reading the clamped edge pixel and
 	// unprojecting anyway placed a pixel centroid taken for a normalized one hundreds of metres off,
@@ -898,7 +899,9 @@ bool URammsDetectionWorldMarkers::DeriveWorldLocationFor(
 			*Raw, DepthFormat, Depth.Width, Depth.Height, Point, DepthSampleRadius, DepthUU))
 	{
 		// A dropout is ordinary -- a dark, shiny or distant surface returns nothing -- so this is
-		// not a warning. The object keeps its 2D marker and gains no world one.
+		// not a warning. The object keeps its 2D marker; a world one it already has is held for a
+		// moment (DerivedDropoutHoldSeconds), and otherwise it gains none.
+		bOutDepthDropout = true;
 		return false;
 	}
 
@@ -1105,6 +1108,10 @@ void URammsDetectionWorldMarkers::Reresolve()
 	// Rebuilt from what this resolve leans on, so only those cameras moving brings it back.
 	UsedSources.Reset();
 	bool bMissingDepth = false;
+	// This resolve's derived locations, replacing LastDerived at the end: an object that has left
+	// the push holds nothing.
+	const double						Now = FPlatformTime::Seconds();
+	TMap<FName, TPair<FVector, double>> Derived;
 
 	TSharedPtr<FJsonObject>			Root;
 	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(LastPayload);
@@ -1162,33 +1169,68 @@ void URammsDetectionWorldMarkers::Reresolve()
 			FRammsDetectionWorldPoint Point;
 			if (!bSentPosition)
 			{
+				// An object still in the push that cannot be placed this time keeps its last derived
+				// location for DerivedDropoutHoldSeconds: its depth dropped out, or the producer sent it
+				// without a 2D position for a frame or two (occluded). Holding does not renew the hold.
+				const FName Id = InstanceId.IsEmpty() ? NAME_None : FName(*InstanceId);
+				const auto	Hold = [&]() {
+					 // A second copy of an id this resolve already placed is dropped, as it always was: holding
+					 // it would put the marker back at the old location, the last copy winning in ApplyMarkers.
+					 const TPair<FVector, double>* Held = (Id.IsNone() || Derived.Contains(Id)) ? nullptr : LastDerived.Find(Id);
+					 if (!Held || Now - Held->Value > DerivedDropoutHoldSeconds)
+					 {
+						 return false;
+					 }
+					 Point.WorldLocation = Held->Key;
+					 Derived.Add(Id, *Held);
+					 return true;
+				};
+
 				// Nothing sent, so unproject the object's own centroid through its depth stream.
 				// Falls back to the box centre, since a producer may send one without the other.
 				FVector2D ImagePoint;
 				bool	  bPixels = false;
 				if (!RammsDetectionMarkers::ReadImagePoint(**Object, ImagePoint, bPixels))
 				{
-					continue;
-				}
-				const FString StreamID = ResolveStreamID(Source);
-				AddCameraStreams(StreamID);
-				if (bPixels)
-				{
-					// Pixels of the source's frame, as the bridge sends them, so normalized by that
-					// stream's size -- the same frame the depth is sampled against.
-					IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(StreamID));
-					FRammsCameraStreamInfo Info;
-					if (!Provider || !Provider->GetStreamInfo(StreamID, Info) || Info.Width <= 0 || Info.Height <= 0)
+					if (!Hold())
 					{
 						continue;
 					}
-					ImagePoint = FVector2D(ImagePoint.X / Info.Width, ImagePoint.Y / Info.Height);
 				}
-				bool bNoDepthYet = false;
-				if (!DeriveWorldLocationFor(Source, ImagePoint, Point.WorldLocation, bNoDepthYet))
+				else
 				{
-					bMissingDepth |= bNoDepthYet;
-					continue;
+					const FString StreamID = ResolveStreamID(Source);
+					AddCameraStreams(StreamID);
+					if (bPixels)
+					{
+						// Pixels of the source's frame, as the bridge sends them, so normalized by that
+						// stream's size -- the same frame the depth is sampled against.
+						IRammsCameraProvider*  Provider = Cast<IRammsCameraProvider>(FindProviderForStream(StreamID));
+						FRammsCameraStreamInfo Info;
+						if (!Provider || !Provider->GetStreamInfo(StreamID, Info) || Info.Width <= 0 || Info.Height <= 0)
+						{
+							continue;
+						}
+						ImagePoint = FVector2D(ImagePoint.X / Info.Width, ImagePoint.Y / Info.Height);
+					}
+					bool bNoDepthYet = false, bDepthDropout = false;
+					if (DeriveWorldLocationFor(Source, ImagePoint, Point.WorldLocation, bNoDepthYet, bDepthDropout))
+					{
+						if (!Id.IsNone())
+						{
+							Derived.Add(Id, TPair<FVector, double>(Point.WorldLocation, Now));
+						}
+					}
+					else
+					{
+						bMissingDepth |= bNoDepthYet;
+						// Only a dropout holds: a point outside the image, or a camera without geometry,
+						// is not going to come back next frame.
+						if (!bDepthDropout || !Hold())
+						{
+							continue;
+						}
+					}
 				}
 				Point.Source = Source;
 			}
@@ -1314,6 +1356,7 @@ void URammsDetectionWorldMarkers::Reresolve()
 	{
 		DepthRetryTicks = 0;
 	}
+	LastDerived = MoveTemp(Derived);
 	ApplyMarkers();
 	OnDetectionWorldPoints.Broadcast(WorldPoints);
 }

@@ -467,6 +467,18 @@ public:
 	int32 DepthSampleRadius = 2;
 
 	/**
+	 * How long a derived marker keeps its last position, before it is removed, while its object is
+	 * still pushed but cannot be placed: the depth at its centroid has dropped out (no valid sample
+	 * in the window), or the producer sent it without a 2D position (occluded for a frame or two).
+	 * Both happen constantly on a real robot: in a 40 s replay of its own data the markers were
+	 * removed 103 times, most back within one or two 15 Hz frames, blinking the boxes and handing
+	 * objects back to the POI layer for that frame. Counted from the last good derive, not renewed
+	 * by holding. 0 removes the marker at once.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection", meta = (ClampMin = "0", UIMin = "0", UIMax = "2", Units = "s"))
+	float DerivedDropoutHoldSeconds = 0.5f;
+
+	/**
 	 * Draw each resolved detection with the debug renderer: an oriented box where a size was sent,
 	 * a cross where only a point is known, and the class name beside it.
 	 *
@@ -617,8 +629,11 @@ private:
 
 	bool ResolveCameraExtrinsic(const FString& Source, FTransform& OutExtrinsic) const;
 
-	/** DeriveWorldLocation, saying whether it failed only for want of depth bytes not yet arrived. */
-	bool DeriveWorldLocationFor(const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet) const;
+	/**
+	 * DeriveWorldLocation, saying whether it failed only for want of depth bytes not yet arrived, or
+	 * only because the depth at the point dropped out (no valid sample in the window).
+	 */
+	bool DeriveWorldLocationFor(const FString& Source, const FVector2D& NormalizedPoint, FVector& OutWorldLocation, bool& bOutNoDepthYet, bool& bOutDepthDropout) const;
 
 	/** Note a camera's streams (colour and its depth sibling) in UsedSources. */
 	void AddCameraStreams(const FString& StreamID);
@@ -634,6 +649,9 @@ private:
 
 	/** Kept so an extrinsic update can be re-applied without waiting for the next push. */
 	FString LastPayload;
+
+	/** Each derived object's last good location and when it was derived (FPlatformTime), for DerivedDropoutHoldSeconds. */
+	TMap<FName, TPair<FVector, double>> LastDerived;
 
 	UPROPERTY(Transient)
 	TArray<FRammsDetectionWorldPoint> WorldPoints;
