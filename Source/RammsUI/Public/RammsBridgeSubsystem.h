@@ -5,7 +5,7 @@
 // matter which receiver copy a Remote Control call lands on.
 //
 //   Inbound  (bridge -> UE): receiver forwards raw JSON strings here -> delegates -> widgets parse
-//   Outbound (UE -> bridge): widgets call PostButtonPress / PostObjectTapped -> UIEventsJson
+//   Outbound (UE -> bridge): widgets call PostButtonPress / PostObjectTapped(OnImage) -> UIEventsJson
 
 #pragma once
 
@@ -245,6 +245,21 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
 	void PostObjectTapped(const FString& InstanceId, const FString& StreamId = TEXT(""));
+
+	/**
+	 * PostObjectTapped for a tap on a camera image: the event also says where on that image the tap
+	 * landed, so the robot can tell which part of the object was meant.
+	 *
+	 *   "tap_point":  [x, y]           pixels of the source frame, origin at its top-left corner, x right,
+	 *                                  y down: the space the bridge's box and centroid are in
+	 *   "image_size": [width, height]  of that frame, as streamed
+	 *
+	 * Only a tap on an image sends them; a tap in the 3D view (a world marker) uses PostObjectTapped
+	 * and leaves them out, so their presence says the tap was on an image. With no frame size
+	 * (ImageSize not positive) they are left out too, rather than guessed.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms Bridge|Outbound")
+	void PostObjectTappedOnImage(const FString& InstanceId, const FString& StreamId, FVector2D TapPoint, FIntPoint ImageSize);
 
 	/** Fired with the full {"latest_seq":N,"events":[...]} string after every event. Receiver binds. */
 	UPROPERTY(BlueprintAssignable, Category = "Ramms Bridge|Outbound")

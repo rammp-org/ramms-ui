@@ -302,7 +302,7 @@ void URammsBridgeSubsystem::PostButtonPress(const FString& ButtonId)
 	PushEvent(Event);
 }
 
-void URammsBridgeSubsystem::PostObjectTapped(const FString& InstanceId, const FString& StreamId)
+static TSharedRef<FJsonObject> MakeObjectTappedEvent(const FString& InstanceId, const FString& StreamId)
 {
 	TSharedRef<FJsonObject> Event = MakeShared<FJsonObject>();
 	Event->SetStringField(TEXT("event_type"), TEXT("object_tapped"));
@@ -310,6 +310,28 @@ void URammsBridgeSubsystem::PostObjectTapped(const FString& InstanceId, const FS
 	if (!StreamId.IsEmpty())
 	{
 		Event->SetStringField(TEXT("stream_id"), StreamId);
+	}
+	return Event;
+}
+
+void URammsBridgeSubsystem::PostObjectTapped(const FString& InstanceId, const FString& StreamId)
+{
+	PushEvent(MakeObjectTappedEvent(InstanceId, StreamId));
+}
+
+void URammsBridgeSubsystem::PostObjectTappedOnImage(const FString& InstanceId, const FString& StreamId, FVector2D TapPoint, FIntPoint ImageSize)
+{
+	TSharedRef<FJsonObject> Event = MakeObjectTappedEvent(InstanceId, StreamId);
+	if (ImageSize.X > 0 && ImageSize.Y > 0)
+	{
+		// Arrays, as box and centroid are on the way in. A Python consumer reads them with json.loads,
+		// so the {"X","Y"} objects UE's struct converter needs inbound are not wanted here.
+		Event->SetArrayField(TEXT("tap_point"), { MakeShared<FJsonValueNumber>(TapPoint.X), MakeShared<FJsonValueNumber>(TapPoint.Y) });
+		Event->SetArrayField(TEXT("image_size"), { MakeShared<FJsonValueNumber>(ImageSize.X), MakeShared<FJsonValueNumber>(ImageSize.Y) });
+	}
+	else
+	{
+		UE_LOG(LogRammsBridge, Warning, TEXT("[Bridge] image tap on %s with no frame size, sent without tap_point"), *InstanceId);
 	}
 	PushEvent(Event);
 }

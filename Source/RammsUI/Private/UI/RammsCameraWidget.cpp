@@ -1842,6 +1842,7 @@ void URammsCameraWidget::ShowBoundingBoxOverlay(FName SourceTag)
 			// Markers, and whether the overlay draws its own boxes under them
 			BBoxOverlay->MarkerWidgetClass = DetectionMarkerClass;
 			BBoxOverlay->SetMarkerStreamID(StreamID);
+			BBoxOverlay->SetSourceCamera(this);
 			BBoxOverlay->MarkerPlacement = DetectionMarkerPlacement;
 			BBoxOverlay->bDrawBoxes = bDrawDetectionBoxes;
 
