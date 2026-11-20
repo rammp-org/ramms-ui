@@ -24,6 +24,35 @@
 
 class UCanvasPanel;
 class IRammsCameraProvider;
+class URammsDetectionPOILayer;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FRammsDetectionPOITapped, UUserWidget*, POI, const FRammsBridgeDetectedObject&, DetectedObject);
+
+/**
+ * Listens to one POI's selection dispatcher on the layer's behalf, so the layer learns WHICH POI
+ * fired: a dispatcher bound straight to the layer could not say who sent it.
+ *
+ * The handler takes no parameters on purpose. The dispatcher is a Blueprint one, found by name, and
+ * its signature is whatever the widget gives it; a parameterless UFUNCTION reads nothing from the
+ * broadcast's parameter block, so it is safe against any signature and the widget can change its
+ * dispatcher's inputs without breaking this.
+ */
+UCLASS(Transient)
+class RAMMSUI_API URammsDetectionPOITapListener : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION()
+	void HandleSelected();
+
+	TWeakObjectPtr<URammsDetectionPOILayer> Layer;
+	TWeakObjectPtr<UUserWidget>				POI;
+
+	/** The object this POI was last given, so a tap can say what was tapped. */
+	FRammsBridgeDetectedObject Object;
+};
 
 UCLASS(meta = (DisplayName = "Ramms Detection POI Layer"))
 class RAMMSUI_API URammsDetectionPOILayer : public URammsBaseWidget
@@ -91,6 +120,40 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
 	bool bShowObjectsWithoutIds = true;
 
+	/**
+	 * The dispatcher on POIWidgetClass that means "this POI was tapped" (RAMMS_POI: OnSelected).
+	 * The layer binds to it once per POI it creates and unbinds when the POI leaves the pool. Its
+	 * inputs do not matter: the layer already knows which POI and object it is. None turns this off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
+	FName POISelectedDispatcherName = TEXT("OnSelected");
+
+	/** A POI on this layer was tapped (its selection dispatcher fired). */
+	UPROPERTY(BlueprintAssignable, Category = "RAMMS|Detection")
+	FRammsDetectionPOITapped OnPOITapped;
+
+	/**
+	 * The POI tapped most recently, or None if there has not been one or it has since been removed
+	 * (its object left the push). Use Get Last Tapped Object for what it showed.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	UUserWidget* GetLastTappedPOI() const { return LastTappedPOI; }
+
+	/**
+	 * The object the last tapped POI was showing when it was tapped. Kept after the POI goes, so a
+	 * tap is not forgotten just because the next push no longer lists the object. False if nothing
+	 * has been tapped since this layer was constructed or the last Clear Last Tapped.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RAMMS|Detection")
+	bool GetLastTappedObject(FRammsBridgeDetectedObject& OutObject) const;
+
+	/** Forget the last tap. */
+	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
+	void ClearLastTapped();
+
+	/** Called by a POI's listener. */
+	void NotifyPOITapped(UUserWidget* POI, const FRammsBridgeDetectedObject& Object);
+
 	/** Match the layer to one payload: reuse, create and remove. An empty one empties the layer. */
 	UFUNCTION(BlueprintCallable, Category = "RAMMS|Detection")
 	void SetDetectedObjects(const FRammsBridgeDetectedObjects& InObjects);
@@ -130,6 +193,12 @@ private:
 	IRammsCameraProvider* FindStreamProvider(const FString& StreamID);
 	UUserWidget*		  CreatePOI();
 
+	/** Bind a new POI's selection dispatcher to a listener of its own. */
+	void BindPOI(UUserWidget* POI);
+
+	/** Take a POI out of the pool: unbind it, take it off the canvas, forget it as last tapped. */
+	void ReleasePOI(UUserWidget* POI);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> POICanvas;
 
@@ -146,6 +215,21 @@ private:
 
 	/** Likewise for a missing canvas, which is permanent once it happens. */
 	bool bWarnedAboutCanvas = false;
+
+	/** Likewise for a POI class with no dispatcher called POISelectedDispatcherName. */
+	bool bWarnedAboutDispatcher = false;
+
+	/** One listener per pooled POI, so each is bound once and unbound when it leaves. */
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<UUserWidget>, TObjectPtr<URammsDetectionPOITapListener>> TapListeners;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> LastTappedPOI;
+
+	UPROPERTY(Transient)
+	FRammsBridgeDetectedObject LastTappedObject;
+
+	bool bHasLastTapped = false;
 
 	/** Likewise for a duplicate instance_id. */
 	bool bWarnedAboutDuplicateId = false;

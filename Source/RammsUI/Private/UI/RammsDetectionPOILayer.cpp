@@ -38,17 +38,11 @@ void URammsDetectionPOILayer::ResetCachedWidgets()
 	// The tree is being rebuilt: the POIs belong to the old canvas
 	for (const TPair<FName, TObjectPtr<UUserWidget>>& Pair : POIsById)
 	{
-		if (Pair.Value)
-		{
-			Pair.Value->RemoveFromParent();
-		}
+		ReleasePOI(Pair.Value);
 	}
 	for (const TObjectPtr<UUserWidget>& POI : UnkeyedPOIs)
 	{
-		if (POI)
-		{
-			POI->RemoveFromParent();
-		}
+		ReleasePOI(POI);
 	}
 	POIsById.Reset();
 	UnkeyedPOIs.Reset();
@@ -287,17 +281,11 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	{
 		for (const TPair<FName, TObjectPtr<UUserWidget>>& Pair : POIsById)
 		{
-			if (Pair.Value)
-			{
-				Pair.Value->RemoveFromParent();
-			}
+			ReleasePOI(Pair.Value);
 		}
 		for (const TObjectPtr<UUserWidget>& POI : UnkeyedPOIs)
 		{
-			if (POI)
-			{
-				POI->RemoveFromParent();
-			}
+			ReleasePOI(POI);
 		}
 		POIsById.Reset();
 		UnkeyedPOIs.Reset();
@@ -414,6 +402,7 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			// Added before the object is handed over: the POI places itself through this slot
 			POICanvas->AddChildToCanvas(POI);
 			POI->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			BindPOI(POI);
 		}
 		else if (!POI->GetParent())
 		{
@@ -432,6 +421,11 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 			Seen.Add(Id);
 		}
 
+		// Before the call, so a POI that fires its dispatcher from SetDetectedObject reports this object
+		if (TObjectPtr<URammsDetectionPOITapListener>* Listener = TapListeners.Find(POI))
+		{
+			(*Listener)->Object = Placed;
+		}
 		IRammsDetectionPOI::Execute_SetDetectedObject(POI, Placed);
 	}
 
@@ -441,19 +435,13 @@ void URammsDetectionPOILayer::SetDetectedObjects(const FRammsBridgeDetectedObjec
 	{
 		if (!Seen.Contains(It.Key()))
 		{
-			if (It.Value())
-			{
-				It.Value()->RemoveFromParent();
-			}
+			ReleasePOI(It.Value());
 			It.RemoveCurrent();
 		}
 	}
 	for (int32 i = NextUnkeyed; i < UnkeyedPOIs.Num(); ++i)
 	{
-		if (UnkeyedPOIs[i])
-		{
-			UnkeyedPOIs[i]->RemoveFromParent();
-		}
+		ReleasePOI(UnkeyedPOIs[i]);
 	}
 	UnkeyedPOIs = MoveTemp(KeptUnkeyed);
 	LastObjects = Objects;
@@ -470,4 +458,106 @@ void URammsDetectionPOILayer::ClearPOIs()
 int32 URammsDetectionPOILayer::GetPOICount() const
 {
 	return POIsById.Num() + UnkeyedPOIs.Num();
+}
+
+void URammsDetectionPOILayer::BindPOI(UUserWidget* POI)
+{
+	if (!POI || POISelectedDispatcherName.IsNone() || TapListeners.Contains(POI))
+	{
+		return;
+	}
+
+	// Found by name because the dispatcher is a Blueprint variable: C++ has no type to bind it by,
+	// and asking every POI to implement something extra would mean editing the widget for a feature
+	// it already has. The property is looked up on the POI's own class, so a subclass that renames
+	// nothing still works.
+	const FMulticastDelegateProperty* Dispatcher =
+		FindFProperty<FMulticastDelegateProperty>(POI->GetClass(), POISelectedDispatcherName);
+	if (!Dispatcher)
+	{
+		if (!bWarnedAboutDispatcher)
+		{
+			bWarnedAboutDispatcher = true;
+			UE_LOG(LogRammsDetectionPOI, Warning,
+				TEXT("[%s] POI class '%s' has no event dispatcher called '%s', so taps on its POIs are not ")
+					TEXT("tracked. Add one, or set POI Selected Dispatcher Name to the one it has (None to stop this)."),
+				*GetName(), *POI->GetClass()->GetName(), *POISelectedDispatcherName.ToString());
+		}
+		return;
+	}
+
+	URammsDetectionPOITapListener* Listener = NewObject<URammsDetectionPOITapListener>(this);
+	Listener->Layer = this;
+	Listener->POI = POI;
+
+	FScriptDelegate Delegate;
+	Delegate.BindUFunction(Listener, GET_FUNCTION_NAME_CHECKED(URammsDetectionPOITapListener, HandleSelected));
+	Dispatcher->AddDelegate(MoveTemp(Delegate), POI);
+	TapListeners.Add(POI, Listener);
+}
+
+void URammsDetectionPOILayer::ReleasePOI(UUserWidget* POI)
+{
+	if (!POI)
+	{
+		return;
+	}
+
+	TObjectPtr<URammsDetectionPOITapListener> Listener;
+	if (TapListeners.RemoveAndCopyValue(POI, Listener) && Listener)
+	{
+		// Unbound rather than left to go stale: a released POI is garbage, but until it is collected
+		// a dispatcher it fires (its own dismiss animation, say) would still report a tap.
+		if (const FMulticastDelegateProperty* Dispatcher =
+				FindFProperty<FMulticastDelegateProperty>(POI->GetClass(), POISelectedDispatcherName))
+		{
+			FScriptDelegate Delegate;
+			Delegate.BindUFunction(Listener, GET_FUNCTION_NAME_CHECKED(URammsDetectionPOITapListener, HandleSelected));
+			Dispatcher->RemoveDelegate(Delegate, POI);
+		}
+		Listener->Layer = nullptr;
+	}
+
+	if (LastTappedPOI == POI)
+	{
+		LastTappedPOI = nullptr; // the object it showed stays in LastTappedObject
+	}
+	POI->RemoveFromParent();
+}
+
+void URammsDetectionPOILayer::NotifyPOITapped(UUserWidget* POI, const FRammsBridgeDetectedObject& Object)
+{
+	LastTappedPOI = POI;
+	LastTappedObject = Object;
+	bHasLastTapped = true;
+
+	UE_LOG(LogRammsDetectionPOI, Log, TEXT("[%s] POI tapped: '%s' (%s, source '%s')"), *GetName(),
+		*Object.InstanceId, *Object.PerceptionClass, *Object.Source);
+	OnPOITapped.Broadcast(POI, Object);
+}
+
+bool URammsDetectionPOILayer::GetLastTappedObject(FRammsBridgeDetectedObject& OutObject) const
+{
+	if (bHasLastTapped)
+	{
+		OutObject = LastTappedObject;
+	}
+	return bHasLastTapped;
+}
+
+void URammsDetectionPOILayer::ClearLastTapped()
+{
+	LastTappedPOI = nullptr;
+	LastTappedObject = FRammsBridgeDetectedObject();
+	bHasLastTapped = false;
+}
+
+void URammsDetectionPOITapListener::HandleSelected()
+{
+	URammsDetectionPOILayer* L = Layer.Get();
+	UUserWidget*			 P = POI.Get();
+	if (L && P)
+	{
+		L->NotifyPOITapped(P, Object);
+	}
 }
