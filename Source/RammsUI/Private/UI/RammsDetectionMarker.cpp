@@ -55,8 +55,8 @@ void URammsDetectionMarker::PostObjectTapped() const
 	const URammsBoundingBoxOverlay* OverlayPtr = Overlay.Get();
 	FVector2D						Normalized;
 	bool							bHavePoint = false;
-	FVector2D						Cursor;
-	const bool						bCursorOver = IsCursorOver(Cursor);
+	FVector2D						CursorPos;
+	const bool						bCursorOver = IsCursorOver(CursorPos);
 	if (PressTime >= 0.0 && FPlatformTime::Seconds() - PressTime <= MaxPressToClickSeconds)
 	{
 		// A click is released over its button, so a mouse press whose cursor has left the marker is not
@@ -68,7 +68,7 @@ void URammsDetectionMarker::PostObjectTapped() const
 	if (!bHavePoint && bCursorOver && OverlayPtr)
 	{
 		// No preview came: the second click of a double-click, which Slate routes without one.
-		bHavePoint = OverlayPtr->ScreenToPaneNormalized(Cursor, OverlayPtr->MarkerPane, Normalized);
+		bHavePoint = OverlayPtr->ScreenToPaneNormalized(CursorPos, OverlayPtr->MarkerPane, Normalized);
 	}
 
 	FVector2D Pixel;
