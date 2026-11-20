@@ -121,6 +121,17 @@ public:
 	bool bShowObjectsWithoutIds = true;
 
 	/**
+	 * Leave out every object that has a world marker (an ARammsDetectionWorldMarker for the same
+	 * instance_id, in this layer's world). The marker's box and its label (RammsDetectionWorldLabels)
+	 * already show that object in the 3D view this layer floats over; a POI beside it says the same
+	 * thing twice, in another style, and the two drift apart as the view moves. Objects with no marker
+	 * -- 2D only, occluded, no depth at their centre -- keep their POI. Re-checked every tick, so a
+	 * POI steps aside as soon as its object's marker appears and comes back if the marker goes.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RAMMS|Detection")
+	bool bHideObjectsWithWorldMarkers = true;
+
+	/**
 	 * The dispatcher on POIWidgetClass that means "this POI was tapped" (RAMMS_POI: OnSelected).
 	 * The layer binds to it once per POI it creates and unbinds when the POI leaves the pool. Its
 	 * inputs do not matter: the layer already knows which POI and object it is. None turns this off.
@@ -264,6 +275,12 @@ private:
 	/** The last payload, re-applied when the layer's size changes (see NativeTick). */
 	UPROPERTY(Transient)
 	FRammsBridgeDetectedObjects LastObjects;
+
+	/** The instance ids that had a world marker when the POIs were last placed (see NativeTick). */
+	TSet<FName> LastMarkedIds;
+
+	/** Instance ids of the world markers in this layer's world. */
+	TSet<FName> CollectWorldMarkedIds() const;
 
 	/** The size the POIs were last placed for. */
 	FVector2D LastLayoutSize = FVector2D::ZeroVector;
