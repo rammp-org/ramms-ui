@@ -360,9 +360,9 @@ void URammsLayoutManager::UpdateZOrder()
 		// For viewport widgets, update z-order without removing/re-adding
 		if (Layout.Widget->IsInViewport())
 		{
-			if (UWorld* World = Layout.Widget->GetWorld())
+			if (Layout.Widget->GetWorld())
 			{
-				if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get(World))
+				if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get())
 				{
 					FGameViewportWidgetSlot SlotInfo = Subsystem->GetWidgetSlot(Layout.Widget);
 					SlotInfo.ZOrder = Layout.ZOrder;

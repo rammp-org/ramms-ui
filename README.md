@@ -413,6 +413,8 @@ Rich payload struct: `EventName`, typed fields (`bEnabled`, `FloatValue`, `IntVa
 
 ## Shaders
 
+The plugin's `Shaders/` folder is mapped to `/RammsUI` by the `RammsUIShaders` module, which loads at `PostConfigInit`: before any RammsUI class is constructed, so a material that a constructor loads (the camera widget's default `M_CameraImage`) finds its includes.
+
 | File | Purpose |
 |---|---|
 | `/RammsUI/Private/RammsPGM.ush` | GPU PGM deprojection, parallax-corrected UV, degenerate-vertex collapse, edge-stretch check |

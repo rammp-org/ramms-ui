@@ -2220,9 +2220,9 @@ void URammsCameraWidget::ApplyZOrder()
 	{
 		// Update viewport z-order via GameViewportSubsystem to avoid
 		// RemoveFromParent/AddToViewport which triggers NativeDestruct/NativeConstruct
-		if (UWorld* World = GetWorld())
+		if (GetWorld())
 		{
-			if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get(World))
+			if (UGameViewportSubsystem* Subsystem = UGameViewportSubsystem::Get())
 			{
 				FGameViewportWidgetSlot SlotInfo = Subsystem->GetWidgetSlot(this);
 				SlotInfo.ZOrder = EffectiveZ;

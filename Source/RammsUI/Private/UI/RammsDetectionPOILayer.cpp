@@ -19,7 +19,7 @@ URammsDetectionPOILayer::URammsDetectionPOILayer()
 	// SelfHitTestInvisible, not HitTestInvisible: the layer itself must not swallow touches meant
 	// for the view underneath, but its POIs have to receive them, and HitTestInvisible would stop
 	// the children too. A designer can still override this per instance.
-	Visibility = ESlateVisibility::SelfHitTestInvisible;
+	SetVisibilityInternal(ESlateVisibility::SelfHitTestInvisible);
 }
 
 void URammsDetectionPOILayer::BuildWidgetTree()
@@ -187,7 +187,7 @@ IRammsCameraProvider* URammsDetectionPOILayer::FindStreamProvider(const FString&
 			FRammsCameraStreamInfo Info;
 			if (Candidate && Candidate->GetStreamInfo(StreamID, Info))
 			{
-				CachedProvider = Cast<UObject>(Candidate->_getUObject());
+				CachedProvider = Cast<UObject>(Candidate);
 				return Candidate;
 			}
 		}

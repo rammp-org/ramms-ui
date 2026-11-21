@@ -578,7 +578,7 @@ void URammsCameraCapturePanel::UpdateFeedImage()
 		FeedImage->SetBrushResourceObject(Source);
 	}
 
-	FeedImage->SetBrushSize(FVector2D(FeedWidth, Height));
+	FeedImage->SetDesiredSizeOverride(FVector2D(FeedWidth, Height));
 	FeedBox->SetWidthOverride(FeedWidth);
 	FeedBox->SetHeightOverride(Height);
 }

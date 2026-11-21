@@ -53,7 +53,7 @@ void URammsDetectionMarker::PostObjectTapped() const
 	}
 
 	const URammsBoundingBoxOverlay* OverlayPtr = Overlay.Get();
-	FVector2D						Normalized;
+	FVector2D						Normalized = FVector2D::ZeroVector;
 	bool							bHavePoint = false;
 	FVector2D						CursorPos;
 	const bool						bCursorOver = IsCursorOver(CursorPos);
@@ -88,7 +88,7 @@ FReply URammsDetectionMarker::NativeOnPreviewMouseButtonDown(const FGeometry& In
 	const bool	 bOtherPointerPending = PressTime >= 0.0 && Now - PressTime <= MaxPressToClickSeconds
 		&& PressPointer != InMouseEvent.GetPointerIndex();
 	const URammsBoundingBoxOverlay* OverlayPtr = Overlay.Get();
-	FVector2D						Normalized;
+	FVector2D						Normalized = FVector2D::ZeroVector;
 	if ((bTouch || InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton) && !bOtherPointerPending && OverlayPtr
 		&& OverlayPtr->ScreenToPaneNormalized(InMouseEvent.GetScreenSpacePosition(), OverlayPtr->MarkerPane, Normalized))
 	{

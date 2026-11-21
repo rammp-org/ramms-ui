@@ -4,28 +4,12 @@
 #include "RammsTouchLinux.h"
 #include "Core.h"
 #include "Modules/ModuleManager.h"
-#include "Interfaces/IPluginManager.h"
-#include "Misc/Paths.h"
-#include "ShaderCore.h"
 
 #define LOCTEXT_NAMESPACE "FRammsUIModule"
 
 void FRammsUIModule::StartupModule()
 {
-	// Register shader directory so materials can #include "/RammsUI/..."
-	FString PluginShaderDir = FPaths::Combine(
-		IPluginManager::Get().FindPlugin(TEXT("RammsUI"))->GetBaseDir(),
-		TEXT("Shaders"));
-
-	if (FPaths::DirectoryExists(PluginShaderDir))
-	{
-		AddShaderSourceDirectoryMapping(TEXT("/RammsUI"), PluginShaderDir);
-		UE_LOG(LogTemp, Log, TEXT("RammsUI: Registered shader directory: %s"), *PluginShaderDir);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("RammsUI: Shader directory not found: %s"), *PluginShaderDir);
-	}
+	// (The shader directory, /RammsUI, is mapped by the RammsUIShaders module, at PostConfigInit.)
 
 	// Linux: with a touchscreen, keep relative mouse mode and text input off; end the touches SDL cancels;
 	// trace touch delivery on request.
