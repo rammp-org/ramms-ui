@@ -453,8 +453,58 @@ void URammsButton::UpdateVisualState()
 		}
 	}
 
+	// The Sim look: a filled button's text is white whatever the theme's text colour (the fills are picked for
+	// it); the default button is a dark surface with an outline, which is what makes it a button on a dark
+	// panel; and a disabled one keeps its outline and readable text rather than fading all of itself.
+	FLinearColor OutlineColor = FLinearColor::Transparent;
+	float		 OutlineWidth = 0.0f;
+	if (URammsUIStyle::UsesSimLook(Style))
+	{
+		const bool bFilled = Variant == ERammsButtonVariant::Primary || Variant == ERammsButtonVariant::Error;
+		// The shades of a state, mixed channel by channel (the HSV mix above turns these blues and reds
+		// violet). A filled button darkens under the pointer, so its white text only gains contrast; the
+		// dark default button lightens.
+		if (Variant != ERammsButtonVariant::Ghost)
+		{
+			if (CurrentState == ERammsButtonState::Hovered)
+			{
+				BgColor = bFilled ? URammsUIStyle::Darken(BaseColor, 0.12f) : URammsUIStyle::Lighten(BaseColor, 0.08f);
+			}
+			else if (CurrentState == ERammsButtonState::Pressed)
+			{
+				BgColor = URammsUIStyle::Darken(BaseColor, 0.25f);
+			}
+		}
+		// An outline lighter than the border colour, which is a hairline against the button's own surface.
+		const FLinearColor Edge = FMath::Lerp(Style->Colors.Border, Style->Colors.TextDisabled, 0.5f);
+		if (Variant == ERammsButtonVariant::Secondary)
+		{
+			OutlineColor = Edge;
+			OutlineWidth = Style->Border.BorderWidth;
+		}
+		if (CurrentState == ERammsButtonState::Disabled)
+		{
+			if (Variant != ERammsButtonVariant::Ghost)
+			{
+				BgColor = FLinearColor::Transparent;
+				OutlineColor = Edge;
+				OutlineWidth = Style->Border.BorderWidth;
+			}
+			TextColor = Style->Colors.TextDisabled;
+			Opacity = 1.0f;
+		}
+		else if (bFilled)
+		{
+			TextColor = FLinearColor::White;
+		}
+		else if (Variant == ERammsButtonVariant::Warning || Variant == ERammsButtonVariant::Success)
+		{
+			TextColor = FLinearColor(0.02f, 0.02f, 0.02f, 1.0f); // amber and green are light: dark text on them
+		}
+	}
+
 	// Apply rounded background to the border
-	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(BgColor, CornerRadius);
+	FSlateBrush Brush = URammsUIStyle::MakeRoundedBoxBrush(BgColor, CornerRadius, OutlineColor, OutlineWidth);
 	URammsUIStyle::ApplyRoundedBrushToBorder(ButtonBorder, Brush);
 	ButtonBorder->SetRenderOpacity(Opacity);
 

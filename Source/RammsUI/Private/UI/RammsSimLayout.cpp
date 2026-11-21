@@ -10,6 +10,8 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Overlay.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -18,10 +20,16 @@
 #include "RammsControlHUDSubsystem.h"
 #include "RammsHUDLayoutUserSettings.h"
 #include "RammsHUDPanelProvider.h"
+#include "RammsControlSink.h"
+#include "RammsControlSurfaceProvider.h"
+#include "RammsControlSurfaceRegistry.h"
 #include "UI/RammsButton.h"
+#include "UI/RammsControlRow.h"
+#include "UI/RammsControlSurfacePanel.h"
 #include "UI/RammsFloatingPanel.h"
 #include "UI/RammsLayoutHost.h"
 #include "UI/RammsSlateHostWidget.h"
+#include "UI/RammsSurfaceJoystick.h"
 #include "UI/RammsUIStyle.h"
 
 namespace
@@ -68,6 +76,19 @@ void URammsSimLayout::ResetCachedWidgets()
 	TrayRow = nullptr;
 	TrayEntries.Reset();
 	ResetButton = nullptr;
+	StatusBorder = nullptr;
+	StatusRow = nullptr;
+	StatusNames.Reset();
+	StatusValues.Reset();
+	StatusAxes.Reset();
+	PromptBox = nullptr;
+	PromptFrames.Reset();
+	PromptTexts.Reset();
+	PromptAxes.Reset();
+	PromptStates.Reset();
+	TrayAxes.Reset();
+	StatusVersion = -1;
+	bStickUnused = false;
 }
 
 void URammsSimLayout::BuildFixed(UCanvasPanel* Root)
@@ -190,6 +211,34 @@ void URammsSimLayout::BuildFloating(UCanvasPanel* Root)
 	TrayRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("PanelTrayRow"));
 	TrayBorder->AddChild(TrayRow);
 	bTrayDirty = true;
+
+	// Sim look: the status strip, top left -- a chip per state worth knowing without opening a panel (the
+	// drive mode, whether the sim is running) -- and, bottom centre, what the robot wants of the user. Both
+	// are empty and collapsed until PollStatus has something for them, and in the Classic look always.
+	StatusBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("StatusStrip"));
+	StatusBorder->SetPadding(FMargin(4.0f, 3.0f));
+	StatusBorder->SetVisibility(ESlateVisibility::Collapsed);
+	if (UCanvasPanelSlot* CanvasSlot = Root->AddChildToCanvas(StatusBorder))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+		CanvasSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+		CanvasSlot->SetPosition(FVector2D(FloatingMargin, 4.0f));
+		CanvasSlot->SetAutoSize(true);
+		CanvasSlot->SetZOrder(1000000);
+	}
+	StatusRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("StatusRow"));
+	StatusBorder->AddChild(StatusRow);
+
+	PromptBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Prompts"));
+	PromptBox->SetVisibility(ESlateVisibility::HitTestInvisible); // words to read: clicks go through to the scene
+	if (UCanvasPanelSlot* CanvasSlot = Root->AddChildToCanvas(PromptBox))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.5f, 1.0f, 0.5f, 1.0f));
+		CanvasSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+		CanvasSlot->SetPosition(FVector2D(0.0f, -40.0f));
+		CanvasSlot->SetAutoSize(true);
+		CanvasSlot->SetZOrder(1000001);
+	}
 }
 
 URammsFloatingPanel* URammsSimLayout::AddFloatingPanel(FName Id, const FText& Title, const FVector2D& DefaultPlacement, bool bResizable)
@@ -245,6 +294,8 @@ void URammsSimLayout::ApplyStyle_Implementation()
 		TrayBorder->Background = URammsUIStyle::MakeRoundedBoxBrush(Back, Style->Border.CornerRadiusLarge);
 	}
 	bTrayDirty = true;
+	StatusVersion = -1; // the strip and prompts are the look's: build (or clear) them for this theme
+	StyleStatus();
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +315,43 @@ void URammsSimLayout::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		ProviderPollSeconds = 0.25f;
 		PollProviders();
 	}
+	StatusPollSeconds -= InDeltaTime;
+	if (StatusPollSeconds <= 0.0f)
+	{
+		StatusPollSeconds = 0.1f;
+		PollStatus();
+	}
+	TickPrompts(InDeltaTime);
 	// Panels keep clear of the tray along the top.
 	const FVector2D Canvas = RootCanvas->GetCachedGeometry().GetLocalSize();
-	const float		TopInset = TrayBorder ? 4.0f + static_cast<float>(TrayBorder->GetDesiredSize().Y) + FloatingMargin : FloatingMargin;
+	float			TopInset = TrayBorder ? 4.0f + static_cast<float>(TrayBorder->GetDesiredSize().Y) + FloatingMargin : FloatingMargin;
+	if (StatusBorder && StatusBorder->GetVisibility() != ESlateVisibility::Collapsed)
+	{
+		// Beside the tray while there is room to its left; under it, pushing the panels down, once a narrow
+		// window or a long status would run the two together.
+		const FVector2D Status = StatusBorder->GetDesiredSize();
+		const float		TrayWidth = TrayBorder ? static_cast<float>(TrayBorder->GetDesiredSize().X) : 0.0f;
+		const float		TrayLeft = (static_cast<float>(Canvas.X) - TrayWidth) * 0.5f;
+		const bool		bBeside = Canvas.X <= 0.0 || FloatingMargin + static_cast<float>(Status.X) + FloatingMargin <= TrayLeft;
+		const float		StatusTop = bBeside ? 4.0f : TopInset - FloatingMargin + 4.0f;
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(StatusBorder->Slot))
+		{
+			const FVector2D Wanted(FloatingMargin, StatusTop);
+			if (!CanvasSlot->GetPosition().Equals(Wanted, 0.5))
+			{
+				CanvasSlot->SetPosition(Wanted);
+			}
+		}
+		if (!bBeside)
+		{
+			TopInset += static_cast<float>(Status.Y) + 4.0f;
+		}
+		else
+		{
+			// Beside the tray: the panels keep clear of whichever of the two reaches lower.
+			TopInset = FMath::Max(TopInset, 4.0f + static_cast<float>(Status.Y) + FloatingMargin);
+		}
+	}
 	for (URammsFloatingPanel* Panel : FloatingPanels)
 	{
 		if (Panel)
@@ -427,16 +512,21 @@ bool URammsSimLayout::AreAllPanelsHidden() const
 			return false;
 		}
 	}
-	return bJoystickHidden || !JoystickSlot;
+	return bJoystickHidden || bStickUnused || !JoystickSlot;
+}
+
+void URammsSimLayout::ApplyJoystickVisibility()
+{
+	if (JoystickSlot)
+	{
+		JoystickSlot->SetVisibility(bJoystickHidden || bStickUnused ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
 }
 
 void URammsSimLayout::SetJoystickHidden(bool bHidden)
 {
 	bJoystickHidden = bHidden;
-	if (JoystickSlot)
-	{
-		JoystickSlot->SetVisibility(bHidden ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
-	}
+	ApplyJoystickVisibility();
 	FRammsFloatingPanelState State;
 	URammsHUDLayoutUserSettings::Get()->Find(JoystickId, State);
 	State.Id = JoystickId;
@@ -514,9 +604,34 @@ void URammsSimLayout::RebuildTray()
 			Add(Panel, NAME_None, Panel->Title);
 		}
 	}
-	if (JoystickSlot)
+	if (JoystickSlot && !bStickUnused)
 	{
 		Add(nullptr, JoystickId, FText::FromString(TEXT("Joystick")));
+	}
+	// Sim look: the robot's own actions the settings want one click away (pause the sim), after a divider.
+	const bool bSim = URammsUIStyle::UsesSimLook(Style);
+	const auto AddDivider = [this]() {
+		USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		Box->SetWidthOverride(1.0f);
+		Box->SetHeightOverride(16.0f);
+		UBorder* Rule = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Rule->SetBrushColor(Style ? Style->Colors.Border : FLinearColor(0.3f, 0.3f, 0.3f, 1.0f));
+		Box->AddChild(Rule);
+		if (UHorizontalBoxSlot* S = TrayRow->AddChildToHorizontalBox(Box))
+		{
+			S->SetPadding(FMargin(6.0f, 0.0f));
+			S->SetVerticalAlignment(VAlign_Center);
+		}
+	};
+	if (bSim && TrayAxes.Num() > 0)
+	{
+		AddDivider();
+		for (const FRammsControlAxis& Axis : TrayAxes)
+		{
+			Add(nullptr, NAME_None, URammsControlRow::SimLabel(Axis.DisplayName.IsEmpty() ? FText::FromName(Axis.Id) : Axis.DisplayName));
+			TrayEntries.Last()->Control = Axis.Id;
+			TrayEntries.Last()->Refresh();
+		}
 	}
 	USizeBox* Divider = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	Divider->SetWidthOverride(1.0f);
@@ -531,7 +646,8 @@ void URammsSimLayout::RebuildTray()
 	}
 	Add(nullptr, AllId, FText::FromString(AreAllPanelsHidden() ? TEXT("Show all") : TEXT("Hide all")));
 	ResetButton = WidgetTree->ConstructWidget<URammsButton>(URammsButton::StaticClass());
-	ResetButton->SetText(FText::FromString(TEXT("Reset")));
+	// "Reset layout" where the robot's own Reset (the sim's) can share the tray or the screen with it.
+	ResetButton->SetText(FText::FromString(bSim ? TEXT("Reset layout") : TEXT("Reset")));
 	ResetButton->SetCompact(true);
 	ResetButton->SetVariant(ERammsButtonVariant::Ghost);
 	ResetButton->SetToolTipText(FText::FromString(TEXT("Every panel back where it started (ramms.UI.ResetLayout)")));
@@ -550,6 +666,14 @@ void URammsSimLayout::RebuildTray()
 void URammsPanelTrayEntry::HandleClicked()
 {
 	URammsSimLayout* L = Layout.Get();
+	if (!Control.IsNone())
+	{
+		if (L)
+		{
+			L->TriggerControl(Control);
+		}
+		return;
+	}
 	if (Special == AllId)
 	{
 		if (L)
@@ -614,6 +738,15 @@ void URammsPanelTrayEntry::Refresh()
 				: P->IsPanelHidden()		? ERammsButtonVariant::Ghost
 											: ERammsButtonVariant::Secondary);
 	}
+	else if (!Control.IsNone())
+	{
+		Tip = FString::Printf(TEXT("%s (the robot's %s control)"), *Label.ToString(), *Control.ToString());
+		// The weight its row has in the panel: red for what the settings name a stop or a reset, filled for a main action.
+		const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+		Button->SetVariant(URammsControlHUDSettings::MatchesAny(Settings->DangerControls, Control) ? ERammsButtonVariant::Error
+				: URammsControlHUDSettings::MatchesAny(Settings->PrimaryControls, Control)		   ? ERammsButtonVariant::Primary
+																								   : ERammsButtonVariant::Secondary);
+	}
 	else if (Special == JoystickId)
 	{
 		const URammsSimLayout* L = Layout.Get();
@@ -634,6 +767,389 @@ void URammsPanelTrayEntry::Refresh()
 // ---------------------------------------------------------------------------
 // Console commands
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Sim look: status strip, prompts, tray actions
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	/** A control's reading as a few words: an Enum's choice, a Text's words, Yes / No for a 0..1 state, a number. */
+	FString StatusWords(UObject* Surface, const FRammsControlAxis& Axis)
+	{
+		const float Value = IRammsControlSink::Execute_GetAxisValue(Surface, Axis.Id);
+		if (Axis.IsText())
+		{
+			FText Words;
+			IRammsControlSink::Execute_GetAxisText(Surface, Axis.Id, Words);
+			return Words.ToString();
+		}
+		if (Axis.Kind == ERammsControlKind::Enum && Axis.EnumLabels.Num() > 0)
+		{
+			return Axis.EnumLabels[FMath::Clamp(FMath::RoundToInt(Value), 0, Axis.EnumLabels.Num() - 1)].ToString();
+		}
+		if (Axis.Units == ERammsControlUnits::Normalized && FMath::IsNearlyEqual(Axis.Range.X, 0.0) && FMath::IsNearlyEqual(Axis.Range.Y, 1.0))
+		{
+			return Value >= 0.99f ? TEXT("Yes") : Value <= 0.01f ? TEXT("No")
+																 : FString::Printf(TEXT("%.0f%%"), Value * 100.0f);
+		}
+		return FString::Printf(TEXT("%.2f"), Value);
+	}
+
+	/** How far below its place a prompt starts its fade in, and ends its fade out. */
+	const float PromptRisePixels = 10.0f;
+
+	/** Whether two prompts are one message with other numbers ("12.4 cm to go" then "7.6 cm to go"): a
+	 *  count ticking down is the same message still on show, not a new one. */
+	bool SameMessage(const FString& A, const FString& B)
+	{
+		const auto Words = [](const FString& In) {
+			FString Out;
+			Out.Reserve(In.Len());
+			for (const TCHAR Ch : In)
+			{
+				if (!FChar::IsDigit(Ch) && Ch != TEXT('.') && Ch != TEXT(',') && Ch != TEXT('-'))
+				{
+					Out.AppendChar(Ch);
+				}
+			}
+			return Out;
+		};
+		return Words(A) == Words(B);
+	}
+
+	bool IsSurface(const UObject* Object)
+	{
+		return Object && Object->GetClass()->ImplementsInterface(URammsControlSurfaceProvider::StaticClass())
+			&& Object->GetClass()->ImplementsInterface(URammsControlSink::StaticClass());
+	}
+} // namespace
+
+void URammsSimLayout::PollStatus()
+{
+	if (!StatusBorder || !PromptBox)
+	{
+		return;
+	}
+	const bool					  bSim = URammsUIStyle::UsesSimLook(Style);
+	UWorld*						  World = GetWorld();
+	URammsControlSurfaceRegistry* Registry = bSim && World ? World->GetSubsystem<URammsControlSurfaceRegistry>() : nullptr;
+	// The robot the HUD's panel shows -- the strip, the prompts and the tray's buttons are about that one,
+	// not whichever registered first -- and the registry's first only where no panel says.
+	UObject* Surface = nullptr;
+	if (bSim)
+	{
+		const URammsControlHUDSubsystem* HUD = URammsControlHUDSubsystem::Get(this);
+		const URammsControlSurfacePanel* Panel = HUD ? HUD->GetSurfacePanel() : nullptr;
+		if (Panel)
+		{
+			Surface = Panel->GetTargetSurface();
+			StatusSource = Panel->Source;
+		}
+		else if (Registry)
+		{
+			Surface = Registry->FindControlSurface();
+		}
+	}
+	if (!IsSurface(Surface))
+	{
+		Surface = nullptr;
+	}
+	const int32 Version = Surface ? IRammsControlSurfaceProvider::Execute_GetControlSurfaceVersion(Surface) : -1;
+	if (Surface != StatusSurface.Get() || Version != StatusVersion)
+	{
+		RebuildStatus(Surface);
+		StatusSurface = Surface;
+		StatusVersion = Version;
+	}
+	if (!Surface)
+	{
+		return;
+	}
+	for (int32 I = 0; I < StatusAxes.Num() && I < StatusValues.Num(); ++I)
+	{
+		const FText Words = FText::FromString(StatusWords(Surface, StatusAxes[I]));
+		if (StatusValues[I] && !StatusValues[I]->GetText().EqualTo(Words))
+		{
+			StatusValues[I]->SetText(Words);
+		}
+	}
+	for (int32 I = 0; I < PromptAxes.Num() && I < PromptTexts.Num() && I < PromptStates.Num(); ++I)
+	{
+		const float Reading = IRammsControlSink::Execute_GetAxisValue(Surface, PromptAxes[I].Id);
+		const uint8 Severity = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Reading), 0, static_cast<int32>(ERammsControlTextSeverity::Fault)));
+		FText		Words;
+		IRammsControlSink::Execute_GetAxisText(Surface, PromptAxes[I].Id, Words);
+		FPromptState& State = PromptStates[I];
+		State.Wanted = Words.IsEmpty() ? 0 : Severity;
+		if (State.Wanted == 0 || !PromptTexts[I])
+		{
+			continue; // nothing to say: TickPrompts lets what is up have its time, then fades it
+		}
+		const FText Old = PromptTexts[I]->GetText();
+		if (!Old.EqualTo(Words))
+		{
+			if (State.Drawn == 0 || !SameMessage(Old.ToString(), Words.ToString()))
+			{
+				State.ShownSeconds = 0.0f; // a new message earns its own time on show
+			}
+			PromptTexts[I]->SetText(Words);
+		}
+		if (State.Drawn != State.Wanted)
+		{
+			State.Drawn = State.Wanted;
+			StyleStatus();
+		}
+	}
+}
+
+void URammsSimLayout::TickPrompts(float DeltaSeconds)
+{
+	if (PromptStates.Num() == 0)
+	{
+		return;
+	}
+	const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+	const float						Hold = FMath::Max(Settings->PromptMinSeconds, 0.0f);
+	const float						Fade = FMath::Max(Settings->PromptFadeSeconds, 0.0f);
+	// A hitch must not swallow the fade or the hold in one step.
+	const float Delta = FMath::Clamp(DeltaSeconds, 0.0f, 0.1f);
+	for (int32 I = 0; I < PromptStates.Num() && I < PromptFrames.Num(); ++I)
+	{
+		FPromptState& State = PromptStates[I];
+		UBorder*	  Frame = PromptFrames[I];
+		if (!Frame || State.Drawn == 0)
+		{
+			continue; // hidden, and the robot has nothing for it
+		}
+		State.ShownSeconds += Delta;
+		// Up while the robot says so, and after that until it has had long enough to be read: a message that
+		// came and went within a moment would otherwise only flicker.
+		const bool	bUp = State.Wanted > 0 || State.ShownSeconds < Hold;
+		const float Step = Fade > 0.0f ? Delta / Fade : 1.0f;
+		State.Alpha = FMath::Clamp(State.Alpha + (bUp ? Step : -Step), 0.0f, 1.0f);
+		if (!bUp && State.Alpha <= 0.0f)
+		{
+			State = FPromptState();
+			Frame->SetVisibility(ESlateVisibility::Collapsed);
+			continue;
+		}
+		// Eased, with a short rise: it settles into place rather than switching on.
+		const float Eased = FMath::InterpEaseOut(0.0f, 1.0f, State.Alpha, 2.0f);
+		Frame->SetRenderOpacity(Eased);
+		Frame->SetRenderTranslation(FVector2D(0.0, (1.0 - Eased) * PromptRisePixels));
+		if (Frame->GetVisibility() == ESlateVisibility::Collapsed)
+		{
+			Frame->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+	}
+}
+
+void URammsSimLayout::RebuildStatus(UObject* Surface)
+{
+	StatusRow->ClearChildren();
+	StatusNames.Reset();
+	StatusValues.Reset();
+	StatusAxes.Reset();
+	// A prompt on show stays on show through a rebuild: the surface changes version when the drive mode
+	// does, which is just when a crossing starts and its prompts matter. Kept by control id, for the same robot.
+	TMap<FName, TPair<FPromptState, FText>> PromptsUp;
+	if (Surface && Surface == StatusSurface.Get())
+	{
+		for (int32 I = 0; I < PromptAxes.Num() && I < PromptStates.Num() && I < PromptTexts.Num(); ++I)
+		{
+			if (PromptStates[I].Drawn > 0 && PromptTexts[I])
+			{
+				PromptsUp.Add(PromptAxes[I].Id, TPair<FPromptState, FText>(PromptStates[I], PromptTexts[I]->GetText()));
+			}
+		}
+	}
+	PromptBox->ClearChildren();
+	PromptFrames.Reset();
+	PromptTexts.Reset();
+	PromptAxes.Reset();
+	PromptStates.Reset();
+	const int32 TrayBefore = TrayAxes.Num();
+	TrayAxes.Reset();
+	const bool bStickWasUnused = bStickUnused;
+	bStickUnused = false;
+	if (!Surface)
+	{
+		StatusBorder->SetVisibility(ESlateVisibility::Collapsed);
+		bTrayDirty = bTrayDirty || TrayBefore > 0 || bStickWasUnused;
+		ApplyJoystickVisibility();
+		return;
+	}
+	const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+	const FRammsControlSurface		Described = IRammsControlSurfaceProvider::Execute_GetControlSurface(Surface);
+	const auto						Find = [&Described](FName Id) {
+		 return Described.Axes.FindByPredicate([Id](const FRammsControlAxis& Axis) { return Axis.Id == Id; });
+	};
+
+	// The drive stick has nothing to drive on a robot with neither of its controls (the robot picker, before
+	// a robot is chosen): it and its tray button are left out rather than sitting there dead.
+	if (const URammsControlHUDSubsystem* HUD = URammsControlHUDSubsystem::Get(this))
+	{
+		const URammsSurfaceJoystick* Stick = HUD->GetJoystick();
+		bStickUnused = Stick && !Find(Stick->ControlIdX) && !Find(Stick->ControlIdY);
+	}
+	ApplyJoystickVisibility();
+
+	for (const FName& Id : Settings->StatusControls)
+	{
+		const FRammsControlAxis* Axis = Find(Id);
+		if (!Axis || Axis->IsAction() || !Axis->bReadback)
+		{
+			continue; // not on this robot, or nothing to read
+		}
+		UBorder* Chip = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Chip->SetPadding(FMargin(9.0f, 4.0f));
+		UHorizontalBox* Words = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		UTextBlock*		Name = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Name->SetText(URammsControlRow::SimLabel(Axis->DisplayName.IsEmpty() ? FText::FromName(Axis->Id) : Axis->DisplayName));
+		Words->AddChildToHorizontalBox(Name);
+		UTextBlock* Value = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		if (UHorizontalBoxSlot* ValueSlot = Words->AddChildToHorizontalBox(Value))
+		{
+			ValueSlot->SetPadding(FMargin(6.0f, 0.0f, 0.0f, 0.0f));
+		}
+		Chip->AddChild(Words);
+		if (UHorizontalBoxSlot* ChipSlot = StatusRow->AddChildToHorizontalBox(Chip))
+		{
+			ChipSlot->SetPadding(FMargin(StatusAxes.Num() > 0 ? 4.0f : 0.0f, 0.0f, 0.0f, 0.0f));
+			ChipSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		StatusNames.Add(Name);
+		StatusValues.Add(Value);
+		StatusAxes.Add(*Axis);
+	}
+	StatusBorder->SetVisibility(StatusAxes.Num() > 0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+
+	if (Settings->bShowPrompts)
+	{
+		for (const FRammsControlAxis& Axis : Described.Axes)
+		{
+			if (!Axis.IsText() || !Axis.bReadback)
+			{
+				continue;
+			}
+			UBorder* Frame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			Frame->SetPadding(FMargin(18.0f, 10.0f));
+			Frame->SetVisibility(ESlateVisibility::Collapsed);
+			Frame->SetRenderOpacity(0.0f); // TickPrompts fades it in when the robot has something to say
+			UTextBlock* Words = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			Words->SetJustification(ETextJustify::Center);
+			Words->SetAutoWrapText(true); // a long status folds rather than running off a narrow window
+			Words->SetWrapTextAt(640.0f);
+			Frame->AddChild(Words);
+			if (UVerticalBoxSlot* FrameSlot = PromptBox->AddChildToVerticalBox(Frame))
+			{
+				FrameSlot->SetHorizontalAlignment(HAlign_Center);
+				FrameSlot->SetPadding(FMargin(0.0f, 6.0f, 0.0f, 0.0f));
+			}
+			PromptFrames.Add(Frame);
+			PromptTexts.Add(Words);
+			PromptAxes.Add(Axis);
+			FPromptState& State = PromptStates.AddDefaulted_GetRef();
+			if (const TPair<FPromptState, FText>* Up = PromptsUp.Find(Axis.Id))
+			{
+				State = Up->Key;
+				Words->SetText(Up->Value);
+				Frame->SetVisibility(ESlateVisibility::HitTestInvisible); // TickPrompts, next, sets how much of it shows
+			}
+		}
+	}
+
+	for (const FName& Id : Settings->TrayControls)
+	{
+		const FRammsControlAxis* Axis = Find(Id);
+		if (Axis && Axis->IsAction())
+		{
+			TrayAxes.Add(*Axis);
+		}
+	}
+	bTrayDirty = true;
+	StyleStatus();
+}
+
+void URammsSimLayout::StyleStatus()
+{
+	if (!Style || !StatusBorder)
+	{
+		return;
+	}
+	FLinearColor Back = Style->Colors.Background;
+	Back.A = 0.6f;
+	StatusBorder->SetBrush(URammsUIStyle::MakeRoundedBoxBrush(Back, Style->Border.CornerRadiusLarge));
+	for (int32 I = 0; I < StatusNames.Num(); ++I)
+	{
+		if (StatusNames[I])
+		{
+			StatusNames[I]->SetFont(Style->Typography.Caption);
+			StatusNames[I]->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+			if (UBorder* Chip = Cast<UBorder>(StatusNames[I]->GetParent() ? StatusNames[I]->GetParent()->GetParent() : nullptr))
+			{
+				Chip->SetBrush(URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Secondary, 12.0f, Style->Colors.Border, Style->Border.BorderWidth));
+			}
+		}
+		if (StatusValues.IsValidIndex(I) && StatusValues[I])
+		{
+			StatusValues[I]->SetFont(Style->Typography.Caption);
+			StatusValues[I]->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+		}
+	}
+	for (int32 I = 0; I < PromptFrames.Num(); ++I)
+	{
+		const uint8 Severity = PromptStates.IsValidIndex(I) ? PromptStates[I].Drawn : 0;
+		if (PromptFrames[I])
+		{
+			// An outline in the severity's colour: the words stay the text colour, readable on the dark frame.
+			// Whether it shows is TickPrompts' business.
+			const FLinearColor Edge = Severity >= static_cast<uint8>(ERammsControlTextSeverity::Fault) ? Style->Colors.Error : Style->Colors.Warning;
+			PromptFrames[I]->SetBrush(URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Background, Style->Border.CornerRadiusLarge, Edge, 2.0f));
+		}
+		if (PromptTexts.IsValidIndex(I) && PromptTexts[I])
+		{
+			PromptTexts[I]->SetFont(Style->Typography.HeadingSmall);
+			PromptTexts[I]->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+		}
+	}
+}
+
+void URammsSimLayout::TriggerControl(FName ControlId)
+{
+	UObject* Surface = StatusSurface.Get();
+	if (IsSurface(Surface))
+	{
+		IRammsControlSink::Execute_TriggerAction(Surface, ControlId, StatusSource);
+	}
+}
+
+TArray<FString> URammsSimLayout::GetStatusChips() const
+{
+	TArray<FString> Out;
+	for (int32 I = 0; I < StatusNames.Num() && I < StatusValues.Num(); ++I)
+	{
+		if (StatusNames[I] && StatusValues[I])
+		{
+			Out.Add(FString::Printf(TEXT("%s: %s"), *StatusNames[I]->GetText().ToString(), *StatusValues[I]->GetText().ToString()));
+		}
+	}
+	return Out;
+}
+
+TArray<FString> URammsSimLayout::GetPrompts() const
+{
+	TArray<FString> Out;
+	for (int32 I = 0; I < PromptTexts.Num(); ++I)
+	{
+		if (PromptTexts[I] && PromptStates.IsValidIndex(I) && PromptStates[I].Drawn > 0)
+		{
+			Out.Add(PromptTexts[I]->GetText().ToString());
+		}
+	}
+	return Out;
+}
 
 namespace
 {

@@ -47,6 +47,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
 	ERammsControlSource Source = ERammsControlSource::Touch;
 
+	/** While nobody holds the thumb, show what the two controls are commanded by any other source -- the
+	 *  keyboard, a gamepad, a script, an autonomy client -- so the stick moves whenever the robot is driven.
+	 *  Always on in the Sim look (ERammsHudLook); set this to have it in the Classic look too. Display only:
+	 *  nothing is sent to the sink, and GetValue stays the thumb's own input. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control Surface")
+	bool bMirrorCommand = false;
+
+	/** What the thumb shows of that command, -1..1 per axis as the controls have it (X = ControlIdX, Y =
+	 *  ControlIdY, so forward is +Y whatever bInvertY); zero while held and when not mirroring. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FVector2D GetMirroredValue() const { return MirrorShown; }
+
 	UFUNCTION(BlueprintCallable, Category = "Control Surface")
 	void SetTarget(UObject* Sink, FName IdX, FName IdY);
 
@@ -65,6 +77,7 @@ public:
 
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	// Real touch (a tablet, the Pixel Streaming page) arrives through the touch
 	// overrides; route it to the base joystick's pointer handling so a finger
@@ -82,4 +95,9 @@ private:
 	UObject* ResolveSink();
 	void	 Push(FVector2D Value);
 	void	 Release();
+	/** Move the thumb toward what the sink reports as commanded (bMirrorCommand), or back to centre. */
+	void TickMirror(float DeltaSeconds);
+
+	/** The mirrored command as the thumb shows it now (eased toward the sink's). */
+	FVector2D MirrorShown = FVector2D::ZeroVector;
 };

@@ -245,6 +245,91 @@ URammsUIStyle* URammsUIStyle::CreateDefaultDarkTheme()
 	return Style;
 }
 
+URammsUIStyle* URammsUIStyle::CreateSimTheme(const URammsUIStyle* FontSource)
+{
+	URammsUIStyle* Style = NewObject<URammsUIStyle>(
+		GetTransientPackage(), NAME_None, RF_Transient);
+	if (FontSource)
+	{
+		Style->CopyFrom(FontSource);
+	}
+	else
+	{
+		Style->Typography = MakeDefaultTypography();
+	}
+	Style->ApplySimLook();
+	return Style;
+}
+
+void URammsUIStyle::ApplySimLook()
+{
+	// Written as the sRGB a person sees and picks; the palette holds linear values, which is how a "40% grey"
+	// button came out light grey under white text.
+	const auto Hex = [](const TCHAR* Code, float Alpha = 1.0f) {
+		FLinearColor Colour = FLinearColor::FromSRGBColor(FColor::FromHex(Code));
+		Colour.A = Alpha;
+		return Colour;
+	};
+
+	StyleName = TEXT("Sim");
+	HudLook = ERammsHudLook::Sim;
+
+	// Contrast of white text: 5.5:1 on Primary, 13:1 on Secondary, 5.1:1 on Error (and more hovered or pressed:
+	// a filled button darkens). TextDisabled is 4.9:1 on Background and 4.4:1 on Surface.
+	Colors.Primary = Hex(TEXT("0B6FA4"));	// filled: the main action, a selected segment
+	Colors.Secondary = Hex(TEXT("2A313B")); // a control's own surface: buttons, steppers
+	Colors.Background = Hex(TEXT("14171C"), 0.94f);
+	Colors.Surface = Hex(TEXT("1D2229"));
+	Colors.TextPrimary = Hex(TEXT("F2F4F7"));
+	Colors.TextSecondary = Hex(TEXT("A9B1BC"));
+	Colors.TextDisabled = Hex(TEXT("7C8794"));
+	Colors.Border = Hex(TEXT("333B46"));
+	Colors.Success = Hex(TEXT("3DCB7A"));
+	Colors.Warning = Hex(TEXT("F2B93B"));
+	Colors.Error = Hex(TEXT("C93A3A"));
+	Colors.Info = Hex(TEXT("35B8F2")); // accent as text and marks: what is live, selected or interactive
+	Colors.IconTint = Colors.TextPrimary;
+
+	Typography.HeadingLarge.Size = 20;
+	Typography.HeadingMedium.Size = 14;
+	Typography.HeadingSmall.Size = 12;
+	Typography.Body.Size = 11;
+	Typography.Caption.Size = 10;
+	Typography.Monospace.Size = 11;
+
+	Border.CornerRadiusSmall = 3.0f;
+	Border.CornerRadiusMedium = 6.0f;
+	Border.CornerRadiusLarge = 10.0f;
+
+	Slider.ThumbSize = 18.0f;
+	Slider.BarThickness = 4.0f;
+	Slider.TrackColor = Hex(TEXT("5A6676")); // 3.1:1 on Background
+	Slider.ActiveBarColor = Colors.Info;
+	Slider.ThumbColor = FLinearColor::White;
+	Slider.DisabledColor = Hex(TEXT("5A6676"), 0.5f);
+
+	ScrollBar.ThumbNormalColor = Hex(TEXT("5A6676"), 0.7f);
+	ScrollBar.ThumbHoveredColor = Hex(TEXT("A9B1BC"), 0.8f);
+
+	CheckBox.UncheckedColor = Colors.Secondary;
+	CheckBox.CheckedColor = Colors.Primary;
+	CheckBox.BorderColor = Colors.Border;
+
+	Interaction.HeaderButtonMinSize = 30.0f;
+	Interaction.ActionButtonMinSize = FVector2D(34.0f, 34.0f);
+	// A source theme's own sizes for these, where it set any, come down with the rest of the type.
+	if (Interaction.ActionButtonLabelFont.Size > 14)
+	{
+		Interaction.ActionButtonLabelFont.Size = 14;
+	}
+	if (Interaction.HeaderButtonFont.Size > 12)
+	{
+		Interaction.HeaderButtonFont.Size = 12;
+	}
+
+	MarkPackageDirty();
+}
+
 URammsUIStyle* URammsUIStyle::CreateDefaultLightTheme()
 {
 	URammsUIStyle* Style = NewObject<URammsUIStyle>(
@@ -283,6 +368,7 @@ void URammsUIStyle::ResetToDarkDefaults()
 {
 	// Reset all fields to dark defaults (struct default constructors are dark)
 	StyleName = TEXT("Dark");
+	HudLook = ERammsHudLook::Classic;
 	Colors = FRammsColorPalette();
 	Typography = MakeDefaultTypography();
 	Spacing = FRammsSpacing();
@@ -340,6 +426,7 @@ void URammsUIStyle::CopyFrom(const URammsUIStyle* Source)
 		return;
 
 	StyleName = Source->StyleName;
+	HudLook = Source->HudLook;
 	Colors = Source->Colors;
 	Typography = Source->Typography;
 	Spacing = Source->Spacing;

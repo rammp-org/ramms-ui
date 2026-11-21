@@ -253,6 +253,10 @@ protected:
 	/** Everything below the title, hidden when collapsed. */
 	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> ContentVBox;
+	/** Sim look: what the panel says in place of its controls while no camera is registered. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> EmptyText;
+	void				   UpdateContentVisibility();
 
 	/** Capture / saving. The rate stepper is its own row -- all five controls on
 	 *  one line did not fit the column and ran off the edge. */
