@@ -25,6 +25,24 @@ enum class ERammsUIEasing : uint8
 };
 
 /**
+ * How the control HUD (URammsSimLayout and what it hosts: the robot panel, its
+ * rows, the panel tray, the camera capture panel) lays itself out. A property of
+ * the theme, so a project picks it with its theme and the shared widgets a
+ * theme styles (buttons, sliders) follow the same switch.
+ *
+ * Classic is the look every theme had before this existed, and stays the
+ * default: a theme that says nothing changes nothing.
+ */
+UENUM(BlueprintType)
+enum class ERammsHudLook : uint8
+{
+	/** Collapsible groups in one scrolling column; two-line slider rows. */
+	Classic UMETA(DisplayName = "Classic"),
+	/** Tabs, one-line rows, segmented choices, a status strip and prompts. */
+	Sim UMETA(DisplayName = "Sim (compact, tabbed)"),
+};
+
+/**
  * Animation curve settings
  */
 USTRUCT(BlueprintType)
@@ -545,6 +563,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FString StyleName = TEXT("Default");
 
+	/** Layout and control shapes of the control HUD; see ERammsHudLook. Classic
+	 *  unless a theme asks otherwise. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
+	ERammsHudLook HudLook = ERammsHudLook::Classic;
+
+	bool IsSimLook() const { return HudLook == ERammsHudLook::Sim; }
+
+	/** True for a style that asks for the Sim look; false for none. */
+	static bool UsesSimLook(const URammsUIStyle* InStyle) { return InStyle && InStyle->IsSimLook(); }
+
+	/** Colour mixed Amount of the way to white (lighter) or to black, channel by channel. The Sim look's
+	 *  hover and pressed shades: mixing through HSV, as the Classic look does, swings a blue or a red
+	 *  toward violet on the way. */
+	static FLinearColor Lighten(const FLinearColor& Colour, float Amount)
+	{
+		FLinearColor Out = FMath::Lerp(Colour, FLinearColor::White, Amount);
+		Out.A = Colour.A;
+		return Out;
+	}
+	static FLinearColor Darken(const FLinearColor& Colour, float Amount)
+	{
+		FLinearColor Out = FMath::Lerp(Colour, FLinearColor::Black, Amount);
+		Out.A = Colour.A;
+		return Out;
+	}
+
 	/** Color palette */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Style")
 	FRammsColorPalette Colors;
@@ -702,6 +746,15 @@ public:
 	static URammsUIStyle* CreateDefaultLightTheme();
 
 	/**
+	 * The sim HUD's theme: a copy of FontSource with the Sim look and its tokens
+	 * (ApplySimLook) over it. FontSource is there for its fonts -- the plugin's
+	 * theme assets carry the glyph fallbacks the HUD's icon characters need --
+	 * and whatever the look does not set (spacing, animation curves) comes from
+	 * it too. With none, the engine's default fonts and the default theme.
+	 */
+	static URammsUIStyle* CreateSimTheme(const URammsUIStyle* FontSource = nullptr);
+
+	/**
 	 * Populate a color palette with light theme colors.
 	 */
 	static FRammsColorPalette MakeLightPalette();
@@ -725,6 +778,15 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
 	void ResetToLightDefaults();
+
+	/**
+	 * Make this theme the sim HUD's: HudLook Sim, a dark palette whose button
+	 * text meets WCAG AA (4.5:1) at rest, hovered and pressed, a visible slider
+	 * track, smaller type and tighter touch targets. Fonts are kept (only their
+	 * sizes change).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Ramms|Theme")
+	void ApplySimLook();
 
 	/**
 	 * Copy all style values from another theme into this one.

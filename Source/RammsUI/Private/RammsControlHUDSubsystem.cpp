@@ -24,6 +24,39 @@ URammsControlHUDSettings::URammsControlHUDSettings()
 	// code-built CreateDefaultDarkTheme uses bare FCoreStyle fonts, which
 	// render those as missing-glyph boxes.
 	Style = TSoftObjectPtr<URammsUIStyle>(FSoftObjectPath(TEXT("/RammsUI/UI/UI_DarkTheme.UI_DarkTheme")));
+
+	// Sim look defaults. Group names are the ones RammsCore's contributors use.
+	const auto Tab = [this](const TCHAR* Name, std::initializer_list<const TCHAR*> Groups) {
+		FRammsHudTab& NewTab = Tabs.AddDefaulted_GetRef();
+		NewTab.Name = FName(Name);
+		for (const TCHAR* Group : Groups)
+		{
+			NewTab.Groups.Add(FName(Group));
+		}
+	};
+	Tab(TEXT("Drive"), { TEXT("Drive") });
+	Tab(TEXT("Curb"), { TEXT("Curb") });
+	Tab(TEXT("Chassis"), { TEXT("Casters"), TEXT("Lift"), TEXT("Linkage"), TEXT("Seat") });
+	Tab(TEXT("Arm"), { TEXT("Arm"), TEXT("Gripper") });
+	Tab(TEXT("View"), { TEXT("Camera"), TEXT("Curb view") });
+	Tab(TEXT("Sim"), { TEXT("Sim"), TEXT("Sim Debug") });
+	PrimaryControls = { TEXT("curb.negotiate") };
+	DangerControls = { TEXT("curb.abort"), TEXT("sim.reset"), TEXT("*.estop"), TEXT("*.stop") };
+	StatusControls = { FName(TEXT("drive.mode")), FName(TEXT("curb.phase")), FName(TEXT("sim.running")) };
+	TrayControls = { FName(TEXT("sim.pause")) };
+}
+
+bool URammsControlHUDSettings::MatchesAny(const TArray<FString>& Patterns, FName Id)
+{
+	const FString IdString = Id.ToString();
+	for (const FString& Pattern : Patterns)
+	{
+		if (IdString.MatchesWildcard(Pattern, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 URammsControlHUDSubsystem* URammsControlHUDSubsystem::Get(const UObject* WorldContextObject)
@@ -144,6 +177,12 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 	{
 		Style = URammsUIStyle::CreateDefaultDarkTheme();
 	}
+	if (Settings && Settings->Look == ERammsHudLook::Sim && !Style->IsSimLook())
+	{
+		// The sim theme's tokens over this theme's fonts (their glyph fallbacks are why the theme is an
+		// asset at all). A copy: the asset, which other widgets may share, is left as it is.
+		Style = URammsUIStyle::CreateSimTheme(Style);
+	}
 	Host->Style = Style;
 
 	UClass* LayoutClass = Settings ? Settings->LayoutClass.LoadSynchronous() : nullptr;
@@ -185,6 +224,10 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 		}
 	}
 	Host->AddToPlayerScreen(10);
+	if (URammsUISubsystem* UI = Controller->GetWorld()->GetSubsystem<URammsUISubsystem>())
+	{
+		UI->OnThemeChanged.AddUniqueDynamic(this, &URammsControlHUDSubsystem::HandleThemeChanged);
+	}
 	Host->TransitionToLayout(FName("Sim"), false);
 
 	// Make the HUD reachable: the game viewport otherwise captures the mouse
@@ -205,6 +248,18 @@ bool URammsControlHUDSubsystem::SpawnHUD()
 	}
 	UE_LOG(LogTemp, Log, TEXT("[RammsControlHUD] spawned for %s (layout %s)"), *Controller->GetName(), *LayoutClass->GetName());
 	return true;
+}
+
+void URammsControlHUDSubsystem::HandleThemeChanged(URammsUIStyle* NewStyle)
+{
+	// SetTheme hands its theme to every live widget. For a HUD in the Sim look that is a Classic theme over
+	// Sim-built rows -- it used to change colours, now it would change the layout -- so the HUD is built
+	// again, which derives the sim theme afresh. (A theme that is itself of the Sim look needs nothing.)
+	const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+	if (Host && Settings && Settings->Look == ERammsHudLook::Sim && !URammsUIStyle::UsesSimLook(NewStyle))
+	{
+		SpawnHUD();
+	}
 }
 
 void URammsControlHUDSubsystem::DestroyHUD()

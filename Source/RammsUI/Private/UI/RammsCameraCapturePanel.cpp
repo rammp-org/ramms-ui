@@ -91,6 +91,17 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	ContentVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ContentVBox"));
 	MainVBox->AddChildToVerticalBox(ContentVBox);
 
+	// Sim look, no camera registered: this line in place of rows of controls that have nothing to act on.
+	EmptyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EmptyText"));
+	EmptyText->SetText(NSLOCTEXT("RammsUI", "NoCameras", "No cameras registered in this level yet. A capture camera shows here as soon as it registers."));
+	EmptyText->SetAutoWrapText(true);
+	EmptyText->SetWrapTextAt(FeedWidth - 4.0f);
+	EmptyText->SetVisibility(ESlateVisibility::Collapsed);
+	if (UVerticalBoxSlot* BSlot = MainVBox->AddChildToVerticalBox(EmptyText))
+	{
+		BSlot->SetPadding(FMargin(2.0f, 2.0f, 2.0f, 4.0f));
+	}
+
 	if (bShowControls)
 	{
 		ControlsHBox = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ControlsHBox"));
@@ -211,11 +222,26 @@ void URammsCameraCapturePanel::BuildWidgetTree()
 	}
 
 	bCollapsed = bStartCollapsed;
-	ContentVBox->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	UpdateContentVisibility();
+}
+
+void URammsCameraCapturePanel::UpdateContentVisibility()
+{
+	// The controls and the feed, unless collapsed -- or, in the Sim look, unless there is no camera for them.
+	const bool bEmpty = URammsUIStyle::UsesSimLook(Style) && Cameras.Num() == 0;
+	if (ContentVBox)
+	{
+		ContentVBox->SetVisibility(bCollapsed || bEmpty ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (EmptyText)
+	{
+		EmptyText->SetVisibility(bEmpty && !bCollapsed ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }
 
 void URammsCameraCapturePanel::ResetCachedWidgets()
 {
+	EmptyText = nullptr;
 	PanelBorder = nullptr;
 	MainVBox = nullptr;
 	TitleText = nullptr;
@@ -277,6 +303,12 @@ void URammsCameraCapturePanel::ApplyStyle_Implementation()
 	{
 		return;
 	}
+	if (EmptyText)
+	{
+		EmptyText->SetFont(Style->Typography.Caption);
+		EmptyText->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+	UpdateContentVisibility();
 	if (PanelBorder)
 	{
 		PanelBorder->Background = bHostedInFloatingPanel ? URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::Transparent, 0.0f)
@@ -825,6 +857,7 @@ void URammsCameraCapturePanel::RefreshLabels()
 	// Cheap, and it means changing a value in Project Settings shows up without
 	// restarting play.
 	ApplyHUDSettings();
+	UpdateContentVisibility(); // a camera registering, or the last one going, swaps the controls and the empty line
 
 	UCameraCaptureSubsystem* Sub = GetSubsystem();
 
@@ -924,6 +957,15 @@ void URammsCameraCapturePanel::RefreshLabels()
 	if (CaptureButton)
 	{
 		CaptureButton->SetText(FText::FromString(Sub->IsCapturing() ? TEXT("Stop Capture") : TEXT("Start Capture")));
+		// Sim look: the panel's main action, filled; red while it is the way to stop. Otherwise the plain
+		// button it always was (and is again after a theme of the other look).
+		const ERammsButtonVariant Wanted = !URammsUIStyle::UsesSimLook(Style) ? ERammsButtonVariant::Secondary
+			: Sub->IsCapturing()											  ? ERammsButtonVariant::Error
+																			  : ERammsButtonVariant::Primary;
+		if (CaptureButton->GetVariant() != Wanted)
+		{
+			CaptureButton->SetVariant(Wanted);
+		}
 	}
 	if (SerializationButton)
 	{
@@ -1078,10 +1120,7 @@ void URammsCameraCapturePanel::SetFeedChannel(ERammsFeedChannel Channel)
 void URammsCameraCapturePanel::ToggleCollapsed()
 {
 	bCollapsed = !bCollapsed;
-	if (ContentVBox)
-	{
-		ContentVBox->SetVisibility(bCollapsed ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
-	}
+	UpdateContentVisibility();
 	RefreshLabels();
 }
 

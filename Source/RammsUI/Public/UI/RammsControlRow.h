@@ -12,6 +12,22 @@ class URammsButton;
 class UButton;
 class UHorizontalBox;
 class UTextBlock;
+class UBorder;
+class URammsControlRow;
+
+/** One choice of a segmented Enum row: carries its index to the row when its button is clicked. */
+UCLASS()
+class RAMMSUI_API URammsControlRowChoice : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION()
+	void HandleClicked();
+
+	TWeakObjectPtr<URammsControlRow> Row;
+	int32							 Index = 0;
+};
 
 /**
  * One control of a control surface, rendered from its FRammsControlAxis:
@@ -24,6 +40,19 @@ class UTextBlock;
  *                            steppers when read-only)
  *  - Text                  -> label over the words, wrapped, coloured by the
  *                            control's severity (ERammsControlTextSeverity)
+ *
+ * In the Sim look (ERammsHudLook, from the theme the row has when Setup runs)
+ * the same controls take less room and show more of their state:
+ *
+ *  - Position / Velocity  -> one line; the live reading is a mark on the
+ *                            slider's track rather than a second number
+ *  - Enum                  -> Off / On is a switch; up to four choices are a
+ *                            segmented control with every choice visible;
+ *                            more keep the steppers
+ *  - Action                -> a button as wide as its place (the panel sets
+ *                            actions side by side), filled or red when the
+ *                            HUD settings name it a primary or a danger control
+ *  - read-only 0..1        -> Yes / No
  *
  * Every label and value wraps within the space its row gives it and is clipped
  * to it (a Position / Velocity row's own label and value too: URammsAxisControl),
@@ -69,6 +98,31 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	FRammsControlAxis GetAxis() const { return Axis; }
+
+	/**
+	 * A control's name as the Sim look shows it. A name with no capital in it is
+	 * an identifier ("dw main plate l"), not one written for a reader: it gets a
+	 * capital, and a trailing side letter becomes "(L)" / "(R)". Any other name
+	 * is returned as it is.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	static FText SimLabel(const FText& Label);
+
+	/** A Text row's severity as last read (ERammsControlTextSeverity as a number); 0 for any other row. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	int32 GetTextSeverity() const { return TextValue ? TextSeverity : 0; }
+
+	/** A Text row's words as last read; empty for any other row. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FText GetTextWords() const;
+
+	/** As if choice Index of an Enum row were picked. */
+	UFUNCTION(BlueprintCallable, Category = "Control Surface")
+	void SelectEnum(int32 Index);
+
+	/** An Enum row's active choice as last read, or -1. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	int32 GetEnumIndex() const { return ShownEnumIndex; }
 
 	/** The slider's value (the target it shows), for Position / Velocity rows. */
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
@@ -130,6 +184,8 @@ private:
 	void OnEnumPrevClicked();
 	UFUNCTION()
 	void OnEnumNextClicked();
+	UFUNCTION()
+	void OnToggleClicked();
 
 	/** Step an Enum control's index, wrapping, and send it. */
 	void StepEnum(int32 Delta);
@@ -182,6 +238,32 @@ private:
 	/** The slider was seeded once from the live pose. */
 	bool bTargetSeeded = false;
 	void RefreshInternal(bool bPeriodic);
+	// --- Sim look ---------------------------------------------------------------
+
+	/** The row was built for the Sim look (the theme it had at Setup). */
+	bool bSimRow = false;
+	/** An Enum row's choice as last shown, so its widgets change only when it does. */
+	int32 ShownEnumIndex = -1;
+
+	/** Segmented control or switch for an editable Enum of up to four choices. */
+	void BuildChoiceRow(const FText& Label);
+	/** Colour the segments / place the switch for the active choice. */
+	void ApplyChoiceState();
+	void StyleStepButton(UButton* Button) const;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URammsControlRowChoice>> Choices;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UBorder>> SegmentBacks;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> SegmentLabels;
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> SegmentFrame;
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> ToggleTrack;
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> ToggleKnob;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> MinusButton;
 	UPROPERTY(Transient)

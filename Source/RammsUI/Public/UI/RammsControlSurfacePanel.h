@@ -16,6 +16,39 @@ class URammsCollapsibleContainer;
 class URammsControlRow;
 class URammsSurfaceJoystick;
 
+class URammsControlSurfacePanel;
+
+/** A tab of the robot panel (Sim look): its button, and the page of groups it shows. */
+UCLASS()
+class RAMMSUI_API URammsPanelTabEntry : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION()
+	void HandleClicked();
+
+	TWeakObjectPtr<URammsControlSurfacePanel> Panel;
+	FName									  Name;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UButton> Button;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> Label;
+	/** A dot beside the label while a status under this tab wants attention. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> Badge;
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> Underline;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> Page;
+	/** Every control on this tab's page, the ones drawn as a stick or a pad included. */
+	TArray<FName> ControlIds;
+	/** The rows on this tab's page, for its badge. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URammsControlRow>> Rows;
+};
+
 /**
  * Renders a robot's control surface, entirely from its description: one
  * collapsible section per group; a joystick for each pair of Continuous axes
@@ -85,6 +118,24 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
 	int32 GetRowCount() const { return Rows.Num(); }
+
+	// --- Sim look: tabs ---------------------------------------------------------
+
+	/** Show Tab's page (Sim look). Unknown names are ignored. */
+	UFUNCTION(BlueprintCallable, Category = "Control Surface")
+	void SelectTab(FName Tab);
+
+	/** The tab on show, or None in the Classic look. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FName GetSelectedTab() const { return bBuiltSim ? ShownTab : NAME_None; }
+
+	/** The tabs, in order (empty in the Classic look). */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	TArray<FName> GetTabNames() const;
+
+	/** The tab whose page holds ControlId (as a row, or as half of a stick or a pad), or None. */
+	UFUNCTION(BlueprintPure, Category = "Control Surface")
+	FName FindTabOfControl(FName ControlId) const;
 
 	/** Vertical scroll position of the groups list (tests). */
 	UFUNCTION(BlueprintPure, Category = "Control Surface")
@@ -158,6 +209,29 @@ private:
 
 	/** Lays a group's child out: inset from the group's edges. */
 	static void InsetInGroup(UWidget* Child, float Top = 2.0f, float Bottom = 2.0f);
+
+	// --- Sim look ---------------------------------------------------------------
+
+	/** The rows were built for the Sim look (the theme's, when Rebuild ran). */
+	bool bBuiltSim = false;
+	/** The tab the user picked. Kept across rebuilds, and while the robot does not have it. */
+	FName SelectedTab;
+	/** The tab on show: SelectedTab while the robot has it, the first tab otherwise. */
+	FName ShownTab;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UWrapBox> TabBar;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<URammsPanelTabEntry>> TabEntries;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> SectionLabels;
+
+	void BuildSimTabs(const struct FRammsControlSurface& Surface, const TArray<FName>& GroupOrder);
+	void BuildSimGroup(URammsPanelTabEntry* Tab, FName Group, const TArray<FRammsControlAxis>& Axes, bool bHeading);
+	/** A pair of axes as a joystick or a pad, captioned, in a cell the caller places. Null when Axis is not half of a pair. */
+	UWidget* MakePairCell(const FRammsControlAxis& Axis, const TArray<FRammsControlAxis>& Axes, TSet<FName>& Consumed, TArray<FName>& OutIds);
+	void	 StyleTabs();
+	void	 RefreshTabBadges();
 	/** A caption for a joystick or pad: small, secondary, wrapping. */
 	UTextBlock* MakeCaption(const FText& Text);
 

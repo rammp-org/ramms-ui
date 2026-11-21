@@ -91,6 +91,15 @@ void URammsJoystickWidget::ApplyStyle_Implementation()
 	ThumbActiveColor = Style->Colors.Info;
 	BackgroundColor = Style->Colors.Surface;
 	BackgroundColor.A = 0.5f;
+	if (Style->IsSimLook())
+	{
+		// There Primary is the dark fill under white text and the accent is Info: the knob is the accent,
+		// lighter while held, on a base that shows against a dark panel as well as over the scene.
+		ThumbColor = Style->Colors.Info;
+		ThumbActiveColor = FLinearColor::LerpUsingHSV(Style->Colors.Info, FLinearColor::White, 0.35f);
+		BackgroundColor = Style->Colors.Secondary;
+		BackgroundColor.A = 0.8f;
+	}
 
 	if (BackgroundImage)
 	{

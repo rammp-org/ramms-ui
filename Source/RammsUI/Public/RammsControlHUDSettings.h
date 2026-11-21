@@ -4,10 +4,25 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "UI/RammsUIStyle.h"
 #include "RammsControlHUDSettings.generated.h"
 
 class URammsLayoutBase;
-class URammsUIStyle;
+
+/** A tab of the robot panel in the Sim look: the control-surface groups it shows, in this order. */
+USTRUCT()
+struct FRammsHudTab
+{
+	GENERATED_BODY()
+
+	/** The tab's label. */
+	UPROPERTY(EditAnywhere, Category = "Tab")
+	FName Name;
+
+	/** Group names (FRammsControlAxis::Group) shown under this tab. */
+	UPROPERTY(EditAnywhere, Category = "Tab")
+	TArray<FName> Groups;
+};
 
 /**
  * Project Settings > Plugins > Ramms Control HUD. Governs the one spawn
@@ -113,6 +128,49 @@ public:
 	/** Theme; empty = the subsystem's current theme (or the default dark theme). */
 	UPROPERTY(Config, EditAnywhere, Category = "HUD")
 	TSoftObjectPtr<URammsUIStyle> Style;
+
+	// -- The Sim look ---------------------------------------------------------
+	//
+	// Opt-in, per project: Classic leaves the HUD exactly as it was.
+
+	/** How the HUD looks and lays itself out. Sim: the robot panel in tabs,
+	 *  one-line rows, segmented choices, a status strip and prompts, in the sim
+	 *  theme (URammsUIStyle::CreateSimTheme over Style's fonts). A Style asset
+	 *  whose own HudLook is Sim is used as it is, whatever this says. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	ERammsHudLook Look = ERammsHudLook::Classic;
+
+	/** The robot panel's tabs, in order. A group no tab names gets a tab of its
+	 *  own; a tab none of whose groups the robot has is left out. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	TArray<FRammsHudTab> Tabs;
+
+	/** Controls drawn as a group's main action (filled). Ids, with * as a wildcard. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	TArray<FString> PrimaryControls;
+
+	/** Controls drawn as stopping or destroying something (red). Ids, with * as a wildcard. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	TArray<FString> DangerControls;
+
+	/** Controls whose state the status strip shows as chips, in order: Enum
+	 *  and read-only controls. One the robot does not have is skipped. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	TArray<FName> StatusControls;
+
+	/** Action controls given a button on the panel tray, in order, so they are
+	 *  one click away whichever tab is showing. One the robot does not have is skipped. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	TArray<FName> TrayControls;
+
+	/** Show what a Text control reports as a prompt at the bottom of the screen
+	 *  while it wants attention (ERammsControlTextSeverity above Info): a crossing
+	 *  paused for the rider, a fault. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
+	bool bShowPrompts = true;
+
+	/** Whether Id is one of Patterns (ids; * matches any run of characters). */
+	static bool MatchesAny(const TArray<FString>& Patterns, FName Id);
 
 	virtual FName GetCategoryName() const override { return FName("Plugins"); }
 };

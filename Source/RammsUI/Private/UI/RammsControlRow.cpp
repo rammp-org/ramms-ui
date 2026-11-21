@@ -5,14 +5,48 @@
 #include "UI/RammsButton.h"
 #include "UI/RammsUIStyle.h"
 #include "RammsControlSink.h"
+#include "RammsControlHUDSettings.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+
+FText URammsControlRow::SimLabel(const FText& Label)
+{
+	// A name with no capital in it is an identifier some table supplied ("dw main plate l"), not one written
+	// for a reader: give it a capital and spell out a trailing side letter. A name someone wrote is left alone.
+	FString Name = Label.ToString();
+	if (Name.IsEmpty() || !Name.Equals(Name.ToLower(), ESearchCase::CaseSensitive))
+	{
+		return Label;
+	}
+	if (Name.EndsWith(TEXT(" l"), ESearchCase::CaseSensitive))
+	{
+		Name = Name.LeftChop(2) + TEXT(" (L)");
+	}
+	else if (Name.EndsWith(TEXT(" r"), ESearchCase::CaseSensitive))
+	{
+		Name = Name.LeftChop(2) + TEXT(" (R)");
+	}
+	Name[0] = FChar::ToUpper(Name[0]);
+	return FText::FromString(Name);
+}
+
+void URammsControlRowChoice::HandleClicked()
+{
+	if (URammsControlRow* Target = Row.Get())
+	{
+		Target->SelectEnum(Index);
+	}
+}
 
 void URammsControlRow::BuildWidgetTree()
 {
@@ -34,6 +68,12 @@ void URammsControlRow::ResetCachedWidgets()
 	ActionButton = nullptr;
 	EnumValue = nullptr;
 	TextValue = nullptr;
+	Choices.Reset();
+	SegmentBacks.Reset();
+	SegmentLabels.Reset();
+	SegmentFrame = nullptr;
+	ToggleTrack = ToggleKnob = nullptr;
+	ShownEnumIndex = -1;
 	RateLabel = RateValue = LiveLabel = LiveValue = MinusLabel = PlusLabel = nullptr;
 	MinusButton = PlusButton = nullptr;
 	ActionButton = nullptr;
@@ -95,16 +135,228 @@ UButton* URammsControlRow::MakeHoldButton(const TCHAR* Name, const TCHAR* Label,
 	OutLabel->SetJustification(ETextJustify::Center);
 	Button->AddChild(OutLabel);
 	USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *FString::Printf(TEXT("%sBox"), Name));
-	Box->SetWidthOverride(44.0f);
-	Box->SetHeightOverride(36.0f);
+	Box->SetWidthOverride(bSimRow ? 34.0f : 44.0f);
+	Box->SetHeightOverride(bSimRow ? 34.0f : 36.0f);
 	Box->AddChild(Button);
 	UHorizontalBoxSlot* BoxSlot = RootBox->AddChildToHorizontalBox(Box);
 	if (BoxSlot)
 	{
-		BoxSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+		BoxSlot->SetPadding(FMargin(bSimRow ? 6.0f : 4.0f, 0.0f, 0.0f, 0.0f));
 		BoxSlot->SetVerticalAlignment(VAlign_Center);
 	}
 	return Button;
+}
+
+void URammsControlRow::StyleStepButton(UButton* Button) const
+{
+	if (!Button || !Style || !bSimRow)
+	{
+		return;
+	}
+	// The engine's default button is light grey, which white marks do not read on. A control's own surface
+	// with an outline, like every other button of the look.
+	const float	 R = Style->Border.CornerRadiusMedium;
+	FButtonStyle ButtonStyle;
+	ButtonStyle.SetNormal(FSlateRoundedBoxBrush(Style->Colors.Secondary, R, Style->Colors.Border, Style->Border.BorderWidth));
+	ButtonStyle.SetHovered(
+		FSlateRoundedBoxBrush(URammsUIStyle::Lighten(Style->Colors.Secondary, 0.08f), R, Style->Colors.Border, Style->Border.BorderWidth));
+	ButtonStyle.SetPressed(FSlateRoundedBoxBrush(Style->Colors.Primary, R));
+	ButtonStyle.SetDisabled(FSlateRoundedBoxBrush(FLinearColor::Transparent, R, Style->Colors.Border, Style->Border.BorderWidth));
+	ButtonStyle.SetNormalPadding(FMargin(0.0f));
+	ButtonStyle.SetPressedPadding(FMargin(0.0f));
+	Button->SetStyle(ButtonStyle);
+}
+
+void URammsControlRow::BuildChoiceRow(const FText& Label)
+{
+	const int32 Count = Axis.EnumLabels.Num();
+	const auto	IsWord = [this](int32 I, const TCHAR* Word) {
+		 return Axis.EnumLabels[I].ToString().TrimStartAndEnd().Equals(Word, ESearchCase::IgnoreCase);
+	};
+	RateLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumLabel"));
+	RateLabel->SetText(Label);
+	RateLabel->SetAutoWrapText(true);
+	RateLabel->SetClipping(EWidgetClipping::ClipToBounds);
+	if (!Axis.bReadback)
+	{
+		// Nothing will ever read the choice back: show the one the control starts at, then whatever is picked.
+		ShownEnumIndex = FMath::Clamp(FMath::RoundToInt(Axis.DefaultValue), 0, Count - 1);
+	}
+
+	if (Count == 2 && IsWord(0, TEXT("Off")) && IsWord(1, TEXT("On")))
+	{
+		// Off / On: a switch. The label says what it switches; the switch says which way it is.
+		if (UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(RateLabel))
+		{
+			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		UButton* Toggle = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Toggle"));
+		Toggle->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
+		USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ToggleBox"));
+		Box->SetWidthOverride(42.0f);
+		Box->SetHeightOverride(24.0f);
+		UOverlay* Stack = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("ToggleStack"));
+		ToggleTrack = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ToggleTrack"));
+		ToggleTrack->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UOverlaySlot* TrackSlot = Stack->AddChildToOverlay(ToggleTrack))
+		{
+			TrackSlot->SetHorizontalAlignment(HAlign_Fill);
+			TrackSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+		ToggleKnob = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ToggleKnob"));
+		ToggleKnob->SetVisibility(ESlateVisibility::HitTestInvisible);
+		ToggleKnob->SetPadding(FMargin(9.0f)); // a border has no size of its own: 18 across
+		if (UOverlaySlot* KnobSlot = Stack->AddChildToOverlay(ToggleKnob))
+		{
+			KnobSlot->SetHorizontalAlignment(HAlign_Left);
+			KnobSlot->SetVerticalAlignment(VAlign_Center);
+			KnobSlot->SetPadding(FMargin(3.0f, 0.0f));
+		}
+		Box->AddChild(Stack);
+		Toggle->AddChild(Box);
+		Toggle->OnClicked.AddUniqueDynamic(this, &URammsControlRow::OnToggleClicked);
+		if (UHorizontalBoxSlot* ToggleSlot = RootBox->AddChildToHorizontalBox(Toggle))
+		{
+			ToggleSlot->SetPadding(FMargin(6.0f, 5.0f, 0.0f, 5.0f));
+			ToggleSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		return;
+	}
+
+	// Every choice on show, the active one filled: one click to any of them, and no stepping round to find
+	// out what the others are.
+	int32 Chars = 0;
+	for (const FText& Choice : Axis.EnumLabels)
+	{
+		Chars += Choice.ToString().Len();
+	}
+	SegmentFrame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Segments"));
+	SegmentFrame->SetPadding(FMargin(2.0f));
+	UHorizontalBox* Segments = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SegmentRow"));
+	SegmentFrame->AddChild(Segments);
+	for (int32 I = 0; I < Count; ++I)
+	{
+		UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+		Button->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
+		UBorder* Back = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Back->SetPadding(FMargin(4.0f, 7.0f));
+		Back->SetHorizontalAlignment(HAlign_Fill); // the label's cell is the segment's width, so it can wrap in it
+		Back->SetVerticalAlignment(VAlign_Center);
+		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Text->SetText(Axis.EnumLabels[I]);
+		Text->SetJustification(ETextJustify::Center);
+		// Like every label of a row: wrapped in its cell and clipped to it, never drawn over the next choice.
+		Text->SetAutoWrapText(true);
+		Text->SetClipping(EWidgetClipping::ClipToBounds);
+		Back->AddChild(Text);
+		Button->AddChild(Back);
+		if (UButtonSlot* InButton = Cast<UButtonSlot>(Back->Slot))
+		{
+			InButton->SetHorizontalAlignment(HAlign_Fill);
+			InButton->SetVerticalAlignment(VAlign_Fill);
+			InButton->SetPadding(FMargin(0.0f));
+		}
+		URammsControlRowChoice* Choice = NewObject<URammsControlRowChoice>(this);
+		Choice->Row = this;
+		Choice->Index = I;
+		Button->OnClicked.AddUniqueDynamic(Choice, &URammsControlRowChoice::HandleClicked);
+		if (UHorizontalBoxSlot* SegmentSlot = Segments->AddChildToHorizontalBox(Button))
+		{
+			SegmentSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+		Choices.Add(Choice);
+		SegmentBacks.Add(Back);
+		SegmentLabels.Add(Text);
+	}
+	if (Count <= 3 && Chars <= 18)
+	{
+		// Short enough to share a line with its label.
+		USizeBox* LabelBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("EnumLabelBox"));
+		LabelBox->SetWidthOverride(120.0f);
+		LabelBox->AddChild(RateLabel);
+		if (UHorizontalBoxSlot* LabelSlot = RootBox->AddChildToHorizontalBox(LabelBox))
+		{
+			LabelSlot->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		if (UHorizontalBoxSlot* FrameSlot = RootBox->AddChildToHorizontalBox(SegmentFrame))
+		{
+			FrameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			FrameSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
+	else
+	{
+		UVerticalBox* Column = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("EnumColumn"));
+		Column->AddChildToVerticalBox(RateLabel);
+		if (UVerticalBoxSlot* FrameSlot = Column->AddChildToVerticalBox(SegmentFrame))
+		{
+			FrameSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 0.0f));
+		}
+		if (UHorizontalBoxSlot* ColumnSlot = RootBox->AddChildToHorizontalBox(Column))
+		{
+			ColumnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
+}
+
+void URammsControlRow::ApplyChoiceState()
+{
+	if (!Style)
+	{
+		return;
+	}
+	const float R = FMath::Max(Style->Border.CornerRadiusMedium - 1.0f, 0.0f);
+	for (int32 I = 0; I < SegmentBacks.Num(); ++I)
+	{
+		const bool bActive = I == ShownEnumIndex;
+		if (SegmentBacks[I])
+		{
+			URammsUIStyle::ApplyRoundedBrushToBorder(SegmentBacks[I],
+				URammsUIStyle::MakeRoundedBoxBrush(bActive ? Style->Colors.Primary : FLinearColor::Transparent, R));
+		}
+		if (SegmentLabels.IsValidIndex(I) && SegmentLabels[I])
+		{
+			SegmentLabels[I]->SetColorAndOpacity(FSlateColor(bActive ? FLinearColor::White : Style->Colors.TextSecondary));
+		}
+	}
+	if (ToggleTrack && ToggleKnob)
+	{
+		const bool bOn = ShownEnumIndex == 1;
+		URammsUIStyle::ApplyRoundedBrushToBorder(ToggleTrack,
+			URammsUIStyle::MakeRoundedBoxBrush(bOn ? Style->Colors.Primary : Style->Slider.TrackColor, 12.0f));
+		URammsUIStyle::ApplyRoundedBrushToBorder(ToggleKnob, URammsUIStyle::MakeRoundedBoxBrush(FLinearColor::White, 9.0f));
+		if (UOverlaySlot* KnobSlot = Cast<UOverlaySlot>(ToggleKnob->Slot))
+		{
+			KnobSlot->SetHorizontalAlignment(bOn ? HAlign_Right : HAlign_Left);
+		}
+	}
+}
+
+void URammsControlRow::SelectEnum(int32 Index)
+{
+	if (!Sink || Axis.Kind != ERammsControlKind::Enum || Axis.bReadOnly || !Axis.EnumLabels.IsValidIndex(Index))
+	{
+		return;
+	}
+	LastUserInputTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	IRammsControlSink::Execute_SetAxis(Sink, Axis.Id, static_cast<float>(Index), Source);
+	// Shown at once; the readback then confirms it, or puts back whatever the robot kept.
+	ShownEnumIndex = Index;
+	ApplyChoiceState();
+}
+
+void URammsControlRow::OnToggleClicked()
+{
+	// The other of the two, by the same path as a segment: shown at once, and held for a moment against a
+	// readback that has not caught up.
+	SelectEnum(ShownEnumIndex == 1 ? 0 : 1);
+}
+
+FText URammsControlRow::GetTextWords() const
+{
+	return TextValue ? TextValue->GetText() : FText::GetEmpty();
 }
 
 void URammsControlRow::NativeDestruct()
@@ -143,8 +395,18 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 	RateLabel = RateValue = LiveLabel = LiveValue = MinusLabel = PlusLabel = nullptr;
 	MinusButton = PlusButton = nullptr;
 	TextSeverity = 0;
+	Choices.Reset();
+	SegmentBacks.Reset();
+	SegmentLabels.Reset();
+	SegmentFrame = nullptr;
+	ToggleTrack = ToggleKnob = nullptr;
+	ShownEnumIndex = -1;
+	// The look is fixed here, with the row's parts: a theme that changes it later needs the row set up again
+	// (the panel rebuilds its rows when its theme's look changes).
+	bSimRow = URammsUIStyle::UsesSimLook(Style);
 
-	const FText Label = Axis.DisplayName.IsEmpty() ? FText::FromName(Axis.Id) : Axis.DisplayName;
+	const FText RawLabel = Axis.DisplayName.IsEmpty() ? FText::FromName(Axis.Id) : Axis.DisplayName;
+	const FText Label = bSimRow ? SimLabel(RawLabel) : RawLabel;
 	// Words wrap inside the space their slot gives them and never draw past it: a
 	// long label or choice makes its row taller instead of running over the value,
 	// the buttons or the next row.
@@ -173,6 +435,10 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 			ColumnSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 			ColumnSlot->SetPadding(FMargin(0.0f, 2.0f));
 		}
+	}
+	else if (bSimRow && Axis.Kind == ERammsControlKind::Enum && !Axis.bReadOnly && Axis.EnumLabels.Num() >= 2 && Axis.EnumLabels.Num() <= 4)
+	{
+		BuildChoiceRow(Label);
 	}
 	else if (Axis.Kind == ERammsControlKind::Enum && Axis.EnumLabels.Num() > 0)
 	{
@@ -245,6 +511,20 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		if (BoxSlot)
 		{
 			BoxSlot->SetPadding(FMargin(0.0f, 2.0f));
+		}
+		if (bSimRow)
+		{
+			// As wide as the place the panel gives it (actions sit side by side), and one of three weights:
+			// what the settings name a group's main action is filled, what they name a stop or a reset is red.
+			if (BoxSlot)
+			{
+				BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			}
+			ActionButton->SetContentPadding(FMargin(10.0f, 9.0f));
+			const URammsControlHUDSettings* Settings = GetDefault<URammsControlHUDSettings>();
+			ActionButton->SetVariant(URammsControlHUDSettings::MatchesAny(Settings->DangerControls, Axis.Id) ? ERammsButtonVariant::Error
+					: URammsControlHUDSettings::MatchesAny(Settings->PrimaryControls, Axis.Id)				 ? ERammsButtonVariant::Primary
+																											 : ERammsButtonVariant::Secondary);
 		}
 	}
 	else if (Axis.Kind == ERammsControlKind::Continuous && !Axis.bReadOnly)
@@ -342,7 +622,8 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 		// The slider and its value are the TARGET (set by the user, initialised
 		// from the live pose once); this column is the live readback, which
 		// keeps moving while the motor gets there.
-		if (Axis.bReadback)
+		// (Not in the Sim look: there the live reading is a mark on the slider's own track.)
+		if (Axis.bReadback && !bSimRow)
 		{
 			UVerticalBox* Live = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("LiveColumn"));
 			LiveLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LiveLabel"));
@@ -403,16 +684,43 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 		}
 		return;
 	}
+	if (SegmentBacks.Num() > 0 || ToggleTrack)
+	{
+		// Left alone for a moment after a pick, so a choice applied a tick later is not flicked back first.
+		const int32 Index = FMath::Clamp(FMath::RoundToInt(Value), 0, Axis.EnumLabels.Num() - 1);
+		if (Index != ShownEnumIndex && Now - LastUserInputTime >= ReadbackHoldOff)
+		{
+			ShownEnumIndex = Index;
+			ApplyChoiceState();
+		}
+		return;
+	}
 	if (EnumValue)
 	{
 		// The value IS the index, so the row always shows whatever is actually
 		// live -- including a change made by something other than this row.
 		const int32 Index = FMath::Clamp(FMath::RoundToInt(Value), 0, Axis.EnumLabels.Num() - 1);
+		ShownEnumIndex = Index;
 		EnumValue->SetText(Axis.EnumLabels.IsValidIndex(Index) ? Axis.EnumLabels[Index] : FText::GetEmpty());
 		return;
 	}
 	if (Axis.bReadOnly && RateValue)
 	{
+		if (bSimRow && Axis.Units == ERammsControlUnits::Normalized && FMath::IsNearlyEqual(Axis.Range.X, 0.0) && FMath::IsNearlyEqual(Axis.Range.Y, 1.0))
+		{
+			// A 0..1 reading with no units is a state ("Closed", "Stowed"), not a quantity: say which, and
+			// only give the number while it is in between.
+			const bool bYes = Value >= 0.99f;
+			const bool bNo = Value <= 0.01f;
+			RateValue->SetText(bYes ? NSLOCTEXT("RammsUI", "StateYes", "\u25CF Yes")
+					: bNo			? NSLOCTEXT("RammsUI", "StateNo", "\u25CB No")
+									: FText::FromString(FString::Printf(TEXT("%.0f%%"), Value * 100.0f)));
+			if (Style)
+			{
+				RateValue->SetColorAndOpacity(FSlateColor(bYes ? Style->Colors.Success : Style->Colors.TextSecondary));
+			}
+			return;
+		}
 		RateValue->SetText(FText::FromString(FString::Printf(TEXT("%+.*f %s"), Decimals(), Value, *UnitsText().ToString())));
 	}
 	else if (AxisControl)
@@ -448,6 +756,10 @@ void URammsControlRow::RefreshInternal(bool bPeriodic)
 		if (LiveValue)
 		{
 			LiveValue->SetText(FText::FromString(FString::Printf(TEXT("%+.*f %s"), Decimals(), Value, *UnitsText().ToString())));
+		}
+		if (bSimRow)
+		{
+			AxisControl->SetLiveValue(Value);
 		}
 	}
 	else if (RateValue)
@@ -520,6 +832,13 @@ void URammsControlRow::ApplyStyle_Implementation()
 	{
 		return;
 	}
+	if (Style->IsSimLook() != bSimRow && Sink && RootBox)
+	{
+		// A theme of the other look after the row was set up: its parts are that look's, so set it up again.
+		// (Setup ends by applying the style, with the looks then agreeing.)
+		Setup(Sink, Axis, Source);
+		return;
+	}
 	if (AxisControl)
 	{
 		AxisControl->SetStyle(Style);
@@ -558,6 +877,28 @@ void URammsControlRow::ApplyStyle_Implementation()
 	{
 		RateValue->SetFont(Style->Typography.Monospace); // constant digit widths
 		RateValue->SetColorAndOpacity(FSlateColor(Style->Colors.TextSecondary));
+	}
+	if (bSimRow)
+	{
+		StyleStepButton(MinusButton);
+		StyleStepButton(PlusButton);
+		if (EnumValue)
+		{
+			// A state among the rows, not the one accent on the panel: plain text.
+			EnumValue->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+		}
+		if (SegmentFrame)
+		{
+			URammsUIStyle::ApplyRoundedBrushToBorder(SegmentFrame, URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Secondary, Style->Border.CornerRadiusMedium, Style->Colors.Border, Style->Border.BorderWidth));
+		}
+		for (UTextBlock* Text : SegmentLabels)
+		{
+			if (Text)
+			{
+				Text->SetFont(Style->Typography.Caption);
+			}
+		}
+		ApplyChoiceState();
 	}
 	if (TextValue)
 	{

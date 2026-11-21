@@ -85,6 +85,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Axis Control")
 	void SetIcon(UTexture2D* NewIcon);
 
+	/**
+	 * One line -- label, −, the slider on a track with a fill and a live mark, +,
+	 * and the value, which resets on a click -- instead of the two-line layout.
+	 * The theme decides, each time it is applied: on for one with the Sim look
+	 * (ERammsHudLook), off otherwise. A call here holds until then, and is styled
+	 * by the theme the control has.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Axis Control")
+	void SetCompactLayout(bool bInCompact);
+
+	UFUNCTION(BlueprintPure, Category = "Axis Control")
+	bool IsCompactLayout() const { return bCompactLayout; }
+
+	/** Compact layout: mark Value on the track -- where the thing is now, against the thumb's target. */
+	UFUNCTION(BlueprintCallable, Category = "Axis Control")
+	void SetLiveValue(float Value);
+
+	/** Compact layout: no live mark. */
+	UFUNCTION(BlueprintCallable, Category = "Axis Control")
+	void ClearLiveValue();
+
+	/** Compact layout: width of the label's column. A longer label wraps. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis Control|Compact")
+	float CompactLabelWidth = 120.0f;
+
+	/** Compact layout: width of the value's column, fixed so a changing number never moves the slider. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Axis Control|Compact")
+	float CompactValueWidth = 72.0f;
+
 	// ── Lifecycle ──────────────────────────────────────────────────
 
 	virtual void NativeOnInitialized() override;
@@ -148,6 +177,52 @@ protected:
 	TObjectPtr<UTextBlock> IncrementLabel;
 
 	// ── Internal Helpers ───────────────────────────────────────────
+
+	bool bCompactLayout = false;
+	/** The slider's handle indent as the engine made it, for the classic arrangement. */
+	bool bClassicIndentHandle = false;
+	/** The compact arrangement set the reset button's tooltip (so the classic one knows to clear it). */
+	bool bCompactTipSet = false;
+	/** The track inset the compact arrangement was laid out with (half the theme's thumb). */
+	float ArrangedInset = -1.0f;
+	bool  bHasLiveValue = false;
+	float LiveValue = 0.0f;
+	/** What UpdateTrackDecor last drew (value, zero point, live mark, slider shown), to skip no-op updates. */
+	FVector4 TrackDrawn = FVector4(-1.0, -1.0, -1.0, -1.0);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> RightVBox;
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> InfoRow;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> LabelSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<USizeBox> ValueSizeBox;
+	UPROPERTY(Transient)
+	TObjectPtr<class UOverlay> SliderOverlay;
+	UPROPERTY(Transient)
+	TObjectPtr<class UBorder> TrackBar;
+	UPROPERTY(Transient)
+	TObjectPtr<class UBorder> NegFill;
+	UPROPERTY(Transient)
+	TObjectPtr<class UBorder> PosFill;
+	UPROPERTY(Transient)
+	TObjectPtr<class UBorder> LiveMark;
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> FillRow;
+	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> LiveRow;
+	UPROPERTY(Transient)
+	TObjectPtr<class USpacer> LiveBefore;
+	UPROPERTY(Transient)
+	TObjectPtr<class USpacer> LiveAfter;
+
+	/** Make the parts only the compact arrangement uses (once). */
+	void EnsureCompactParts();
+	/** Place the parts BuildWidgetTree made, in the classic or the compact arrangement. */
+	void ArrangeLayout();
+	/** Compact layout: size the fill and place the live mark for the current values. */
+	void UpdateTrackDecor();
 
 	void UpdateValueDisplay();
 	void UpdateSliderFromValue();

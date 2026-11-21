@@ -262,6 +262,35 @@ The robot HUD's default layout (`URammsSimLayout`, spawned by `URammsControlHUDS
 - **Console:** `ramms.UI.ResetLayout` and `ramms.UI.Panels [show|hide|toggle]`.
 - **Pop-outs** are desktop only. They are turned off by `URammsControlHUDSettings::bAllowPopOut` and whenever the command line asks for Pixel Streaming, which streams only the game viewport. Keyboard focus moves into a popped-out window when you click it, so click back into the game view to drive with the keyboard.
 
+### The Sim look — `ERammsHudLook`
+
+The HUD has two looks. **Classic** is the default and is what every project had before the switch existed. **Sim** is opt-in, per project:
+
+```ini
+; Config/DefaultGame.ini
+[/Script/RammsUI.RammsControlHUDSettings]
+Look=Sim
+```
+
+The look is a property of the theme (`URammsUIStyle::HudLook`), so the shared widgets a theme styles follow it and nothing changes for a widget whose theme does not ask. With `Look=Sim` the HUD builds its theme with `URammsUIStyle::CreateSimTheme`: a copy of the `Style` asset (for its fonts, and whatever the look does not set) with the Sim look's tokens over it. A theme asset whose own `HudLook` is Sim is used as it is (`ApplySimLook` turns one into the other in the editor). The HUD stays in the Sim look when `URammsUISubsystem::SetTheme` changes the theme of everything else.
+
+What the Sim look changes:
+
+- **Robot panel in tabs.** `URammsControlHUDSettings::Tabs` maps control-surface groups to tabs (Drive, Curb, Chassis, Arm, View, Sim by default). A group no tab names gets a tab of its own; a tab the robot has nothing for is left out. A tab shows a dot while a status under it wants attention.
+- **One-line rows.** A slider row is label, −, slider, +, value. The slider has a track and a fill; an amber tick marks the live reading against the thumb's target. Clicking the value resets it.
+- **Choices on show.** An Off / On control is a switch. An Enum of up to four choices is a segmented control. Longer ones keep the steppers.
+- **Actions side by side**, two or three to a line, in three weights: `PrimaryControls` are filled, `DangerControls` are red, the rest are plain. Both lists take control ids with `*` as a wildcard.
+- **Sticks and pads two to a line**, each with its caption under it.
+- **Status strip (top left):** a chip per control in `StatusControls` that the robot has (`drive.mode`, `curb.phase`, `sim.running` by default). The strip, the prompts and the tray's buttons follow the robot the panel shows, and exist only in the floating layout.
+- **Prompts (bottom centre):** what a Text control reports while its severity is above Info, such as a crossing paused for the rider. `bShowPrompts` turns them off.
+- **Tray actions:** a button on the panel tray per Action control in `TrayControls` (`sim.pause` by default), and "Reset layout" in place of "Reset".
+- **Theme:** dark surfaces with outlined buttons whose text meets WCAG AA, smaller type, and tighter touch targets.
+- **Camera capture panel:** one line saying there is no camera, in place of controls with nothing to act on.
+
+The lists have defaults in code. To empty one, clear it in the ini before adding to it: `!StatusControls=ClearArray`.
+
+`URammsControlSurfacePanel` adds `SelectTab`, `GetSelectedTab`, `GetTabNames` and `FindTabOfControl`; `FindRow` finds a row on any tab. `URammsSimLayout` adds `GetStatusChips`, `GetPrompts` and `TriggerControl`.
+
 Content can take part in the chrome by implementing `IRammsFloatingPanelContent`: it supplies the title-bar text and drops its own frame while hosted. `URammsControlSurfacePanel` and `URammsCameraCapturePanel` both do.
 
 **Panels from components.** A component on the controlled pawn that implements `IRammsHUDPanelProvider` (RammsControl) offers panels as Slate content, and says whether each is wanted now. The layout hosts each one in a floating panel, wrapped in a `URammsSlateHostWidget`, and shows it while it is wanted. The curb controller's "Curb view" graphs come in this way.

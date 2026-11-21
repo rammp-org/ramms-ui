@@ -55,7 +55,9 @@ void URammsSurfacePositionPad::ApplyStyle_Implementation()
 	// the authored translucency, since a solid outline reads as a wall rather
 	// than as the edge of somewhere you can go.
 	const float RegionAlpha = RegionColor.A;
-	RegionColor = Style->Colors.Border;
+	// (In the Sim look the border colour is a hairline on a dark panel, too faint for an outline that is
+	// the whole of what the pad shows of its reach: the disabled-text grey, which is drawn to be read.)
+	RegionColor = Style->IsSimLook() ? Style->Colors.TextDisabled : Style->Colors.Border;
 	RegionColor.A = RegionAlpha;
 	// Live is where the mechanism IS and target is where it was told to go;
 	// Info and Warning are the palette's readback and pending pair.

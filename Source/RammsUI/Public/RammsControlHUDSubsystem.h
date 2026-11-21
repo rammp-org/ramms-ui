@@ -9,6 +9,7 @@
 class APlayerController;
 class URammsControlSurfacePanel;
 class URammsLayoutHost;
+class URammsUIStyle;
 class URammsSurfaceJoystick;
 class URammsCameraCapturePanel;
 
@@ -61,6 +62,9 @@ public:
 private:
 	UFUNCTION()
 	void OnRegistryChanged(UObject* Provider, bool bRegistered);
+	/** URammsUISubsystem gave every live widget a new theme, the HUD's included. */
+	UFUNCTION()
+	void HandleThemeChanged(URammsUIStyle* NewStyle);
 
 	void TrySpawn();
 

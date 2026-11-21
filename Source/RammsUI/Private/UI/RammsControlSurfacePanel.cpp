@@ -9,13 +9,18 @@
 #include "RammsControlSink.h"
 #include "RammsControlSurfaceProvider.h"
 #include "RammsControlSurfaceRegistry.h"
+#include "RammsControlHUDSettings.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/Button.h"
+#include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -35,7 +40,43 @@ namespace
 		Name.RemoveFromEnd(TEXT("_C"));
 		return FText::FromString(FName::NameToDisplayString(Name, /*bIsBool=*/false));
 	}
+
+	/** A pair's caption in the Sim look. Names that start alike say the shared part once:
+	 *  "Seat height" and "Seat fore/aft" -> "Seat: height × fore/aft". */
+	FText PairCaption(const FText& Vertical, const FText& Horizontal)
+	{
+		TArray<FString> A, B;
+		Vertical.ToString().ParseIntoArrayWS(A);
+		Horizontal.ToString().ParseIntoArrayWS(B);
+		int32 Shared = 0;
+		while (Shared < A.Num() - 1 && Shared < B.Num() - 1 && A[Shared].Equals(B[Shared], ESearchCase::CaseSensitive))
+		{
+			++Shared;
+		}
+		const auto Join = [](const TArray<FString>& Words, int32 From, int32 To) {
+			FString Out;
+			for (int32 I = From; I < To; ++I)
+			{
+				Out += (Out.IsEmpty() ? TEXT("") : TEXT(" ")) + Words[I];
+			}
+			return Out;
+		};
+		if (Shared == 0)
+		{
+			return FText::FromString(FString::Printf(TEXT("%s \u00D7 %s"), *Vertical.ToString(), *Horizontal.ToString()));
+		}
+		return FText::FromString(
+			FString::Printf(TEXT("%s: %s \u00D7 %s"), *Join(A, 0, Shared), *Join(A, Shared, A.Num()), *Join(B, Shared, B.Num())));
+	}
 } // namespace
+
+void URammsPanelTabEntry::HandleClicked()
+{
+	if (URammsControlSurfacePanel* Target = Panel.Get())
+	{
+		Target->SelectTab(Name);
+	}
+}
 
 void URammsControlSurfacePanel::BuildWidgetTree()
 {
@@ -63,6 +104,14 @@ void URammsControlSurfacePanel::BuildWidgetTree()
 		TitleSlot->SetPadding(FMargin(4.0f, 2.0f, 4.0f, 6.0f));
 	}
 
+	// Sim look: the tabs. Empty and collapsed otherwise.
+	TabBar = WidgetTree->ConstructWidget<UWrapBox>(UWrapBox::StaticClass(), TEXT("TabBar"));
+	TabBar->SetVisibility(ESlateVisibility::Collapsed);
+	if (UVerticalBoxSlot* TabSlot = MainVBox->AddChildToVerticalBox(TabBar))
+	{
+		TabSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+	}
+
 	GroupsScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("GroupsScroll"));
 	GroupsScroll->SetConsumeMouseWheel(EConsumeMouseWheel::Never); // the panel handles the wheel itself (NativeOnMouseWheel)
 	UVerticalBoxSlot* ScrollSlot = MainVBox->AddChildToVerticalBox(GroupsScroll);
@@ -81,6 +130,9 @@ void URammsControlSurfacePanel::ResetCachedWidgets()
 	TitleText = nullptr;
 	GroupsScroll = nullptr;
 	GroupsVBox = nullptr;
+	TabBar = nullptr;
+	TabEntries.Reset();
+	SectionLabels.Reset();
 	Groups.Reset();
 	Rows.Reset();
 	Captions.Reset();
@@ -194,6 +246,14 @@ void URammsControlSurfacePanel::Rebuild()
 	Captions.Reset();
 	Joysticks.Reset();
 	Pads.Reset();
+	TabEntries.Reset();
+	SectionLabels.Reset();
+	if (TabBar)
+	{
+		TabBar->ClearChildren();
+		TabBar->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	bBuiltSim = URammsUIStyle::UsesSimLook(Style);
 
 	if (!ResolveSurface())
 	{
@@ -222,6 +282,12 @@ void URammsControlSurfacePanel::Rebuild()
 	{
 		GroupOrder.AddUnique(Axis.Group);
 	}
+	if (bBuiltSim)
+	{
+		BuildSimTabs(Surface, GroupOrder);
+		ApplyStyle();
+		return;
+	}
 	for (const FName& Group : GroupOrder)
 	{
 		TArray<FRammsControlAxis> Axes;
@@ -234,6 +300,435 @@ void URammsControlSurfacePanel::Rebuild()
 		BuildGroup(Group, Axes);
 	}
 	ApplyStyle();
+}
+
+// --- Sim look: tabs of groups ------------------------------------------------
+
+void URammsControlSurfacePanel::BuildSimTabs(const FRammsControlSurface& Surface, const TArray<FName>& GroupOrder)
+{
+	// Which groups go under which tab: the settings' tabs in their order, each with the groups of its that
+	// this robot has; then a tab apiece for any group no tab names, in the surface's order.
+	struct FTabPlan
+	{
+		FName		  Name;
+		TArray<FName> Groups;
+	};
+	const auto HasAxes = [&Surface](FName Group) {
+		return Surface.Axes.ContainsByPredicate([Group](const FRammsControlAxis& Axis) { return Axis.Group == Group; });
+	};
+	TArray<FTabPlan> Plan;
+	TSet<FName>		 Claimed;
+	for (const FRammsHudTab& Configured : GetDefault<URammsControlHUDSettings>()->Tabs)
+	{
+		FTabPlan Tab;
+		Tab.Name = Configured.Name;
+		for (const FName& Group : Configured.Groups)
+		{
+			if (!Claimed.Contains(Group) && GroupOrder.Contains(Group) && HasAxes(Group))
+			{
+				Tab.Groups.Add(Group);
+				Claimed.Add(Group);
+			}
+		}
+		FTabPlan* Same = Plan.FindByPredicate([&Tab](const FTabPlan& Other) { return Other.Name == Tab.Name; });
+		if (Tab.Groups.Num() > 0 && Same)
+		{
+			Same->Groups.Append(Tab.Groups); // two tabs of one name are one tab: a name is what picks it
+		}
+		else if (Tab.Groups.Num() > 0 && !Tab.Name.IsNone())
+		{
+			Plan.Add(MoveTemp(Tab));
+		}
+		else
+		{
+			// A tab left out gives its groups back, so they still get a place.
+			for (const FName& Group : Tab.Groups)
+			{
+				Claimed.Remove(Group);
+			}
+		}
+	}
+	for (const FName& Group : GroupOrder)
+	{
+		if (!Claimed.Contains(Group) && HasAxes(Group))
+		{
+			// Under the tab of its own name if there is one (a "View" group the View tab does not list).
+			if (FTabPlan* Same = Plan.FindByPredicate([Group](const FTabPlan& Other) { return Other.Name == Group; }))
+			{
+				Same->Groups.Add(Group);
+				continue;
+			}
+			FTabPlan Tab;
+			Tab.Name = Group;
+			Tab.Groups.Add(Group);
+			Plan.Add(MoveTemp(Tab));
+		}
+	}
+
+	for (const FTabPlan& Tab : Plan)
+	{
+		URammsPanelTabEntry* Entry = NewObject<URammsPanelTabEntry>(this);
+		Entry->Panel = this;
+		Entry->Name = Tab.Name;
+
+		// The tab: its name, a dot when something under it wants attention, and a line under the one on show.
+		Entry->Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+		Entry->Button->SetStyle(URammsUIStyle::MakeTransparentButtonStyle());
+		UVerticalBox*	Stack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+		UHorizontalBox* Words = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		Entry->Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Entry->Label->SetText(FText::FromName(Tab.Name));
+		Words->AddChildToHorizontalBox(Entry->Label);
+		Entry->Badge = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Entry->Badge->SetText(FText::FromString(TEXT("\u25CF")));
+		Entry->Badge->SetVisibility(ESlateVisibility::Collapsed);
+		if (UHorizontalBoxSlot* BadgeSlot = Words->AddChildToHorizontalBox(Entry->Badge))
+		{
+			BadgeSlot->SetPadding(FMargin(4.0f, 0.0f, 0.0f, 0.0f));
+			BadgeSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		if (UVerticalBoxSlot* WordsSlot = Stack->AddChildToVerticalBox(Words))
+		{
+			WordsSlot->SetPadding(FMargin(10.0f, 6.0f, 10.0f, 5.0f));
+			WordsSlot->SetHorizontalAlignment(HAlign_Center);
+		}
+		Entry->Underline = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Entry->Underline->SetPadding(FMargin(0.0f, 1.0f)); // a border has no size of its own: 2 high
+		Stack->AddChildToVerticalBox(Entry->Underline);
+		Entry->Button->AddChild(Stack);
+		Entry->Button->OnClicked.AddUniqueDynamic(Entry, &URammsPanelTabEntry::HandleClicked);
+		TabBar->AddChildToWrapBox(Entry->Button);
+
+		Entry->Page = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+		GroupsVBox->AddChildToVerticalBox(Entry->Page);
+		TabEntries.Add(Entry);
+
+		for (const FName& Group : Tab.Groups)
+		{
+			TArray<FRammsControlAxis> Axes;
+			Surface.GetAxesInGroup(Group, Axes);
+			Axes.StableSort([](const FRammsControlAxis& A, const FRammsControlAxis& B) { return A.Order < B.Order; });
+			// A tab of one group named for it needs no heading saying so again.
+			BuildSimGroup(Entry, Group, Axes, Tab.Groups.Num() > 1 || Group != Tab.Name);
+		}
+	}
+	// One tab is no choice: no bar for it.
+	TabBar->SetVisibility(TabEntries.Num() > 1 ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	// The tab the user picked while the robot has it, the first otherwise -- without forgetting the pick, so
+	// a tab that is gone for one version of the surface comes back selected.
+	ShownTab = TabEntries.ContainsByPredicate([this](const URammsPanelTabEntry* Entry) { return Entry && Entry->Name == SelectedTab; })
+		? SelectedTab
+		: (TabEntries.Num() > 0 ? TabEntries[0]->Name : NAME_None);
+	StyleTabs();
+}
+
+UWidget* URammsControlSurfacePanel::MakePairCell(const FRammsControlAxis& Axis, const TArray<FRammsControlAxis>& Axes, TSet<FName>& Consumed,
+	TArray<FName>& OutIds)
+{
+	const bool bRate = Axis.Kind == ERammsControlKind::Continuous;
+	if ((!bRate && Axis.Kind != ERammsControlKind::Position) || Axis.bReadOnly || Axis.PairedAxis.IsNone())
+	{
+		return nullptr;
+	}
+	const FRammsControlAxis* Pair = Axes.FindByPredicate([&Axis](const FRammsControlAxis& A) { return A.Id == Axis.PairedAxis; });
+	if (!Pair || Pair->Kind != Axis.Kind || Pair->bReadOnly || Consumed.Contains(Pair->Id))
+	{
+		return nullptr;
+	}
+	// The same pairing as the Classic look (BuildGroup): the lower-Order axis is the vertical one.
+	const FRammsControlAxis& Vertical = (Axis.Order <= Pair->Order) ? Axis : *Pair;
+	const FRammsControlAxis& Horizontal = (&Vertical == &Axis) ? *Pair : Axis;
+
+	UWidget* Control = nullptr;
+	if (bRate)
+	{
+		URammsSurfaceJoystick* Joystick = CreateWidget<URammsSurfaceJoystick>(this);
+		Joystick->bAutoFindSink = false;
+		Joystick->SetRadii(JoystickRadius, JoystickRadius * 0.35f);
+		Joystick->Source = Source;
+		Joystick->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
+		if (Style)
+		{
+			Joystick->SetStyle(Style);
+		}
+		Joysticks.Add(Joystick);
+		Control = Joystick;
+	}
+	else
+	{
+		URammsSurfacePositionPad* Pad = CreateWidget<URammsSurfacePositionPad>(this);
+		Pad->SetStyle(Style);
+		Pad->bAutoFindSink = false;
+		Pad->Source = Source;
+		Pad->SetTarget(TargetSurface, Horizontal.Id, Vertical.Id);
+		Pad->SetRegion(URammsControlRow::DisplayRangeFor(Horizontal), URammsControlRow::DisplayRangeFor(Vertical), Vertical.RegionOutline);
+		Pads.Add(Pad);
+		Control = Pad;
+	}
+	Consumed.Add(Axis.Id);
+	Consumed.Add(Pair->Id);
+	OutIds.Add(Axis.Id);
+	OutIds.Add(Pair->Id);
+
+	// The control in a box of its own size (its canvas places its images absolutely), its caption under it.
+	UVerticalBox* Cell = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	USizeBox*	  Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+	const float	  BoxSize = JoystickRadius * 2.0f + 8.0f;
+	Box->SetWidthOverride(BoxSize);
+	Box->SetHeightOverride(BoxSize);
+	Box->AddChild(Control);
+	if (UVerticalBoxSlot* BoxSlot = Cell->AddChildToVerticalBox(Box))
+	{
+		BoxSlot->SetHorizontalAlignment(HAlign_Center);
+		BoxSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 2.0f));
+	}
+	Cell->AddChildToVerticalBox(
+		MakeCaption(PairCaption(URammsControlRow::SimLabel(Vertical.DisplayName), URammsControlRow::SimLabel(Horizontal.DisplayName))));
+	return Cell;
+}
+
+void URammsControlSurfacePanel::BuildSimGroup(URammsPanelTabEntry* Tab, FName Group, const TArray<FRammsControlAxis>& Axes, bool bHeading)
+{
+	UVerticalBox* Page = Tab->Page;
+	if (bHeading)
+	{
+		UTextBlock* Heading = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Heading->SetText(FText::FromString(Group.ToString().ToUpper()));
+		if (UVerticalBoxSlot* HeadingSlot = Page->AddChildToVerticalBox(Heading))
+		{
+			HeadingSlot->SetPadding(FMargin(4.0f, Page->GetChildrenCount() > 1 ? 12.0f : 2.0f, 4.0f, 4.0f));
+		}
+		SectionLabels.Add(Heading);
+	}
+
+	// Rows go one to a line. Actions and pads sit side by side: a run of either fills lines of up to
+	// LineMax before starting the next.
+	enum class ELine : uint8
+	{
+		None,
+		Actions,
+		Pairs
+	};
+	UHorizontalBox* Line = nullptr;
+	ELine			LineKind = ELine::None;
+	int32			LineMax = 0;
+	// A line of actions that the run did not fill keeps its cells' width: empty cells take the rest, so the
+	// last button of a run is the size of the ones before it and not stretched across what is left. (A
+	// lone action, a run of one, has nothing to match and takes the line.)
+	bool	   bLineContinuesRun = false;
+	const auto CloseLine = [&]() {
+		if (Line && LineKind == ELine::Actions && (Line->GetChildrenCount() > 1 || bLineContinuesRun))
+		{
+			while (Line->GetChildrenCount() < LineMax)
+			{
+				if (UHorizontalBoxSlot* Empty = Line->AddChildToHorizontalBox(WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass())))
+				{
+					Empty->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+					Empty->SetPadding(FMargin(8.0f, 0.0f, 0.0f, 0.0f));
+				}
+			}
+		}
+	};
+	const auto Place = [&](UWidget* Widget, ELine Kind, int32 Max) {
+		if (Kind == ELine::None)
+		{
+			CloseLine();
+			Line = nullptr;
+			LineKind = ELine::None;
+			if (UVerticalBoxSlot* RowSlot = Page->AddChildToVerticalBox(Widget))
+			{
+				RowSlot->SetPadding(FMargin(4.0f, 3.0f));
+			}
+			return;
+		}
+		if (!Line || LineKind != Kind || Line->GetChildrenCount() >= LineMax)
+		{
+			CloseLine();
+			bLineContinuesRun = Line && LineKind == Kind; // a full line of the same run came before this one
+			Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+			LineKind = Kind;
+			LineMax = Max;
+			if (UVerticalBoxSlot* LineSlot = Page->AddChildToVerticalBox(Line))
+			{
+				LineSlot->SetPadding(FMargin(4.0f, 2.0f));
+			}
+		}
+		if (UHorizontalBoxSlot* CellSlot = Line->AddChildToHorizontalBox(Widget))
+		{
+			CellSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			CellSlot->SetPadding(FMargin(Line->GetChildrenCount() > 1 ? 8.0f : 0.0f, 0.0f, 0.0f, 0.0f));
+		}
+	};
+
+	TSet<FName> Consumed;
+	for (int32 I = 0; I < Axes.Num(); ++I)
+	{
+		const FRammsControlAxis& Axis = Axes[I];
+		if (Consumed.Contains(Axis.Id))
+		{
+			continue;
+		}
+		if (UWidget* Cell = MakePairCell(Axis, Axes, Consumed, Tab->ControlIds))
+		{
+			Place(Cell, ELine::Pairs, 2);
+			// The group's other sticks and pads join this one, two to a line, rather than each waiting its
+			// turn among the rows: side by side they take half the height, and the rows that follow stay in
+			// their own order.
+			for (int32 J = I + 1; J < Axes.Num(); ++J)
+			{
+				if (!Consumed.Contains(Axes[J].Id))
+				{
+					if (UWidget* More = MakePairCell(Axes[J], Axes, Consumed, Tab->ControlIds))
+					{
+						Place(More, ELine::Pairs, 2);
+					}
+				}
+			}
+			continue;
+		}
+		URammsControlRow* Row = CreateWidget<URammsControlRow>(this);
+		if (Style)
+		{
+			Row->SetStyle(Style);
+		}
+		Row->Setup(TargetSurface, Axis, Source);
+		Rows.Add(Row);
+		Tab->Rows.Add(Row);
+		Tab->ControlIds.Add(Axis.Id);
+		Consumed.Add(Axis.Id);
+		if (!Axis.IsAction())
+		{
+			Place(Row, ELine::None, 0);
+			continue;
+		}
+		// Three short names to a line, or two longer ones: decided for the whole run, so its lines match.
+		int32 Max = 3;
+		if (LineKind != ELine::Actions || !Line)
+		{
+			for (int32 J = I; J < Axes.Num() && Axes[J].IsAction(); ++J)
+			{
+				const FText Name = URammsControlRow::SimLabel(Axes[J].DisplayName.IsEmpty() ? FText::FromName(Axes[J].Id) : Axes[J].DisplayName);
+				if (Name.ToString().Len() > 10)
+				{
+					Max = 2;
+					break;
+				}
+			}
+		}
+		else
+		{
+			Max = LineMax;
+		}
+		Place(Row, ELine::Actions, Max);
+	}
+	CloseLine();
+}
+
+void URammsControlSurfacePanel::SelectTab(FName Tab)
+{
+	if (!TabEntries.ContainsByPredicate([Tab](const URammsPanelTabEntry* Entry) { return Entry && Entry->Name == Tab; }))
+	{
+		return;
+	}
+	SelectedTab = Tab;
+	ShownTab = Tab;
+	StyleTabs();
+	SetScrollOffset(0.0f); // a new page starts at its top
+}
+
+TArray<FName> URammsControlSurfacePanel::GetTabNames() const
+{
+	TArray<FName> Names;
+	for (const URammsPanelTabEntry* Entry : TabEntries)
+	{
+		if (Entry)
+		{
+			Names.Add(Entry->Name);
+		}
+	}
+	return Names;
+}
+
+FName URammsControlSurfacePanel::FindTabOfControl(FName ControlId) const
+{
+	for (const URammsPanelTabEntry* Entry : TabEntries)
+	{
+		if (Entry && Entry->ControlIds.Contains(ControlId))
+		{
+			return Entry->Name;
+		}
+	}
+	return NAME_None;
+}
+
+void URammsControlSurfacePanel::StyleTabs()
+{
+	for (URammsPanelTabEntry* Entry : TabEntries)
+	{
+		if (!Entry)
+		{
+			continue;
+		}
+		const bool bShown = Entry->Name == ShownTab;
+		if (Entry->Page)
+		{
+			Entry->Page->SetVisibility(bShown ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		}
+		if (!Style)
+		{
+			continue;
+		}
+		if (Entry->Label)
+		{
+			Entry->Label->SetFont(Style->Typography.Body);
+			Entry->Label->SetColorAndOpacity(FSlateColor(bShown ? Style->Colors.TextPrimary : Style->Colors.TextSecondary));
+		}
+		if (Entry->Badge)
+		{
+			Entry->Badge->SetFont(Style->Typography.Caption);
+		}
+		if (Entry->Underline)
+		{
+			URammsUIStyle::ApplyRoundedBrushToBorder(Entry->Underline,
+				URammsUIStyle::MakeRoundedBoxBrush(bShown ? Style->Colors.Info : FLinearColor::Transparent, 1.0f));
+		}
+	}
+	for (UTextBlock* Heading : SectionLabels)
+	{
+		if (Heading && Style)
+		{
+			Heading->SetFont(Style->Typography.Caption);
+			Heading->SetColorAndOpacity(FSlateColor(Style->Colors.TextDisabled));
+		}
+	}
+	RefreshTabBadges();
+}
+
+void URammsControlSurfacePanel::RefreshTabBadges()
+{
+	// A status that wants attention (a crossing paused for the rider, a fault) marks its tab, so it is not
+	// missed for being on a page that is not showing.
+	for (URammsPanelTabEntry* Entry : TabEntries)
+	{
+		if (!Entry || !Entry->Badge)
+		{
+			continue;
+		}
+		int32 Severity = 0;
+		for (const URammsControlRow* Row : Entry->Rows)
+		{
+			if (Row)
+			{
+				Severity = FMath::Max(Severity, Row->GetTextSeverity());
+			}
+		}
+		Entry->Badge->SetVisibility(Severity > 0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (Severity > 0 && Style)
+		{
+			Entry->Badge->SetColorAndOpacity(
+				FSlateColor(Severity >= static_cast<int32>(ERammsControlTextSeverity::Fault) ? Style->Colors.Error : Style->Colors.Warning));
+		}
+	}
 }
 
 void URammsControlSurfacePanel::InsetInGroup(UWidget* Child, float Top, float Bottom)
@@ -451,6 +946,10 @@ void URammsControlSurfacePanel::NativeTick(const FGeometry& MyGeometry, float In
 			Row->Refresh();
 		}
 	}
+	if (bBuiltSim)
+	{
+		RefreshTabBadges();
+	}
 }
 
 void URammsControlSurfacePanel::ApplyStyle_Implementation()
@@ -460,6 +959,14 @@ void URammsControlSurfacePanel::ApplyStyle_Implementation()
 	{
 		return;
 	}
+	if (Style->IsSimLook() != bBuiltSim && BuiltVersion != -1)
+	{
+		// A theme of the other look: its rows are different widgets, not the same ones restyled. (Rebuild
+		// applies the style itself when it finds a robot, with the looks then agreeing; the rest of this
+		// runs either way, so the title and frame are restyled when it finds none.)
+		Rebuild();
+	}
+	StyleTabs();
 	if (TitleText)
 	{
 		TitleText->SetFont(Style->Typography.HeadingMedium);

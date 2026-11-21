@@ -216,6 +216,12 @@ void URammsFloatingPanel::ApplyStyle_Implementation()
 	{
 		TitleText->SetFont(Style->Typography.Body);
 		TitleText->SetColorAndOpacity(FSlateColor(Style->Colors.TextPrimary));
+		// Sim look: a title too long for the bar ends in an ellipsis rather than mid-letter.
+		TitleText->SetTextOverflowPolicy(Style->IsSimLook() ? ETextOverflowPolicy::Ellipsis : ETextOverflowPolicy::Clip);
+	}
+	if (Accent && Style->IsSimLook())
+	{
+		Accent->Background = URammsUIStyle::MakeRoundedBoxBrush(Style->Colors.Info, 1.5f); // the accent, not the dark fill
 	}
 	if (GripText)
 	{
