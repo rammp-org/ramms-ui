@@ -121,7 +121,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Layout|Sim Look")
 	TArray<FString> GetStatusChips() const;
 
-	/** The prompts on show, in the order the robot lists their controls (empty outside the Sim look). */
+	/** The prompts on show, in the order the robot lists their controls (empty outside the Sim look). One
+	 *  the robot has just cleared counts until it has faded out (URammsControlHUDSettings::PromptMinSeconds). */
 	UFUNCTION(BlueprintPure, Category = "Layout|Sim Look")
 	TArray<FString> GetPrompts() const;
 
@@ -164,7 +165,24 @@ private:
 	/** Read the robot's surface for the status strip and the prompts; rebuild them when it changes. */
 	void PollStatus();
 	void RebuildStatus(UObject* Surface);
+	/** Show the drive stick unless the user hid it or the robot has nothing for it to drive. */
+	void ApplyJoystickVisibility();
 	void StyleStatus();
+	/** Fade the prompts in and out, and keep one that came and went up for long enough to read. */
+	void TickPrompts(float DeltaSeconds);
+
+	/** Where a prompt is in its life: what the robot says now, and how its frame is drawn. */
+	struct FPromptState
+	{
+		/** Severity the robot reports now (ERammsControlTextSeverity); 0 = it has nothing to say. */
+		uint8 Wanted = 0;
+		/** Severity the frame is drawn for; stays through the hold and the fade after the robot goes quiet. */
+		uint8 Drawn = 0;
+		/** 0 = hidden .. 1 = fully on show. */
+		float Alpha = 0.0f;
+		/** How long the message on show has been up, from when it (not its numbers) last changed. */
+		float ShownSeconds = 0.0f;
+	};
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> StatusBorder;
@@ -184,8 +202,7 @@ private:
 	/** The controls behind the chips and the prompts, in step with the arrays above. */
 	TArray<FRammsControlAxis> StatusAxes;
 	TArray<FRammsControlAxis> PromptAxes;
-	/** Each prompt's severity as last drawn (ERammsControlTextSeverity; 0 = not showing). */
-	TArray<uint8> PromptSeverity;
+	TArray<FPromptState>	  PromptStates;
 	/** Tray controls the robot has, for RebuildTray. */
 	TArray<FRammsControlAxis> TrayAxes;
 
@@ -202,6 +219,8 @@ private:
 
 	bool  bFloating = false;
 	bool  bJoystickHidden = false;
+	/** Sim look: the robot on show has neither of the drive stick's controls, so the stick is left out. */
+	bool  bStickUnused = false;
 	bool  bTrayDirty = true;
 	float ProviderPollSeconds = 0.0f;
 };

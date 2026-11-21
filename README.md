@@ -282,7 +282,8 @@ What the Sim look changes:
 - **Actions side by side**, two or three to a line, in three weights: `PrimaryControls` are filled, `DangerControls` are red, the rest are plain. Both lists take control ids with `*` as a wildcard.
 - **Sticks and pads two to a line**, each with its caption under it.
 - **Status strip (top left):** a chip per control in `StatusControls` that the robot has (`drive.mode`, `curb.phase`, `sim.running` by default). The strip, the prompts and the tray's buttons follow the robot the panel shows, and exist only in the floating layout.
-- **Prompts (bottom centre):** what a Text control reports while its severity is above Info, such as a crossing paused for the rider. `bShowPrompts` turns them off.
+- **Prompts (bottom centre):** what a Text control reports while its severity is above Info, such as a crossing paused for the rider. A prompt fades in and out (`PromptFadeSeconds`, 0.2 s) and stays up for at least `PromptMinSeconds` (1.5 s), so one the robot raised and cleared within a moment can still be read. `bShowPrompts` turns them off.
+- **Sticks follow the robot.** A stick nobody is holding shows what its two controls are commanded by any other source (keys, a gamepad, a script), so the drive stick moves whenever the robot is driven. `URammsSurfaceJoystick::bMirrorCommand` turns this on for one stick in the Classic look; `GetMirroredValue` reads it.
 - **Tray actions:** a button on the panel tray per Action control in `TrayControls` (`sim.pause` by default), and "Reset layout" in place of "Reset".
 - **Theme:** dark surfaces with outlined buttons whose text meets WCAG AA, smaller type, and tighter touch targets.
 - **Camera capture panel:** one line saying there is no camera, in place of controls with nothing to act on.

@@ -39,8 +39,8 @@ URammsControlHUDSettings::URammsControlHUDSettings()
 	Tab(TEXT("Chassis"), { TEXT("Casters"), TEXT("Lift"), TEXT("Linkage"), TEXT("Seat") });
 	Tab(TEXT("Arm"), { TEXT("Arm"), TEXT("Gripper") });
 	Tab(TEXT("View"), { TEXT("Camera"), TEXT("Curb view") });
-	Tab(TEXT("Sim"), { TEXT("Sim"), TEXT("Sim Debug") });
-	PrimaryControls = { TEXT("curb.negotiate") };
+	Tab(TEXT("Sim"), { TEXT("Simulation"), TEXT("Sim"), TEXT("Sim Debug") });
+	PrimaryControls = { TEXT("curb.negotiate"), TEXT("sim.robot.load") };
 	DangerControls = { TEXT("curb.abort"), TEXT("sim.reset"), TEXT("*.estop"), TEXT("*.stop") };
 	StatusControls = { FName(TEXT("drive.mode")), FName(TEXT("curb.phase")), FName(TEXT("sim.running")) };
 	TrayControls = { FName(TEXT("sim.pause")) };

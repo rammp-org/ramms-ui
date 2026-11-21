@@ -5,6 +5,13 @@
 #include "RammsControlSurfaceRegistry.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "UI/RammsUIStyle.h"
+
+namespace
+{
+	/** How fast the thumb follows a mirrored command (FInterpTo speed, 1/s): there in about a fifth of a second. */
+	const float MirrorInterpSpeed = 16.0f;
+} // namespace
 
 URammsSurfaceJoystick::URammsSurfaceJoystick(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -25,6 +32,59 @@ void URammsSurfaceJoystick::NativeDestruct()
 {
 	Release();
 	Super::NativeDestruct();
+}
+
+void URammsSurfaceJoystick::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	TickMirror(InDeltaTime);
+}
+
+void URammsSurfaceJoystick::TickMirror(float DeltaSeconds)
+{
+	// The thumb is the user's while they hold it, and stays where they left it on a stick that does not
+	// centre itself: it shows their input then, not anyone else's.
+	if (bIsActive || !CurrentValue.IsNearlyZero())
+	{
+		MirrorShown = FVector2D::ZeroVector;
+		return;
+	}
+	FVector2D Wanted = FVector2D::ZeroVector;
+	if (bMirrorCommand || URammsUIStyle::UsesSimLook(Style))
+	{
+		// The commanded target, not the readback: what the keys, a gamepad or a script are asking of the
+		// axes now. It springs back with them when the source lets go or times out.
+		if (UObject* Sink = ResolveSink())
+		{
+			float X = 0.0f;
+			float Y = 0.0f;
+			if (!ControlIdX.IsNone() && IRammsControlSink::Execute_GetAxisTarget(Sink, ControlIdX, X))
+			{
+				Wanted.X = FMath::Clamp(X, -1.0f, 1.0f);
+			}
+			if (!ControlIdY.IsNone() && IRammsControlSink::Execute_GetAxisTarget(Sink, ControlIdY, Y))
+			{
+				Wanted.Y = FMath::Clamp(Y, -1.0f, 1.0f);
+			}
+			if (Wanted.SizeSquared() > 1.0)
+			{
+				Wanted = Wanted.GetSafeNormal(); // the base is round: the thumb stays inside it
+			}
+		}
+	}
+	// Eased: keys go from nothing to full at once, and a thumb that jumped would read as a glitch.
+	FVector2D Next = FMath::Vector2DInterpTo(MirrorShown, Wanted, FMath::Clamp(DeltaSeconds, 0.0f, 0.1f), MirrorInterpSpeed);
+	if ((Next - Wanted).SizeSquared() < 1.0e-6)
+	{
+		Next = Wanted;
+	}
+	if (Next.Equals(MirrorShown, 0.0))
+	{
+		return; // settled: nothing to redraw
+	}
+	MirrorShown = Next;
+	const double Reach = FMath::Max(JoystickRadius - ThumbRadius, 0.0f);
+	SetThumbOffset(FVector2D(Next.X, bInvertY ? -Next.Y : Next.Y) * Reach);
 }
 
 void URammsSurfaceJoystick::SetTarget(UObject* Sink, FName IdX, FName IdY)

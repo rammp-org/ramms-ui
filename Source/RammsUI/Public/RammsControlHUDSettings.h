@@ -169,6 +169,17 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look")
 	bool bShowPrompts = true;
 
+	/** Shortest time a prompt stays up, in seconds, so that one the robot raised and
+	 *  cleared within a moment can be read rather than flickering by. Counted from when
+	 *  the message last changed (its numbers counting down are not a change).
+	 *  0 = a prompt goes as soon as the robot clears it. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look", meta = (ClampMin = "0.0", ClampMax = "10.0", Units = "s"))
+	float PromptMinSeconds = 1.5f;
+
+	/** How long a prompt takes to fade in and to fade out, in seconds. 0 = no fade. */
+	UPROPERTY(Config, EditAnywhere, Category = "HUD|Sim Look", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s"))
+	float PromptFadeSeconds = 0.2f;
+
 	/** Whether Id is one of Patterns (ids; * matches any run of characters). */
 	static bool MatchesAny(const TArray<FString>& Patterns, FName Id);
 

@@ -456,11 +456,12 @@ void URammsControlRow::Setup(UObject* InSink, const FRammsControlAxis& InAxis, E
 
 		EnumValue = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("EnumValue"));
 		Contain(EnumValue);
-		if (Axis.bReadOnly)
+		if (Axis.bReadOnly || (bSimRow && Axis.EnumLabels.Num() < 2))
 		{
 			// A state to show (curb.phase), not a choice to make: no steppers that
 			// can never be pressed, and the words share the row with the label
-			// rather than squeezing into a stepper's column.
+			// rather than squeezing into a stepper's column. In the Sim look the
+			// same goes for a choice of one (the only robot there is to start).
 			EnumValue->SetJustification(ETextJustify::Right);
 			if (UHorizontalBoxSlot* ValueSlot = RootBox->AddChildToHorizontalBox(EnumValue))
 			{
